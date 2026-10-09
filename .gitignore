@@ -1,0 +1,12 @@
+# build output
+/bin/
+/cloudrix
+*.db
+*.db-shm
+*.db-wal
+.env
+
+# frontend
+web/node_modules/
+web/dist/*
+!web/dist/.gitkeep
