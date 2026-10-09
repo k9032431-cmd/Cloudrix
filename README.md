@@ -24,14 +24,52 @@
 
 ## Быстрый старт
 
+### Установка одной командой
+
+На чистом сервере с Ubuntu, Debian, CentOS, Rocky или Alma (amd64 или arm64), от root:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/k9032431-cmd/Cloudrix/main/install.sh)
+```
+
+Установщик по очереди спросит:
+
+1. **Логин и пароль главного администратора.** Если нажать Enter вместо пароля, он сгенерирует надёжный пароль.
+2. **Есть ли у вас домен.** Если есть, проверит, что домен указывает на этот сервер, и предложит бесплатный SSL-сертификат Let's Encrypt (продлевается автоматически).
+3. **Порт панели** (по умолчанию 2053 с доменом и 8000 без него) и название подписки, которое увидят клиенты в своих приложениях.
+
+После этого он сам скачает панель (или соберёт её из исходников, если готового релиза нет), создаст systemd-сервис, откроет порт в firewall и покажет адрес, логин и пароль.
+
+Управление после установки:
+
+```bash
+cloudrix-manager status      # состояние
+cloudrix-manager logs        # логи в реальном времени
+cloudrix-manager restart     # перезапуск
+cloudrix-manager update      # обновление (перед ним делается бэкап базы)
+cloudrix-manager admin       # создать админа или сбросить пароль
+cloudrix-manager cert        # добавить домен и включить HTTPS позже
+cloudrix-manager uninstall   # удалить
+```
+
+Установка без вопросов, например для Ansible:
+
+```bash
+CLOUDRIX_ADMIN_USERNAME=admin CLOUDRIX_ADMIN_PASSWORD='S3cure-pass' \
+CLOUDRIX_DOMAIN=panel.example.com CLOUDRIX_EMAIL=me@example.com CLOUDRIX_PORT=2053 \
+bash install.sh install --yes
+```
+
+Если GitHub с сервера недоступен, можно указать своё зеркало архива: `CLOUDRIX_DOWNLOAD_URL=https://mirror/cloudrix-linux-{arch}.tar.gz`.
+
+Где что лежит: настройки в `/etc/cloudrix/cloudrix.env`, сертификаты в `/etc/cloudrix/certs`, база в `/var/lib/cloudrix`. Панель работает от отдельного системного пользователя `cloudrix`.
+
 ### Docker
 
 ```bash
 cp .env.example .env   # задайте CLOUDRIX_ADMIN_PASSWORD и CLOUDRIX_HOST
 docker compose up -d --build
 ```
-
-Панель откроется на `http://<сервер>:8000`.
 
 ### Из исходников
 
@@ -42,10 +80,11 @@ make web build
 CLOUDRIX_ADMIN_USERNAME=admin CLOUDRIX_ADMIN_PASSWORD=change-me ./bin/cloudrix
 ```
 
-Создать суперадмина вручную:
+Создать суперадмина или сбросить ему пароль вручную:
 
 ```bash
 ./bin/cloudrix admin create -u admin
+./bin/cloudrix admin passwd -u admin
 ```
 
 ### Разработка
@@ -57,7 +96,15 @@ make test   # go vet + go test + проверка типов TypeScript
 
 ## Настройки
 
-Все настройки задаются переменными окружения. Полный список с пояснениями лежит в [`.env.example`](.env.example).
+Все настройки задаются переменными окружения. Полный список с пояснениями лежит в [`.env.example`](.env.example). Чтобы панель сама работала по HTTPS, укажите `CLOUDRIX_TLS_CERT` и `CLOUDRIX_TLS_KEY`.
+
+## Релизы
+
+При пуше тега `v*` GitHub Actions собирает `cloudrix-linux-amd64.tar.gz` и `cloudrix-linux-arm64.tar.gz` и прикладывает их к релизу. Установщик скачивает именно их.
+
+```bash
+git tag v0.1.0 && git push origin v0.1.0
+```
 
 ## API
 

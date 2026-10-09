@@ -431,10 +431,10 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
         {needsCert && (
           <Section title="Certificate">
             <Field label="Cert file">
-              <Input value={s.cert_file ?? ''} onChange={(e) => setS({ cert_file: e.target.value })} placeholder="/var/lib/cloudrix/certs/fullchain.pem" />
+              <Input value={s.cert_file ?? ''} onChange={(e) => setS({ cert_file: e.target.value })} placeholder="/etc/cloudrix/certs/fullchain.pem" />
             </Field>
             <Field label="Key file">
-              <Input value={s.key_file ?? ''} onChange={(e) => setS({ key_file: e.target.value })} placeholder="/var/lib/cloudrix/certs/key.pem" />
+              <Input value={s.key_file ?? ''} onChange={(e) => setS({ key_file: e.target.value })} placeholder="/etc/cloudrix/certs/privkey.pem" />
             </Field>
           </Section>
         )}

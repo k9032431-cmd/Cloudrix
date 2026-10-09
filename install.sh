@@ -7,6 +7,9 @@
 # После установки доступна команда `cloudrix-manager`:
 #   cloudrix-manager status | restart | logs | update | admin | uninstall
 #
+# Конкретная версия: CLOUDRIX_VERSION=v0.1.0. Своё зеркало архива:
+#   CLOUDRIX_DOWNLOAD_URL=https://mirror.example.com/cloudrix-linux-{arch}.tar.gz
+#
 # Без вопросов (для автоматизации), все значения через переменные:
 #   CLOUDRIX_ADMIN_USERNAME=admin CLOUDRIX_ADMIN_PASSWORD=secret123 \
 #   CLOUDRIX_DOMAIN=panel.example.com CLOUDRIX_EMAIL=me@example.com \
@@ -16,7 +19,7 @@ set -Eeuo pipefail
 
 REPO="${CLOUDRIX_REPO:-k9032431-cmd/Cloudrix}"
 BRANCH="${CLOUDRIX_BRANCH:-main}"
-VERSION="${CLOUDRIX_VERSION:-latest}"
+RELEASE="${CLOUDRIX_VERSION:-latest}"
 
 APP_DIR="/opt/cloudrix"
 CONF_DIR="/etc/cloudrix"
@@ -152,10 +155,12 @@ require_root() {
 
 detect_os() {
   [[ -f /etc/os-release ]] || die "Не удалось определить ОС."
-  # shellcheck disable=SC1091
-  . /etc/os-release
-  OS_ID=${ID:-unknown}
-  OS_NAME=${PRETTY_NAME:-$OS_ID}
+  # В подоболочке: os-release определяет VERSION, ID и т.п., не засоряем ими скрипт.
+  OS_NAME=$(
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    echo "${PRETTY_NAME:-${ID:-unknown}}"
+  )
   if command -v apt-get >/dev/null; then
     PKG=apt
   elif command -v dnf >/dev/null; then
@@ -240,10 +245,13 @@ valid_username() {
 
 download_release() {
   local url
-  if [[ $VERSION == latest ]]; then
+  if [[ -n ${CLOUDRIX_DOWNLOAD_URL-} ]]; then
+    # Своё зеркало, если GitHub недоступен с сервера.
+    url=${CLOUDRIX_DOWNLOAD_URL//\{arch\}/$ARCH}
+  elif [[ $RELEASE == latest ]]; then
     url="https://github.com/$REPO/releases/latest/download/cloudrix-linux-$ARCH.tar.gz"
   else
-    url="https://github.com/$REPO/releases/download/$VERSION/cloudrix-linux-$ARCH.tar.gz"
+    url="https://github.com/$REPO/releases/download/$RELEASE/cloudrix-linux-$ARCH.tar.gz"
   fi
   info "Скачиваю готовую сборку: $url"
   curl -fsSL --retry 3 -o "$WORK/cloudrix.tar.gz" "$url" 2>/dev/null || return 1
@@ -261,17 +269,22 @@ build_from_source() {
     die "Не удалось скачать исходники $REPO (репозиторий приватный или нет сети?)."
 
   info "Скачиваю Go $GO_VERSION и Node.js $NODE_VERSION (только для сборки)"
-  curl -fsSL --retry 3 "https://go.dev/dl/go$GO_VERSION.linux-$ARCH.tar.gz" | tar -xz -C "$tools"
+  curl -fsSL --retry 3 "${CLOUDRIX_GO_URL:-https://dl.google.com/go/go$GO_VERSION.linux-$ARCH.tar.gz}" | tar -xz -C "$tools"
   curl -fsSL --retry 3 "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$NODE_ARCH.tar.xz" | tar -xJ -C "$tools"
   local path="$tools/go/bin:$tools/node-v$NODE_VERSION-linux-$NODE_ARCH/bin:$PATH"
 
+  # env, а не "PATH=... cmd": так новый PATH используется и для поиска самой команды.
   info "Собираю веб-интерфейс"
-  (cd "$src/web" && PATH=$path npm ci --no-audit --no-fund --loglevel=error && PATH=$path npm run build --silent) >/dev/null
+  (cd "$src/web" &&
+    env PATH="$path" npm ci --no-audit --no-fund --no-update-notifier --loglevel=error >/dev/null &&
+    env PATH="$path" npm run build --silent >/dev/null)
 
   info "Собираю панель"
-  (cd "$src" && PATH=$path GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" CGO_ENABLED=0 \
-    go build -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$BRANCH-src" \
-    -o "$WORK/cloudrix" ./cmd/cloudrix)
+  (cd "$src" &&
+    { env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" go mod download >/dev/null 2>&1 || true; } &&
+    env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" CGO_ENABLED=0 \
+      go build -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$BRANCH-src" \
+      -o "$WORK/cloudrix" ./cmd/cloudrix)
   cp "$src/install.sh" "$WORK/install.sh"
 }
 
@@ -293,10 +306,16 @@ install_binary() {
   if [[ -f $WORK/install.sh ]]; then
     install -m 0755 "$WORK/install.sh" "$MANAGER"
   elif [[ -f ${BASH_SOURCE[0]-} && ${BASH_SOURCE[0]} != /dev/* && ${BASH_SOURCE[0]} != /proc/* ]]; then
-    install -m 0755 "${BASH_SOURCE[0]}" "$MANAGER"
+    # При `cloudrix-manager update` скрипт и есть $MANAGER — копировать не нужно.
+    [[ ${BASH_SOURCE[0]} -ef $MANAGER ]] || install -m 0755 "${BASH_SOURCE[0]}" "$MANAGER"
   else
-    if curl -fsSL "https://raw.githubusercontent.com/$REPO/$BRANCH/install.sh" -o "$MANAGER"; then
-      chmod 0755 "$MANAGER"
+    # Скрипт запущен через pipe — своего файла нет, скачиваем копию.
+    if curl -fsSL "https://raw.githubusercontent.com/$REPO/$BRANCH/install.sh" -o "$MANAGER.tmp" 2>/dev/null; then
+      install -m 0755 "$MANAGER.tmp" "$MANAGER"
+      rm -f "$MANAGER.tmp"
+    else
+      rm -f "$MANAGER.tmp"
+      warn "Не удалось скачать cloudrix-manager; управлять можно, запустив установщик снова."
     fi
   fi
   ok "Установлена версия $("$BIN" version)"
@@ -437,7 +456,7 @@ wait_healthy() {
   local scheme=http
   [[ $TLS == 1 ]] && scheme=https
   for _ in $(seq 1 20); do
-    if curl -fsk --max-time 2 "$scheme://127.0.0.1:$PANEL_PORT/health" >/dev/null 2>&1; then return 0; fi
+    if curl -fsk --noproxy '*' --max-time 2 "$scheme://127.0.0.1:$PANEL_PORT/health" >/dev/null 2>&1; then return 0; fi
     sleep 0.5
   done
   return 1
@@ -454,10 +473,11 @@ cmd_install() {
 
   if [[ -x $BIN ]] && systemctl is-enabled "$SERVICE" >/dev/null 2>&1; then
     warn "Cloudrix уже установлен ($("$BIN" version 2>/dev/null || echo '?'))."
-    ask_yes_no "Переустановить? Пользователи и настройки сохранятся" n || {
+    # С --yes переустанавливаем без вопроса: флаг передан явно.
+    if ! ((ASSUME_YES)) && ! ask_yes_no "Переустановить? Пользователи и настройки сохранятся" n; then
       info "Для обновления используйте: cloudrix-manager update"
       exit 0
-    }
+    fi
   fi
 
   step "1/4  Администратор"
@@ -552,6 +572,9 @@ cmd_install() {
     systemctl stop "$SERVICE" 2>/dev/null || true
     if issue_certificate "$DOMAIN" "$EMAIL"; then
       TLS=1
+    elif [[ -f $CERT_DIR/fullchain.pem && -f $CERT_DIR/privkey.pem ]]; then
+      TLS=1
+      warn "Новый сертификат получить не удалось — использую уже имеющийся из $CERT_DIR."
     else
       warn "Сертификат получить не удалось — панель запустится по HTTP. Повторить: cloudrix-manager cert"
     fi
@@ -617,9 +640,16 @@ cmd_update() {
   info "Текущая версия: $("$BIN" version 2>/dev/null || echo '?')"
   ensure_deps
   fetch_binary
-  cp "$DATA_DIR/cloudrix.db" "$DATA_DIR/cloudrix.db.bak-$(date +%Y%m%d%H%M%S)" 2>/dev/null && ok "Резервная копия базы создана в $DATA_DIR"
+  # Бэкап при остановленной панели, чтобы в копию попали и данные из WAL.
+  systemctl stop "$SERVICE"
+  local backup
+  backup="$DATA_DIR/backup-$(date +%Y%m%d-%H%M%S)"
+  mkdir -p "$backup"
+  cp -a "$DATA_DIR"/cloudrix.db* "$backup"/ 2>/dev/null || true
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$backup"
+  ok "Резервная копия базы: $backup"
   install_binary
-  systemctl restart "$SERVICE"
+  systemctl start "$SERVICE"
   ok "Обновлено и перезапущено"
 }
 
