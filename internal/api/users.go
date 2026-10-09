@@ -220,6 +220,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	s.drive.forget(r.Context(), u.ID)
 	if err := s.store.DeleteUser(r.Context(), u.ID); err != nil {
 		s.writeStoreError(w, err)
 		return
@@ -263,6 +264,9 @@ func (s *Server) handleRevokeUser(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	if err := s.drive.rotate(r.Context(), u); err != nil {
+		s.log.Warn("rotate drive link", "user", u.Username, "err", err)
+	}
 	s.audit(r, "user.revoke", u.Username, "")
 	s.usersChanged()
 	writeJSON(w, http.StatusOK, u)
@@ -282,7 +286,7 @@ func (s *Server) handleUserSubscription(w http.ResponseWriter, r *http.Request) 
 	if links == nil {
 		links = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"url": s.subURL(r, u), "links": links})
+	writeJSON(w, http.StatusOK, map[string]any{"url": s.subURL(r, u), "links": links, "gdrive": s.userDrive(r.Context(), u)})
 }
 
 func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +385,7 @@ func (s *Server) handleBulkUsers(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if req.Action == "delete" {
+			s.drive.forget(r.Context(), u.ID)
 			err = s.store.DeleteUser(r.Context(), u.ID)
 		} else {
 			switch req.Action {

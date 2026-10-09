@@ -14,6 +14,7 @@ const Inbounds = lazy(() => import('./pages/Inbounds'))
 const Nodes = lazy(() => import('./pages/Nodes'))
 const Admins = lazy(() => import('./pages/Admins'))
 const Audit = lazy(() => import('./pages/Audit'))
+const SettingsPage = lazy(() => import('./pages/Settings'))
 const Subscription = lazy(() => import('./pages/Subscription'))
 
 function Spinner() {
@@ -51,6 +52,7 @@ function App() {
           <Route path="nodes" element={<Protected sudo><Nodes /></Protected>} />
           <Route path="admins" element={<Protected sudo><Admins /></Protected>} />
           <Route path="audit" element={<Protected sudo><Audit /></Protected>} />
+          <Route path="settings" element={<Protected sudo><SettingsPage /></Protected>} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

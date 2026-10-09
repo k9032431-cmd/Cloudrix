@@ -24,6 +24,7 @@ type env struct {
 	t   *testing.T
 	srv *httptest.Server
 	st  *store.Store
+	api *Server
 }
 
 func newEnv(t *testing.T) *env {
@@ -41,7 +42,7 @@ func newEnv(t *testing.T) *env {
 	s := New(cfg, st, auth.NewIssuer("test-secret", time.Hour), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, st: st}
+	return &env{t: t, srv: srv, st: st, api: s}
 }
 
 func (e *env) do(method, path, token string, body any, out any) *http.Response {

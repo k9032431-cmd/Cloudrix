@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/config"
+	"github.com/k9032431-cmd/cloudrix/internal/gdrive"
 	"github.com/k9032431-cmd/cloudrix/internal/store"
 )
 
@@ -24,17 +26,33 @@ type Server struct {
 	web     fs.FS // built frontend; may be empty
 	limiter *loginLimiter
 	started time.Time
+	drive   *driveSyncer
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }
 
 func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logger, web fs.FS) *Server {
-	return &Server{
+	s := &Server{
 		cfg: cfg, store: st, issuer: issuer, log: log, web: web,
 		limiter: newLoginLimiter(5, 5*time.Minute),
 		started: time.Now(),
 	}
+	s.drive = newDriveSyncer(s, gdrive.Google)
+	return s
 }
+
+// Start loads persisted settings and runs background workers until ctx ends.
+func (s *Server) Start(ctx context.Context) error {
+	if err := s.drive.load(ctx); err != nil {
+		return err
+	}
+	go s.drive.run(ctx)
+	s.drive.Trigger()
+	return nil
+}
+
+// NotifyUsersChanged lets other components (e.g. lifecycle jobs) report user changes.
+func (s *Server) NotifyUsersChanged() { s.usersChanged() }
 
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
@@ -69,6 +87,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/users/{id}/devices", s.handleListDevices)
 			r.Delete("/users/{id}/devices", s.handleDeleteDevice)
 			r.Get("/users/{id}/traffic", s.handleUserTraffic)
+			r.Post("/users/{id}/gdrive", s.handleUserDrive)
+			r.Delete("/users/{id}/gdrive", s.handleDeleteUserDrive)
 
 			r.Get("/inbounds", s.handleListInbounds)
 
@@ -87,6 +107,13 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/nodes", s.handleCreateNode)
 				r.Put("/nodes/{id}", s.handleUpdateNode)
 				r.Delete("/nodes/{id}", s.handleDeleteNode)
+
+				r.Get("/settings/gdrive", s.handleGetDrive)
+				r.Put("/settings/gdrive", s.handleUpdateDrive)
+				r.Post("/settings/gdrive/connect", s.handleDriveConnect)
+				r.Post("/settings/gdrive/disconnect", s.handleDriveDisconnect)
+				r.Post("/settings/gdrive/test", s.handleDriveTest)
+				r.Post("/settings/gdrive/sync", s.handleDriveSyncAll)
 
 				r.Get("/core/config", s.handleCoreConfig)
 				r.Get("/audit", s.handleAudit)
@@ -174,6 +201,7 @@ func (s *Server) cors(next http.Handler) http.Handler {
 }
 
 func (s *Server) usersChanged() {
+	s.drive.Trigger()
 	if s.OnUsersChanged != nil {
 		s.OnUsersChanged()
 	}

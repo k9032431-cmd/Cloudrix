@@ -170,6 +170,7 @@ type subscriptionInfo struct {
 	ExpireAt      *time.Time          `json:"expire_at"`
 	ResetStrategy model.ResetStrategy `json:"reset_strategy"`
 	URL           string              `json:"url"`
+	DriveURL      string              `json:"gdrive_url,omitempty"` // backup link through googleapis.com
 	Links         []string            `json:"links"`
 	WireGuard     []string            `json:"wireguard"` // inbound tags with downloadable .conf
 }
@@ -188,6 +189,9 @@ func (s *Server) handleSubscriptionInfo(w http.ResponseWriter, r *http.Request) 
 	info := subscriptionInfo{
 		Username: u.Username, Status: u.Status, DataLimit: u.DataLimit, UsedTraffic: u.UsedTraffic,
 		ExpireAt: u.ExpireAt, ResetStrategy: u.ResetStrategy, URL: s.subURL(r, u), Links: []string{}, WireGuard: []string{},
+	}
+	if d := s.userDrive(r.Context(), u); d.URL != "" && u.DeviceLimit == 0 {
+		info.DriveURL = d.URL
 	}
 	// With a device limit, links would bypass HWID checks, so only the URL is shown.
 	if u.DeviceLimit == 0 {

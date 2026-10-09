@@ -156,6 +156,27 @@ export interface Stats {
   nodes?: { total: number; connected: number }
 }
 
+export interface UserDrive {
+  available: boolean
+  url?: string
+  synced_at?: string
+  error?: string
+}
+
+export interface DriveSettings {
+  enabled: boolean
+  api_key: string
+  client_id: string
+  has_client_secret: boolean
+  connected: boolean
+  account: string
+  format: 'base64' | 'plain'
+  interval_minutes: number
+  connect: { pending: boolean; user_code?: string; verification_url?: string; expires_at: string; error?: string }
+  files: number
+  errors: number
+}
+
 export interface SubscriptionInfo {
   username: string
   status: UserStatus
@@ -164,6 +185,7 @@ export interface SubscriptionInfo {
   expire_at: string | null
   reset_strategy: ResetStrategy
   url: string
+  gdrive_url?: string
   links: string[]
   wireguard: string[]
 }

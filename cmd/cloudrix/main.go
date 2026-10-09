@@ -64,7 +64,10 @@ func serve(cfg config.Config, log *slog.Logger) error {
 	}
 
 	srv := api.New(cfg, st, auth.NewIssuer(secret, cfg.TokenTTL), log, web.FS())
-	runner := &jobs.Runner{Store: st, Interval: cfg.JobsInterval, Log: log}
+	if err := srv.Start(ctx); err != nil {
+		return err
+	}
+	runner := &jobs.Runner{Store: st, Interval: cfg.JobsInterval, Log: log, OnChange: srv.NotifyUsersChanged}
 	go runner.Run(ctx)
 
 	httpSrv := &http.Server{

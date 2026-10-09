@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Download, Languages, Moon, Sun } from 'lucide-react'
+import { CloudUpload, Download, Languages, Moon, Sun } from 'lucide-react'
 import { useFetch, useTheme } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { daysLeft, formatBytes, formatDate } from '../lib/format'
 import type { SubscriptionInfo } from '../lib/types'
-import { Button, Card, CopyButton, IconButton, ProgressBar, QR } from '../components/ui'
+import { Button, Card, CopyButton, IconButton, ProgressBar, QR, cx } from '../components/ui'
 import { UserStatusBadge } from '../components/StatusBadge'
 import { Logo } from '../components/Layout'
 
@@ -24,6 +25,8 @@ export default function Subscription() {
   const { dark, toggle } = useTheme()
   const { data, error, loading } = useFetch<SubscriptionInfo>(`/sub/${encodeURIComponent(token ?? '')}/info`)
   const left = data ? daysLeft(data.expire_at) : null
+  const [kind, setKind] = useState<'direct' | 'gdrive'>('direct')
+  const url = data ? (kind === 'gdrive' && data.gdrive_url ? data.gdrive_url : data.url) : ''
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-50 px-4 py-8 dark:bg-slate-950">
@@ -77,16 +80,33 @@ export default function Subscription() {
             </Card>
 
             <Card className="flex flex-col items-center gap-4 p-6">
-              <QR value={data.url} size={200} />
-              <p className="text-sm text-slate-500">{t('sub.scan')}</p>
-              <CopyButton text={data.url} label={t('sub.copyLink')} />
+              {data.gdrive_url && (
+                <div className="grid w-full max-w-xs grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+                  {(['direct', 'gdrive'] as const).map((k) => (
+                    <button
+                      key={k}
+                      onClick={() => setKind(k)}
+                      className={cx(
+                        'flex h-8 items-center justify-center gap-1.5 rounded-md text-xs font-medium transition-colors',
+                        kind === k ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
+                      )}
+                    >
+                      {k === 'gdrive' && <CloudUpload className="h-3.5 w-3.5" />}
+                      {k === 'direct' ? t('sub.kind.direct') : `${t('sub.backup')} · Google`}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <QR value={url} size={200} />
+              <p className="text-center text-sm text-slate-500">{kind === 'gdrive' ? t('sub.gdriveHint') : t('sub.scan')}</p>
+              <CopyButton text={url} label={t('sub.copyLink')} />
             </Card>
 
             <Card className="p-6">
               <h2 className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">{t('sub.addToApp')}</h2>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {APPS.map((a) => (
-                  <a key={a.name} href={a.link(data.url)}>
+                  <a key={a.name} href={a.link(url)}>
                     <Button variant="secondary" className="w-full">
                       {a.name}
                     </Button>

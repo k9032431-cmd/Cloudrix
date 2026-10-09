@@ -1,15 +1,22 @@
 import { useState } from 'react'
-import { KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from 'lucide-react'
+import { CloudUpload, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from 'lucide-react'
 import { del, post } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
+import { useAuth } from '../../lib/auth'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
-import type { DailyTraffic, Device, User } from '../../lib/types'
+import type { DailyTraffic, Device, User, UserDrive } from '../../lib/types'
 import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx } from '../../components/ui'
 import { UserStatusBadge } from '../../components/StatusBadge'
 import { TrafficChart } from '../Dashboard'
 
 type Tab = 'sub' | 'links' | 'devices'
+
+interface SubInfo {
+  url: string
+  links: string[]
+  gdrive: UserDrive
+}
 
 export default function UserDetails({
   user,
@@ -26,7 +33,7 @@ export default function UserDetails({
   const [tab, setTab] = useState<Tab>('sub')
   const [confirm, setConfirm] = useState<'delete' | 'revoke' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const { data: sub } = useFetch<{ url: string; links: string[] }>(`/api/users/${user.id}/subscription?v=${user.sub_token}`)
+  const { data: sub, reload: reloadSub } = useFetch<SubInfo>(`/api/users/${user.id}/subscription?v=${user.sub_token}`)
   const { data: traffic } = useFetch<DailyTraffic[]>(`/api/users/${user.id}/traffic?days=14`)
   const devices = useFetch<Device[]>(tab === 'devices' ? `/api/users/${user.id}/devices` : null)
 
@@ -110,22 +117,7 @@ export default function UserDetails({
         ))}
       </div>
 
-      {tab === 'sub' && sub && (
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
-          <QR value={sub.url} size={180} />
-          <div className="min-w-0 flex-1 space-y-3">
-            <code className="block break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">{sub.url}</code>
-            <div className="flex flex-wrap gap-2">
-              <CopyButton text={sub.url} />
-              <a href={sub.url} target="_blank" rel="noreferrer">
-                <Button variant="secondary" size="sm">
-                  ↗
-                </Button>
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
+      {tab === 'sub' && sub && <SubscriptionLinks user={user} sub={sub} onDriveChanged={reloadSub} />}
 
       {tab === 'links' && (
         <div className="space-y-2">
@@ -189,6 +181,87 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
     <div className="min-w-0">
       <div className="mb-1 text-xs text-slate-500 dark:text-slate-400">{label}</div>
       <div className="text-sm font-medium text-slate-900 dark:text-white">{children}</div>
+    </div>
+  )
+}
+
+// SubscriptionLinks shows the regular subscription URL and, next to it, the
+// backup Google Drive link (www.googleapis.com/drive/v3/files/…?key=…&alt=media).
+function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: SubInfo; onDriveChanged: () => void }) {
+  const { t, lang } = useI18n()
+  const { admin } = useAuth()
+  const [kind, setKind] = useState<'direct' | 'gdrive'>('direct')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const drive = sub.gdrive
+  const url = kind === 'direct' ? sub.url : drive.url
+
+  const createDrive = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await post(`/api/users/${user.id}/gdrive`)
+      onDriveChanged()
+    } catch (e) {
+      setError((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div>
+      <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
+        {(['direct', 'gdrive'] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setKind(k)}
+            className={cx(
+              'flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
+              kind === k ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
+            )}
+          >
+            {k === 'gdrive' && <CloudUpload className="h-3.5 w-3.5" />}
+            {t(`sub.kind.${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {kind === 'gdrive' && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t('sub.gdriveHint')}</p>}
+      <ErrorNote error={error ?? (kind === 'gdrive' ? drive.error ?? null : null)} />
+
+      {url ? (
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
+          <QR value={url} size={180} />
+          <div className="min-w-0 flex-1 space-y-3">
+            <code className="block break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">{url}</code>
+            <div className="flex flex-wrap items-center gap-2">
+              <CopyButton text={url} />
+              <a href={url} target="_blank" rel="noreferrer">
+                <Button variant="secondary" size="sm">
+                  ↗
+                </Button>
+              </a>
+              {kind === 'gdrive' && drive.synced_at && (
+                <span className="text-xs text-slate-400">
+                  {t('sub.gdriveSynced')}: {relativeTime(drive.synced_at, lang)}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : !drive.available ? (
+        <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800/60">
+          {admin?.role === 'sudo' ? t('sub.gdriveNotSetUp') : t('sub.gdriveNotSetUpAdmin')}
+        </p>
+      ) : user.device_limit > 0 ? (
+        <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{t('sub.gdriveDeviceLimit')}</p>
+      ) : (
+        <Button onClick={createDrive} loading={busy}>
+          <CloudUpload className="h-4 w-4" />
+          {t('sub.gdriveCreate')}
+        </Button>
+      )}
     </div>
   )
 }

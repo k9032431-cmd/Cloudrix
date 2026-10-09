@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
-import { Activity, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Network, ScrollText, Server, ShieldCheck, Sun, Users, X } from 'lucide-react'
+import { Activity, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Network, ScrollText, Server, Settings, ShieldCheck, Sun, Users, X } from 'lucide-react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { useTheme } from '../lib/hooks'
@@ -31,6 +31,7 @@ export default function Layout() {
     { to: '/nodes', label: t('nav.nodes'), icon: Server, show: sudo },
     { to: '/admins', label: t('nav.admins'), icon: ShieldCheck, show: sudo },
     { to: '/audit', label: t('nav.audit'), icon: ScrollText, show: sudo },
+    { to: '/settings', label: t('nav.settings'), icon: Settings, show: sudo },
   ].filter((n) => n.show)
 
   const sidebar = (

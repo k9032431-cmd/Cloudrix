@@ -131,6 +131,14 @@ var migrations = []string{
 		bytes INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (day, user_id)
 	);`,
+	// 2: subscriptions mirrored to Google Drive
+	`CREATE TABLE user_gdrive (
+		user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+		file_id TEXT NOT NULL DEFAULT '',
+		hash TEXT NOT NULL DEFAULT '',
+		synced_at INTEGER,
+		error TEXT NOT NULL DEFAULT ''
+	);`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {
