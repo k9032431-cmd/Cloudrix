@@ -9,7 +9,9 @@ import (
 )
 
 type Config struct {
-	Listen         string        // HTTP listen address, e.g. :8000
+	Listen         string // HTTP listen address, e.g. :8000
+	TLSCert        string // serve HTTPS when both cert and key are set
+	TLSKey         string
 	DatabasePath   string        // SQLite file
 	JWTSecret      string        // empty = generated and persisted in DB
 	TokenTTL       time.Duration // admin session lifetime
@@ -27,6 +29,8 @@ type Config struct {
 func Load() Config {
 	return Config{
 		Listen:         env("CLOUDRIX_LISTEN", ":8000"),
+		TLSCert:        env("CLOUDRIX_TLS_CERT", ""),
+		TLSKey:         env("CLOUDRIX_TLS_KEY", ""),
 		DatabasePath:   env("CLOUDRIX_DB", "cloudrix.db"),
 		JWTSecret:      env("CLOUDRIX_JWT_SECRET", ""),
 		TokenTTL:       time.Duration(envInt("CLOUDRIX_TOKEN_TTL_HOURS", 24)) * time.Hour,

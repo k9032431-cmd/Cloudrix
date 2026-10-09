@@ -2,6 +2,7 @@
 //
 //	cloudrix                       start the panel
 //	cloudrix admin create -u NAME  create a sudo admin (password from CLOUDRIX_ADMIN_PASSWORD or prompt)
+//	cloudrix admin passwd -u NAME  set a new password for an existing admin
 package main
 
 import (
@@ -76,7 +77,12 @@ func serve(cfg config.Config, log *slog.Logger) error {
 	}
 	errc := make(chan error, 1)
 	go func() {
-		log.Info("cloudrix panel listening", "addr", cfg.Listen, "version", api.Version)
+		if cfg.TLSCert != "" && cfg.TLSKey != "" {
+			log.Info("cloudrix panel listening (https)", "addr", cfg.Listen, "version", api.Version)
+			errc <- httpSrv.ListenAndServeTLS(cfg.TLSCert, cfg.TLSKey)
+			return
+		}
+		log.Info("cloudrix panel listening (http)", "addr", cfg.Listen, "version", api.Version)
 		errc <- httpSrv.ListenAndServe()
 	}()
 
@@ -137,36 +143,57 @@ func jwtSecret(ctx context.Context, cfg config.Config, st *store.Store) (string,
 }
 
 func runCommand(cfg config.Config, args []string) error {
-	if len(args) >= 2 && args[0] == "admin" && args[1] == "create" {
-		fs := flag.NewFlagSet("admin create", flag.ExitOnError)
-		username := fs.String("u", "", "username")
-		_ = fs.Parse(args[2:])
-		if *username == "" {
-			return errors.New("usage: cloudrix admin create -u NAME")
-		}
-		password := cfg.AdminPassword
-		if password == "" {
-			fmt.Fprint(os.Stderr, "password: ")
-			line, err := bufio.NewReader(os.Stdin).ReadString('\n')
-			if err != nil && line == "" {
-				return err
-			}
-			password = strings.TrimSpace(line)
-		}
-		st, err := store.Open(cfg.DatabasePath)
-		if err != nil {
+	if args[0] == "version" {
+		fmt.Println(api.Version)
+		return nil
+	}
+	if len(args) < 2 || args[0] != "admin" || (args[1] != "create" && args[1] != "passwd") {
+		return fmt.Errorf("unknown command %q (use: admin create -u NAME, admin passwd -u NAME, version)", strings.Join(args, " "))
+	}
+	fs := flag.NewFlagSet("admin "+args[1], flag.ExitOnError)
+	username := fs.String("u", "", "username")
+	_ = fs.Parse(args[2:])
+	if *username == "" {
+		return fmt.Errorf("usage: cloudrix admin %s -u NAME", args[1])
+	}
+	password := cfg.AdminPassword
+	if password == "" {
+		fmt.Fprint(os.Stderr, "password: ")
+		line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil && line == "" {
 			return err
 		}
-		defer st.Close()
-		if err := createAdmin(context.Background(), st, *username, password); err != nil {
+		password = strings.TrimSpace(line)
+	}
+	st, err := store.Open(cfg.DatabasePath)
+	if err != nil {
+		return err
+	}
+	defer st.Close()
+	ctx := context.Background()
+
+	if args[1] == "create" {
+		if err := createAdmin(ctx, st, *username, password); err != nil {
+			if errors.Is(err, store.ErrConflict) {
+				return fmt.Errorf("admin %q already exists; use `cloudrix admin passwd -u %s`", *username, *username)
+			}
 			return err
 		}
 		fmt.Println("sudo admin created:", *username)
 		return nil
 	}
-	if args[0] == "version" {
-		fmt.Println(api.Version)
-		return nil
+
+	a, err := st.GetAdminByUsername(ctx, *username)
+	if err != nil {
+		return fmt.Errorf("admin %q: %w", *username, err)
 	}
-	return fmt.Errorf("unknown command %q", strings.Join(args, " "))
+	if a.PasswordHash, err = auth.HashPassword(password); err != nil {
+		return err
+	}
+	a.Disabled = false
+	if err := st.UpdateAdmin(ctx, a); err != nil {
+		return err
+	}
+	fmt.Println("password updated:", *username)
+	return nil
 }
