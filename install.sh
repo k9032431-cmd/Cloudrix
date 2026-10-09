@@ -723,16 +723,28 @@ panel_port() { printf '%s' "${CLOUDRIX_LISTEN##*:}"; }
 
 panel_tls() { [[ -n ${CLOUDRIX_TLS_CERT-} ]] && echo 1 || echo 0; }
 
-# make_backup [метка] — согласованная копия базы без остановки панели.
+# make_backup [метка] [бинарник] — согласованная копия базы без остановки
+# панели. Если бинарник не умеет `backup` (старые версии), база копируется
+# при остановленной панели.
 make_backup() {
-  local label=${1:-manual} file
+  local label=${1:-manual} bin=${2:-$BIN} file
   mkdir -p "$BACKUP_DIR"
   chown "$SERVICE_USER:$SERVICE_USER" "$BACKUP_DIR"
   file="$BACKUP_DIR/cloudrix-$(date +%Y%m%d-%H%M%S)-$label.db"
-  run_as_service "$BIN" backup "$file" >/dev/null || return 1
+  if ! run_as_service "$bin" backup "$file" >/dev/null 2>&1; then
+    local was_active=0
+    systemctl is-active --quiet "$SERVICE" && was_active=1
+    systemctl stop "$SERVICE" 2>/dev/null || true
+    local rc=0
+    cp -p "$DATA_DIR/cloudrix.db" "$file" || rc=1
+    [[ -f $DATA_DIR/cloudrix.db-wal ]] && { cp -p "$DATA_DIR/cloudrix.db-wal" "$file-wal" || rc=1; }
+    ((was_active)) && systemctl start "$SERVICE"
+    ((rc == 0)) || return 1
+  fi
   # Храним 10 последних копий.
+  local old
   find "$BACKUP_DIR" -maxdepth 1 -name 'cloudrix-*.db' -printf '%T@ %p\n' 2>/dev/null |
-    sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f
+    sort -rn | tail -n +11 | cut -d' ' -f2- | while read -r old; do rm -f "$old" "$old-wal"; done
   BACKUP_FILE=$file
 }
 
@@ -783,7 +795,9 @@ cmd_update() {
   ensure_deps
   fetch_binary
 
-  if make_backup "before-update"; then
+  # Бэкап делает уже новая версия: у старых может не быть команды backup.
+  chmod 0755 "$WORK" "$WORK/cloudrix"
+  if make_backup "before-update" "$WORK/cloudrix"; then
     ok "Резервная копия базы: $BACKUP_FILE"
   else
     ask_yes_no "Не удалось сделать резервную копию базы. Продолжить без неё?" n || die "Обновление отменено."
@@ -834,6 +848,9 @@ cmd_restore() {
   systemctl stop "$SERVICE"
   rm -f "$DATA_DIR/cloudrix.db-wal" "$DATA_DIR/cloudrix.db-shm"
   install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0640 "$file" "$DATA_DIR/cloudrix.db"
+  if [[ -f $file-wal ]]; then
+    install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0640 "$file-wal" "$DATA_DIR/cloudrix.db-wal"
+  fi
   systemctl start "$SERVICE"
   ok "База восстановлена из $(basename "$file")"
 }
