@@ -3,6 +3,7 @@
 //	cloudrix                       start the panel
 //	cloudrix admin create -u NAME  create a sudo admin (password from CLOUDRIX_ADMIN_PASSWORD or prompt)
 //	cloudrix admin passwd -u NAME  set a new password for an existing admin
+//	cloudrix backup FILE           write a consistent copy of the database
 package main
 
 import (
@@ -150,8 +151,23 @@ func runCommand(cfg config.Config, args []string) error {
 		fmt.Println(api.Version)
 		return nil
 	}
+	if args[0] == "backup" {
+		if len(args) != 2 {
+			return errors.New("usage: cloudrix backup FILE")
+		}
+		st, err := store.Open(cfg.DatabasePath)
+		if err != nil {
+			return err
+		}
+		defer st.Close()
+		if err := st.Backup(context.Background(), args[1]); err != nil {
+			return err
+		}
+		fmt.Println("backup written:", args[1])
+		return nil
+	}
 	if len(args) < 2 || args[0] != "admin" || (args[1] != "create" && args[1] != "passwd") {
-		return fmt.Errorf("unknown command %q (use: admin create -u NAME, admin passwd -u NAME, version)", strings.Join(args, " "))
+		return fmt.Errorf("unknown command %q (use: admin create -u NAME, admin passwd -u NAME, backup FILE, version)", strings.Join(args, " "))
 	}
 	fs := flag.NewFlagSet("admin "+args[1], flag.ExitOnError)
 	username := fs.String("u", "", "username")

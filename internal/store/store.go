@@ -198,3 +198,9 @@ func ptrUnix(v sql.NullInt64) *time.Time {
 func isUnique(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
 }
+
+// Backup writes a consistent copy of the database to path while the panel keeps running.
+func (s *Store) Backup(ctx context.Context, path string) error {
+	_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, path)
+	return err
+}

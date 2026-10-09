@@ -4,8 +4,8 @@
 # Установка одной командой:
 #   bash <(curl -fsSL https://raw.githubusercontent.com/k9032431-cmd/Cloudrix/main/install.sh)
 #
-# После установки доступна команда `cloudrix-manager`:
-#   cloudrix-manager status | restart | logs | update | admin | uninstall
+# После установки доступна команда `cloudrix-manager`. Без аргументов она
+# открывает меню; обновление панели — пункт меню или `cloudrix-manager update`.
 #
 # Конкретная версия: CLOUDRIX_VERSION=v0.1.0. Своё зеркало архива:
 #   CLOUDRIX_DOWNLOAD_URL=https://mirror.example.com/cloudrix-linux-{arch}.tar.gz
@@ -17,15 +17,20 @@
 
 set -Eeuo pipefail
 
-REPO="${CLOUDRIX_REPO:-k9032431-cmd/Cloudrix}"
-BRANCH="${CLOUDRIX_BRANCH:-main}"
+# Откуда ставить и обновлять. При установке запоминается в $INSTALL_CONF,
+# поэтому `update` берёт новые версии из того же репозитория и ветки.
+REPO="${CLOUDRIX_REPO-}"
+BRANCH="${CLOUDRIX_BRANCH-}"
 RELEASE="${CLOUDRIX_VERSION:-latest}"
+DEFAULT_REPO="k9032431-cmd/Cloudrix"
 
 APP_DIR="/opt/cloudrix"
 CONF_DIR="/etc/cloudrix"
 DATA_DIR="/var/lib/cloudrix"
 CERT_DIR="$CONF_DIR/certs"
 ENV_FILE="$CONF_DIR/cloudrix.env"
+INSTALL_CONF="$CONF_DIR/install.conf"
+BACKUP_DIR="$DATA_DIR/backups"
 BIN="/usr/local/bin/cloudrix"
 MANAGER="/usr/local/bin/cloudrix-manager"
 SERVICE="cloudrix"
@@ -35,6 +40,8 @@ GO_VERSION="1.24.7"
 NODE_VERSION="22.22.0"
 
 ASSUME_YES=0
+FORCE=0
+FOLLOW=0
 
 # ---------- вывод ----------
 
@@ -243,15 +250,82 @@ valid_username() {
 
 # ---------- получение бинарника ----------
 
+# ---------- источник и версии ----------
+
+# load_install_conf восстанавливает репозиторий и ветку, с которых ставили панель.
+# Явно заданные CLOUDRIX_REPO / CLOUDRIX_BRANCH важнее сохранённых.
+load_install_conf() {
+  INSTALLED_REF=""
+  if [[ -f $INSTALL_CONF ]]; then
+    local repo branch ref
+    repo=$(sed -n 's/^REPO=//p' "$INSTALL_CONF")
+    branch=$(sed -n 's/^BRANCH=//p' "$INSTALL_CONF")
+    ref=$(sed -n 's/^REF=//p' "$INSTALL_CONF")
+    [[ -z $REPO ]] && REPO=$repo
+    [[ -z $BRANCH ]] && BRANCH=$branch
+    INSTALLED_REF=$ref
+  fi
+  [[ -n $REPO ]] || REPO=$DEFAULT_REPO
+}
+
+save_install_conf() {
+  mkdir -p "$CONF_DIR"
+  printf '# Откуда ставилась панель; используется командой update\nREPO=%s\nBRANCH=%s\nCHANNEL=%s\nREF=%s\nUPDATED=%s\n' \
+    "$REPO" "$BRANCH" "$TARGET_CHANNEL" "$TARGET_REF" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$INSTALL_CONF"
+}
+
+github_api() {
+  curl -fsSL --max-time 15 -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO$1" 2>/dev/null
+}
+
+# resolve_branch выбирает ветку по умолчанию репозитория, если она не задана.
+resolve_branch() {
+  [[ -n $BRANCH ]] && return
+  BRANCH=$(github_api "" | sed -n 's/.*"default_branch": *"\([^"]*\)".*/\1/p' | head -n1 || true)
+  [[ -n $BRANCH ]] || BRANCH=main
+}
+
+# resolve_target определяет, что ставить: последний релиз (если есть) или
+# последний коммит ветки. Заполняет TARGET_CHANNEL и TARGET_REF.
+resolve_target() {
+  if [[ -n ${CLOUDRIX_LOCAL_BINARY-} ]]; then
+    TARGET_CHANNEL=local TARGET_REF=local
+    return
+  fi
+  if [[ -n ${CLOUDRIX_DOWNLOAD_URL-} ]]; then
+    TARGET_CHANNEL=mirror TARGET_REF=$RELEASE
+    return
+  fi
+  local tag=""
+  if [[ $RELEASE == latest ]]; then
+    tag=$(github_api "/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1 || true)
+  else
+    tag=$RELEASE
+  fi
+  if [[ -n $tag ]]; then
+    TARGET_CHANNEL=release TARGET_REF=$tag
+    return
+  fi
+  resolve_branch
+  TARGET_CHANNEL=source
+  TARGET_REF=$(curl -fsSL --max-time 15 -H "Accept: application/vnd.github.sha" \
+    "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | head -c 40 || true)
+  [[ $TARGET_REF =~ ^[0-9a-f]{40}$ ]] || TARGET_REF=$BRANCH
+}
+
+short_ref() {
+  local r=${1-}
+  [[ $r =~ ^[0-9a-f]{40}$ ]] && r=${r:0:7}
+  printf '%s' "${r:-?}"
+}
+
 download_release() {
   local url
-  if [[ -n ${CLOUDRIX_DOWNLOAD_URL-} ]]; then
+  if [[ $TARGET_CHANNEL == mirror ]]; then
     # Своё зеркало, если GitHub недоступен с сервера.
     url=${CLOUDRIX_DOWNLOAD_URL//\{arch\}/$ARCH}
-  elif [[ $RELEASE == latest ]]; then
-    url="https://github.com/$REPO/releases/latest/download/cloudrix-linux-$ARCH.tar.gz"
   else
-    url="https://github.com/$REPO/releases/download/$RELEASE/cloudrix-linux-$ARCH.tar.gz"
+    url="https://github.com/$REPO/releases/download/$TARGET_REF/cloudrix-linux-$ARCH.tar.gz"
   fi
   info "Скачиваю готовую сборку: $url"
   curl -fsSL --retry 3 -o "$WORK/cloudrix.tar.gz" "$url" 2>/dev/null || return 1
@@ -260,18 +334,20 @@ download_release() {
 }
 
 build_from_source() {
-  warn "Готовой сборки нет — собираю из исходников (ветка $BRANCH). Это займёт несколько минут."
+  warn "Собираю из исходников ($REPO, ветка $BRANCH, коммит $(short_ref "$TARGET_REF")). Это займёт несколько минут."
   local src="$WORK/src" tools="$WORK/tools"
   mkdir -p "$src" "$tools"
 
   info "Скачиваю исходники"
-  curl -fsSL --retry 3 "https://github.com/$REPO/archive/refs/heads/$BRANCH.tar.gz" | tar -xz -C "$src" --strip-components=1 ||
+  curl -fsSL --retry 3 "https://github.com/$REPO/archive/$TARGET_REF.tar.gz" | tar -xz -C "$src" --strip-components=1 ||
     die "Не удалось скачать исходники $REPO (репозиторий приватный или нет сети?)."
 
   info "Скачиваю Go $GO_VERSION и Node.js $NODE_VERSION (только для сборки)"
   curl -fsSL --retry 3 "${CLOUDRIX_GO_URL:-https://dl.google.com/go/go$GO_VERSION.linux-$ARCH.tar.gz}" | tar -xz -C "$tools"
   curl -fsSL --retry 3 "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-$NODE_ARCH.tar.xz" | tar -xJ -C "$tools"
   local path="$tools/go/bin:$tools/node-v$NODE_VERSION-linux-$NODE_ARCH/bin:$PATH"
+  local version
+  version="git-$(short_ref "$TARGET_REF")"
 
   # env, а не "PATH=... cmd": так новый PATH используется и для поиска самой команды.
   info "Собираю веб-интерфейс"
@@ -283,7 +359,7 @@ build_from_source() {
   (cd "$src" &&
     { env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" go mod download >/dev/null 2>&1 || true; } &&
     env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" CGO_ENABLED=0 \
-      go build -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$BRANCH-src" \
+      go build -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$version" \
       -o "$WORK/cloudrix" ./cmd/cloudrix)
   cp "$src/install.sh" "$WORK/install.sh"
 }
@@ -292,11 +368,20 @@ fetch_binary() {
   WORK=$(mktemp -d)
   # shellcheck disable=SC2064
   trap "rm -rf '$WORK'" EXIT
-  if [[ -n ${CLOUDRIX_LOCAL_BINARY-} ]]; then
-    cp "$CLOUDRIX_LOCAL_BINARY" "$WORK/cloudrix"
-  elif ! download_release; then
-    build_from_source
-  fi
+  [[ -n ${TARGET_CHANNEL-} ]] || resolve_target
+  case $TARGET_CHANNEL in
+    local) cp "$CLOUDRIX_LOCAL_BINARY" "$WORK/cloudrix" ;;
+    mirror) download_release || die "Не удалось скачать архив с зеркала." ;;
+    release)
+      if ! download_release; then
+        warn "Релиз $TARGET_REF скачать не удалось — соберу из исходников."
+        resolve_branch
+        TARGET_CHANNEL=source TARGET_REF=$BRANCH
+        build_from_source
+      fi
+      ;;
+    source) build_from_source ;;
+  esac
   "$WORK/cloudrix" version >/dev/null || die "Собранный бинарник не запускается."
 }
 
@@ -310,7 +395,7 @@ install_binary() {
     [[ ${BASH_SOURCE[0]} -ef $MANAGER ]] || install -m 0755 "${BASH_SOURCE[0]}" "$MANAGER"
   else
     # Скрипт запущен через pipe — своего файла нет, скачиваем копию.
-    if curl -fsSL "https://raw.githubusercontent.com/$REPO/$BRANCH/install.sh" -o "$MANAGER.tmp" 2>/dev/null; then
+    if curl -fsSL "https://raw.githubusercontent.com/$REPO/${TARGET_REF:-$BRANCH}/install.sh" -o "$MANAGER.tmp" 2>/dev/null; then
       install -m 0755 "$MANAGER.tmp" "$MANAGER"
       rm -f "$MANAGER.tmp"
     else
@@ -471,6 +556,7 @@ cmd_install() {
   detect_arch
   info "Система: $OS_NAME ($ARCH)"
 
+  load_install_conf
   if [[ -x $BIN ]] && systemctl is-enabled "$SERVICE" >/dev/null 2>&1; then
     warn "Cloudrix уже установлен ($("$BIN" version 2>/dev/null || echo '?'))."
     # С --yes переустанавливаем без вопроса: флаг передан явно.
@@ -592,6 +678,7 @@ cmd_install() {
 
   write_env
   write_service
+  save_install_conf
   setup_admin
   open_firewall "$PANEL_PORT"
   systemctl enable --now "$SERVICE" >/dev/null 2>&1
@@ -623,7 +710,7 @@ print_summary() {
     printf '  %sПароль:%s  тот, что вы ввели\n' "$C_BOLD" "$C_RESET"
   fi
   [[ $TLS == 1 ]] && printf '  %sСертификат:%s %s (подходит и для инбаундов Hysteria2/TUIC/TLS)\n' "$C_BOLD" "$C_RESET" "$CERT_DIR/fullchain.pem"
-  printf '\n  Управление: %scloudrix-manager%s status | restart | logs | update | admin | cert | uninstall\n\n' "$C_CYAN" "$C_RESET"
+  printf '\n  Меню управления (обновление, логи, бэкапы): %scloudrix-manager%s\n\n' "$C_CYAN" "$C_RESET"
 }
 
 load_env() {
@@ -632,25 +719,203 @@ load_env() {
   set -a && . "$ENV_FILE" && set +a
 }
 
+panel_port() { printf '%s' "${CLOUDRIX_LISTEN##*:}"; }
+
+panel_tls() { [[ -n ${CLOUDRIX_TLS_CERT-} ]] && echo 1 || echo 0; }
+
+# make_backup [метка] — согласованная копия базы без остановки панели.
+make_backup() {
+  local label=${1:-manual} file
+  mkdir -p "$BACKUP_DIR"
+  chown "$SERVICE_USER:$SERVICE_USER" "$BACKUP_DIR"
+  file="$BACKUP_DIR/cloudrix-$(date +%Y%m%d-%H%M%S)-$label.db"
+  run_as_service "$BIN" backup "$file" >/dev/null || return 1
+  # Храним 10 последних копий.
+  find "$BACKUP_DIR" -maxdepth 1 -name 'cloudrix-*.db' -printf '%T@ %p\n' 2>/dev/null |
+    sort -rn | tail -n +11 | cut -d' ' -f2- | xargs -r rm -f
+  BACKUP_FILE=$file
+}
+
+# self_update загружает свежую версию этого скрипта и перезапускает команду ею,
+# чтобы новые пункты меню и исправления установщика приходили вместе с панелью.
+self_update() {
+  [[ -z ${CLOUDRIX_SELF_UPDATED-} && $TARGET_CHANNEL != local && $TARGET_CHANNEL != mirror ]] || return 0
+  local tmp self=${BASH_SOURCE[0]-}
+  tmp=$(mktemp)
+  if curl -fsSL --max-time 20 "https://raw.githubusercontent.com/$REPO/$TARGET_REF/install.sh" -o "$tmp" 2>/dev/null &&
+    bash -n "$tmp" 2>/dev/null && ! { [[ -f $self ]] && cmp -s "$tmp" "$self"; }; then
+    info "Обновляю сам менеджер"
+    local args=(update)
+    ((ASSUME_YES)) && args+=(--yes)
+    ((FORCE)) && args+=(--force)
+    exec env CLOUDRIX_SELF_UPDATED=1 CLOUDRIX_REPO="$REPO" CLOUDRIX_BRANCH="$BRANCH" \
+      CLOUDRIX_TARGET="$TARGET_CHANNEL:$TARGET_REF" bash "$tmp" "${args[@]}"
+  fi
+  rm -f "$tmp"
+}
+
 cmd_update() {
   require_root
   detect_os
   detect_arch
   load_env
-  info "Текущая версия: $("$BIN" version 2>/dev/null || echo '?')"
+  load_install_conf
+  local current
+  current=$("$BIN" version 2>/dev/null || echo '?')
+
+  if [[ -n ${CLOUDRIX_TARGET-} ]]; then
+    TARGET_CHANNEL=${CLOUDRIX_TARGET%%:*} TARGET_REF=${CLOUDRIX_TARGET#*:}
+  else
+    info "Проверяю обновления ($REPO${BRANCH:+, ветка $BRANCH})"
+    resolve_target
+  fi
+  info "Установлена: $current"
+  info "Доступна:    $(short_ref "$TARGET_REF")${TARGET_CHANNEL:+ ($TARGET_CHANNEL)}"
+
+  if [[ $TARGET_CHANNEL != local && $TARGET_CHANNEL != mirror && -n $INSTALLED_REF && $INSTALLED_REF == "$TARGET_REF" ]] && ! ((FORCE)); then
+    ok "У вас уже последняя версия."
+    if ((ASSUME_YES)) || ! ask_yes_no "Всё равно переустановить эту версию?" n; then
+      return 0
+    fi
+  fi
+  self_update
+
   ensure_deps
   fetch_binary
-  # Бэкап при остановленной панели, чтобы в копию попали и данные из WAL.
-  systemctl stop "$SERVICE"
-  local backup
-  backup="$DATA_DIR/backup-$(date +%Y%m%d-%H%M%S)"
-  mkdir -p "$backup"
-  cp -a "$DATA_DIR"/cloudrix.db* "$backup"/ 2>/dev/null || true
-  chown -R "$SERVICE_USER:$SERVICE_USER" "$backup"
-  ok "Резервная копия базы: $backup"
+
+  if make_backup "before-update"; then
+    ok "Резервная копия базы: $BACKUP_FILE"
+  else
+    ask_yes_no "Не удалось сделать резервную копию базы. Продолжить без неё?" n || die "Обновление отменено."
+  fi
+
+  cp -p "$BIN" "$BIN.prev"
   install_binary
+  systemctl restart "$SERVICE"
+  PANEL_PORT=$(panel_port) TLS=$(panel_tls)
+  if ! wait_healthy; then
+    warn "Новая версия не запустилась — возвращаю предыдущую."
+    mv -f "$BIN.prev" "$BIN"
+    systemctl restart "$SERVICE"
+    die "Обновление откатено. Посмотрите логи: cloudrix-manager logs"
+  fi
+  rm -f "$BIN.prev"
+  save_install_conf
+  ok "Панель обновлена: $current → $("$BIN" version)"
+}
+
+cmd_backup() {
+  require_root
+  load_env
+  make_backup manual || die "Не удалось создать резервную копию."
+  ok "Резервная копия: $BACKUP_FILE"
+}
+
+cmd_restore() {
+  require_root
+  load_env
+  local files=() i choice
+  mapfile -t files < <(find "$BACKUP_DIR" -maxdepth 1 -name 'cloudrix-*.db' -printf '%T@ %p\n' 2>/dev/null | sort -rn | cut -d' ' -f2-)
+  ((${#files[@]})) || die "Резервных копий нет ($BACKUP_DIR)."
+  echo
+  for i in "${!files[@]}"; do
+    printf '  %s%2d)%s %s  %s(%s)%s\n' "$C_BOLD" $((i + 1)) "$C_RESET" "$(basename "${files[$i]}")" "$C_DIM" "$(du -h "${files[$i]}" | cut -f1)" "$C_RESET"
+  done
+  echo
+  choice=${1-}
+  ask choice "Номер копии для восстановления"
+  if ! [[ $choice =~ ^[0-9]+$ ]] || ((choice < 1 || choice > ${#files[@]})); then
+    die "Нет такого номера."
+  fi
+  local file=${files[$((choice - 1))]}
+  warn "Текущая база будет заменена копией $(basename "$file"). Перед этим сохраню её копию."
+  ask_yes_no "Восстановить?" n || return 0
+  make_backup "before-restore" && ok "Текущая база сохранена: $BACKUP_FILE"
+  systemctl stop "$SERVICE"
+  rm -f "$DATA_DIR/cloudrix.db-wal" "$DATA_DIR/cloudrix.db-shm"
+  install -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0640 "$file" "$DATA_DIR/cloudrix.db"
   systemctl start "$SERVICE"
-  ok "Обновлено и перезапущено"
+  ok "База восстановлена из $(basename "$file")"
+}
+
+cmd_info() {
+  load_env
+  load_install_conf
+  local state
+  state=$(systemctl is-active "$SERVICE" 2>/dev/null || true)
+  printf '\n  %sПанель:%s     %s\n' "$C_BOLD" "$C_RESET" "${CLOUDRIX_SUB_URL:-?}"
+  printf '  %sСостояние:%s  %s\n' "$C_BOLD" "$C_RESET" "$([[ $state == active ]] && printf '%sработает%s' "$C_GREEN" "$C_RESET" || printf '%s%s%s' "$C_RED" "${state:-остановлена}" "$C_RESET")"
+  printf '  %sВерсия:%s     %s\n' "$C_BOLD" "$C_RESET" "$("$BIN" version 2>/dev/null || echo '?')"
+  printf '  %sИсточник:%s   %s%s\n' "$C_BOLD" "$C_RESET" "$REPO" "${BRANCH:+ (ветка $BRANCH)}"
+  printf '  %sHTTPS:%s      %s\n' "$C_BOLD" "$C_RESET" "$([[ $(panel_tls) == 1 ]] && echo "да ($CERT_DIR)" || echo нет)"
+  printf '  %sДанные:%s     %s, настройки %s\n' "$C_BOLD" "$C_RESET" "$DATA_DIR" "$ENV_FILE"
+  [[ -f $CONF_DIR/admin-credentials.txt ]] && printf '  %sПароль:%s     сгенерированный пароль лежит в %s\n' "$C_BOLD" "$C_RESET" "$CONF_DIR/admin-credentials.txt"
+  echo
+}
+
+cmd_logs() {
+  if ((FOLLOW)); then
+    journalctl -u "$SERVICE" -f -n 100
+  else
+    journalctl -u "$SERVICE" -n 60 --no-pager
+  fi
+}
+
+# ---------- меню ----------
+
+menu() {
+  require_root
+  [[ -f $ENV_FILE ]] || {
+    warn "Панель ещё не установлена."
+    ask_yes_no "Установить сейчас?" y && cmd_install
+    return
+  }
+  have_tty || die "Меню работает только в терминале. Команды: $(basename "$0") --help"
+  local choice
+  while true; do
+    clear 2>/dev/null || true
+    banner
+    (cmd_info) || true
+    printf '  %s1)%s Обновить панель\n' "$C_BOLD" "$C_RESET"
+    printf '  %s2)%s Перезапустить\n' "$C_BOLD" "$C_RESET"
+    printf '  %s3)%s Логи (последние строки)\n' "$C_BOLD" "$C_RESET"
+    printf '  %s4)%s Логи в реальном времени %s(выход — Ctrl+C)%s\n' "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf '  %s5)%s Сбросить пароль / добавить администратора\n' "$C_BOLD" "$C_RESET"
+    printf '  %s6)%s Домен и HTTPS-сертификат\n' "$C_BOLD" "$C_RESET"
+    printf '  %s7)%s Сделать резервную копию базы\n' "$C_BOLD" "$C_RESET"
+    printf '  %s8)%s Восстановить базу из копии\n' "$C_BOLD" "$C_RESET"
+    printf '  %s9)%s Удалить панель\n' "$C_BOLD" "$C_RESET"
+    printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
+    read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
+    case $choice in
+      1) run_menu_action cmd_update ;;
+      2) run_menu_action bash -c "systemctl restart $SERVICE && echo '✔ Перезапущено'" ;;
+      3) run_menu_action cmd_logs ;;
+      4) FOLLOW=1 run_menu_action cmd_logs ;;
+      5) run_menu_action cmd_admin ;;
+      6) run_menu_action cmd_cert ;;
+      7) run_menu_action cmd_backup ;;
+      8) run_menu_action cmd_restore ;;
+      9)
+        run_menu_action cmd_uninstall
+        [[ -f $ENV_FILE ]] || return 0
+        ;;
+      0 | q | exit | "") return 0 ;;
+      *) warn "Нет такого пункта" ;;
+    esac
+  done
+}
+
+# run_menu_action запускает пункт в подоболочке: ошибка не закрывает меню.
+run_menu_action() {
+  echo
+  local rc=0
+  # Ctrl+C прерывает только сам пункт (например, логи), а не меню.
+  trap ':' INT
+  ("$@") || rc=$?
+  trap - INT
+  ((rc == 0 || rc == 130)) || warn "Действие завершилось с ошибкой (код $rc)."
+  read -r -p "$(printf '\n%sНажмите Enter, чтобы вернуться в меню…%s' "$C_DIM" "$C_RESET")" _ <"$TTY" || true
 }
 
 cmd_admin() {
@@ -721,26 +986,32 @@ usage() {
   cat <<EOF
 Использование: $(basename "$0") [команда] [--yes]
 
-  install     установить или переустановить панель (по умолчанию)
-  update      обновить до последней версии (база сохраняется, делается бэкап)
-  status      состояние сервиса
-  restart     перезапустить панель
-  logs        логи в реальном времени
-  admin       создать администратора или сбросить ему пароль
-  cert        выпустить SSL-сертификат и включить HTTPS
-  uninstall   удалить панель
+  (без команды)  меню управления — если панель уже установлена
+  install        установить или переустановить панель
+  update         обновить панель до последней версии (с бэкапом и откатом)
+  info           адрес, версия и состояние панели
+  status         состояние сервиса systemd
+  restart        перезапустить панель
+  logs [-f]      логи (с -f — в реальном времени)
+  admin          создать администратора или сбросить ему пароль
+  cert           выпустить SSL-сертификат и включить HTTPS
+  backup         сделать резервную копию базы
+  restore        восстановить базу из резервной копии
+  uninstall      удалить панель
 
-  --yes       не задавать вопросов, брать значения из переменных окружения
-              (CLOUDRIX_ADMIN_USERNAME, CLOUDRIX_ADMIN_PASSWORD, CLOUDRIX_DOMAIN,
-               CLOUDRIX_EMAIL, CLOUDRIX_PORT, CLOUDRIX_SUB_TITLE)
+  --yes          не задавать вопросов (значения из CLOUDRIX_* переменных)
+  --force        для update: переустановить, даже если версия последняя
 EOF
 }
 
 main() {
-  local cmd=install args=()
+  local cmd="" args=()
+  ASSUME_YES=0 FORCE=0 FOLLOW=0
   for a in "$@"; do
     case $a in
       -y | --yes) ASSUME_YES=1 ;;
+      --force) FORCE=1 ;;
+      -f | --follow) FOLLOW=1 ;;
       -h | --help | help)
         usage
         exit 0
@@ -749,17 +1020,29 @@ main() {
     esac
   done
   ((${#args[@]})) && cmd=${args[0]} && args=("${args[@]:1}")
+  if [[ -z $cmd ]]; then
+    # Установленная панель + терминал → меню; иначе (curl | bash на чистом сервере) → установка.
+    if [[ -f $ENV_FILE ]] && ! ((ASSUME_YES)) && have_tty; then
+      cmd=menu
+    else
+      cmd=install
+    fi
+  fi
   case $cmd in
+    menu) menu ;;
     install) cmd_install ;;
     update | upgrade) cmd_update ;;
+    info) cmd_info ;;
     status) systemctl status "$SERVICE" --no-pager ;;
     restart)
       require_root
       systemctl restart "$SERVICE" && ok "Перезапущено"
       ;;
-    logs) journalctl -u "$SERVICE" -f -n 100 ;;
+    logs) cmd_logs ;;
     admin) cmd_admin "${args[@]}" ;;
     cert) cmd_cert "${args[@]}" ;;
+    backup) cmd_backup ;;
+    restore) cmd_restore "${args[@]}" ;;
     uninstall | remove) cmd_uninstall ;;
     *)
       usage
