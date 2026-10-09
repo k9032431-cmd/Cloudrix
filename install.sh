@@ -811,7 +811,7 @@ cmd_update() {
     warn "Новая версия не запустилась — возвращаю предыдущую."
     mv -f "$BIN.prev" "$BIN"
     systemctl restart "$SERVICE"
-    die "Обновление откатено. Посмотрите логи: cloudrix-manager logs"
+    die "Обновление отменено, работает прежняя версия. Причина — в логах: cloudrix-manager logs"
   fi
   rm -f "$BIN.prev"
   save_install_conf
