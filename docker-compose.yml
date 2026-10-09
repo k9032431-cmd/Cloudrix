@@ -1,0 +1,13 @@
+services:
+  cloudrix:
+    build: .
+    image: cloudrix:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - cloudrix-data:/var/lib/cloudrix
+
+volumes:
+  cloudrix-data:
