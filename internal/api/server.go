@@ -209,8 +209,14 @@ func (s *Server) cors(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) usersChanged() {
-	s.drive.Trigger()
+// usersChanged reports edits. With ids only those users' Drive files are
+// refreshed right away; without ids (inbounds, nodes, jobs) everything is checked.
+func (s *Server) usersChanged(ids ...int64) {
+	if len(ids) > 0 {
+		s.drive.Touch(ids...)
+	} else {
+		s.drive.Trigger()
+	}
 	if s.OnUsersChanged != nil {
 		s.OnUsersChanged()
 	}

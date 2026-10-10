@@ -1,8 +1,10 @@
 package api
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -27,6 +29,10 @@ type fakeGoogle struct {
 	nextID    int
 	apiKey    string
 	refreshes int
+	delay     time.Duration // simulated latency of every request
+	throttle  int           // every Nth upload gets a 429 (0 = never)
+	uploads   int
+	limited   int
 }
 
 func newFakeGoogle() (*fakeGoogle, *httptest.Server) {
@@ -36,12 +42,24 @@ func newFakeGoogle() (*fakeGoogle, *httptest.Server) {
 
 func (g *fakeGoogle) id() string {
 	g.nextID++
-	return "f" + string(rune('A'+g.nextID))
+	return fmt.Sprintf("f%d", g.nextID)
 }
 
 func (g *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if g.delay > 0 {
+		time.Sleep(g.delay) // outside the lock: requests are served concurrently
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if strings.HasPrefix(r.URL.Path, "/upload/") {
+		g.uploads++
+		if g.throttle > 0 && g.uploads%g.throttle == 0 {
+			g.limited++
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = io.WriteString(w, `{"error":{"message":"Rate Limit Exceeded"}}`)
+			return
+		}
+	}
 	p := r.URL.Path
 	authed := r.Header.Get("Authorization") == "Bearer access-1"
 	jsonOut := func(v any) { _ = json.NewEncoder(w).Encode(v) }
@@ -260,4 +278,92 @@ func TestGoogleDriveSubscriptions(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	t.Fatal("deleted user's drive file still served")
+}
+
+// TestDriveSyncSpeed checks that one user's edit reaches Drive within about a
+// second and that a change touching every user is uploaded in parallel.
+func TestDriveSyncSpeed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("load test")
+	}
+	e := newEnv(t)
+	g, gs := newFakeGoogle()
+	defer gs.Close()
+	client := gdrive.New(gdrive.Endpoints{OAuth: gs.URL + "/oauth", Drive: gs.URL + "/drive/v3", Upload: gs.URL + "/upload/drive/v3"})
+	client.RetryBase = 50 * time.Millisecond
+	e.api.drive.client = client
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go e.api.drive.run(ctx)
+
+	root := e.login("root", "supersecret")
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	e.do("PUT", "/api/settings/gdrive", root, map[string]any{"enabled": true, "api_key": g.apiKey, "client_id": "cid", "client_secret": "secret", "format": "plain", "interval_minutes": 60}, nil)
+	if err := e.api.drive.update(ctx, func(s *driveSettings) { s.RefreshToken = "refresh-1" }); err != nil {
+		t.Fatal(err)
+	}
+
+	const n = 250
+	ids := make([]int64, n)
+	files := make([]string, n)
+	for i := 0; i < n; i++ {
+		var u model.User
+		e.do("POST", "/api/users", root, userInput{Username: fmt.Sprintf("user%03d", i)}, &u)
+		var d userDriveView
+		if resp := e.do("POST", "/api/users/"+itoa(u.ID)+"/gdrive", root, nil, &d); resp.StatusCode != 200 {
+			t.Fatalf("create link %d: %d", i, resp.StatusCode)
+		}
+		ids[i], files[i] = u.ID, d.URL[strings.LastIndex(d.URL, "/")+1:strings.Index(d.URL, "?")]
+	}
+
+	// Slow, flaky Google from here on: 150 ms per request, every 10th upload throttled.
+	g.mu.Lock()
+	g.delay, g.throttle = 150*time.Millisecond, 10
+	g.mu.Unlock()
+
+	// 1. One user's edit is visible on Drive almost immediately.
+	start := time.Now()
+	e.do("PUT", "/api/users/"+itoa(ids[123]), root, userInput{Username: "user123", DataLimit: 77 << 30}, nil)
+	for !strings.Contains(mustContent(g, files[123]), "total=82678120448") {
+		if time.Since(start) > 5*time.Second {
+			t.Fatalf("single user edit not synced in 5s: %q", mustContent(g, files[123]))
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	single := time.Since(start)
+
+	// 2. A branding change rewrites all 250 files.
+	start = time.Now()
+	e.do("PUT", "/api/settings/subscription", root, branding{Title: "VIP COREX", Announce: "Hi {USERNAME}", UpdateHours: 1}, nil)
+	for {
+		done := 0
+		for i, f := range files {
+			if strings.Contains(mustContent(g, f), b64Header(fmt.Sprintf("Hi user%03d", i))) {
+				done++
+			}
+		}
+		if done == n {
+			break
+		}
+		if time.Since(start) > 60*time.Second {
+			t.Fatalf("only %d/%d files updated after 60s", done, n)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	all := time.Since(start)
+	g.mu.Lock()
+	limited := g.limited
+	g.mu.Unlock()
+	t.Logf("one user: %v; all %d users: %v (incl. 3s debounce, %d throttled requests retried)", single.Round(time.Millisecond), n, all.Round(time.Millisecond), limited)
+	if single > 2*time.Second {
+		t.Errorf("single user took %v", single)
+	}
+	if limited == 0 {
+		t.Error("throttling was not exercised")
+	}
+}
+
+func mustContent(g *fakeGoogle, id string) string {
+	c, _ := g.content(id)
+	return c
 }

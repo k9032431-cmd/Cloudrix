@@ -175,6 +175,7 @@ export interface DriveSettings {
   connect: { pending: boolean; user_code?: string; verification_url?: string; expires_at: string; error?: string }
   files: number
   errors: number
+  last_run: { at?: string; files: number; uploaded: number; failed: number; seconds: number }
 }
 
 export interface Branding {

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -40,6 +41,8 @@ var Google = Endpoints{
 type Client struct {
 	ep   Endpoints
 	http *http.Client
+	// RetryBase is the first backoff delay when Google asks to slow down.
+	RetryBase time.Duration
 
 	mu           sync.Mutex
 	clientID     string
@@ -50,7 +53,7 @@ type Client struct {
 }
 
 func New(ep Endpoints) *Client {
-	return &Client{ep: ep, http: &http.Client{Timeout: 30 * time.Second}}
+	return &Client{ep: ep, http: &http.Client{Timeout: 30 * time.Second}, RetryBase: time.Second}
 }
 
 // Configure sets OAuth credentials and drops any cached access token.
@@ -102,7 +105,48 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &e) && e.Status == http.StatusNotFound
 }
 
+// retryable reports whether Google asked us to slow down or failed transiently.
+func retryable(status int, body string) bool {
+	switch {
+	case status == http.StatusTooManyRequests || status >= 500:
+		return true
+	case status == http.StatusForbidden:
+		return strings.Contains(body, "rateLimitExceeded") || strings.Contains(body, "userRateLimitExceeded")
+	}
+	return false
+}
+
+// do sends the request, retrying with exponential backoff (up to 5 tries)
+// on rate limits and server errors so large syncs do not fail midway.
 func (c *Client) do(req *http.Request, out any) error {
+	var err error
+	delay := c.RetryBase
+	for attempt := 0; ; attempt++ {
+		err = c.doOnce(req, out)
+		var apiErr *APIError
+		if attempt >= 4 || !errors.As(err, &apiErr) || !retryable(apiErr.Status, apiErr.Body) {
+			return err
+		}
+		if req.GetBody != nil {
+			body, berr := req.GetBody()
+			if berr != nil {
+				return err
+			}
+			req.Body = body
+		} else if req.Body != nil {
+			return err // cannot replay the body
+		}
+		wait := delay + time.Duration(rand.Int64N(int64(delay)/2+1))
+		select {
+		case <-req.Context().Done():
+			return req.Context().Err()
+		case <-time.After(wait):
+		}
+		delay *= 2
+	}
+}
+
+func (c *Client) doOnce(req *http.Request, out any) error {
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return err

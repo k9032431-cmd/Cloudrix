@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { CheckCircle2, CloudUpload, ExternalLink, Link2Off, RefreshCw, ShieldCheck } from 'lucide-react'
 import { post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
+import { relativeTime } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 import type { DriveSettings } from '../lib/types'
 import BrandingCard from './settings/BrandingCard'
@@ -19,7 +20,7 @@ export default function Settings() {
 }
 
 function DriveCard() {
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { data, error, reload, setData } = useFetch<DriveSettings>('/api/settings/gdrive')
   const [form, setForm] = useState({ enabled: false, api_key: '', client_id: '', client_secret: '', format: 'base64', interval_minutes: 10 })
   const [busy, setBusy] = useState<string | null>(null)
@@ -80,6 +81,16 @@ function DriveCard() {
           <div>
             <h2 className="font-semibold text-slate-900 dark:text-white">{t('gd.title')}</h2>
             {data && <p className="text-xs text-slate-500">{t('gd.stats', { files: data.files, errors: data.errors })}</p>}
+            {data?.last_run?.at && (
+              <p className="text-xs text-slate-400">
+                {t('gd.lastRun', {
+                  when: relativeTime(data.last_run.at, lang),
+                  uploaded: data.last_run.uploaded,
+                  files: data.last_run.files,
+                  sec: data.last_run.seconds.toFixed(1),
+                })}
+              </p>
+            )}
           </div>
         </div>
         {data && (
@@ -88,7 +99,8 @@ function DriveCard() {
           </Badge>
         )}
       </div>
-      <p className="mb-5 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('gd.desc')}</p>
+      <p className="mb-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('gd.desc')}</p>
+      <p className="mb-5 max-w-3xl text-xs text-slate-500 dark:text-slate-400">⚡ {t('gd.instant')}</p>
       <ErrorNote error={error} />
       {note && (
         <div

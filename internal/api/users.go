@@ -165,7 +165,7 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.create", u.Username, "")
-	s.usersChanged()
+	s.usersChanged(u.ID)
 	writeJSON(w, http.StatusCreated, u)
 }
 
@@ -211,7 +211,7 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.update", u.Username, "")
-	s.usersChanged()
+	s.usersChanged(u.ID)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -226,7 +226,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.delete", u.Username, "")
-	s.usersChanged()
+	s.usersChanged(u.ID) // nothing to refresh; keeps core sync informed
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -243,7 +243,7 @@ func (s *Server) handleResetTraffic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "user.reset_traffic", u.Username, "")
-	s.usersChanged()
+	s.usersChanged(u.ID)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -268,7 +268,7 @@ func (s *Server) handleRevokeUser(w http.ResponseWriter, r *http.Request) {
 		s.log.Warn("rotate drive link", "user", u.Username, "err", err)
 	}
 	s.audit(r, "user.revoke", u.Username, "")
-	s.usersChanged()
+	s.usersChanged(u.ID)
 	writeJSON(w, http.StatusOK, u)
 }
 
@@ -372,6 +372,7 @@ func (s *Server) handleBulkUsers(w http.ResponseWriter, r *http.Request) {
 	a := adminFrom(r.Context())
 	now := time.Now().UTC()
 	done := 0
+	var changed []int64
 	for _, id := range req.IDs {
 		u, err := s.store.GetUser(r.Context(), id)
 		if errors.Is(err, store.ErrNotFound) {
@@ -415,6 +416,7 @@ func (s *Server) handleBulkUsers(w http.ResponseWriter, r *http.Request) {
 			}
 			jobs.Apply(u, now)
 			err = s.store.UpdateUser(r.Context(), u)
+			changed = append(changed, u.ID)
 		}
 		if err != nil {
 			s.writeStoreError(w, err)
@@ -423,6 +425,6 @@ func (s *Server) handleBulkUsers(w http.ResponseWriter, r *http.Request) {
 		done++
 	}
 	s.audit(r, "user.bulk."+req.Action, fmt.Sprintf("%d users", done), "")
-	s.usersChanged()
+	s.usersChanged(changed...)
 	writeJSON(w, http.StatusOK, map[string]int{"affected": done})
 }

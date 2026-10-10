@@ -59,15 +59,66 @@ type driveSyncer struct {
 	client  *gdrive.Client
 	trigger chan struct{}
 
-	mu     sync.Mutex // guards set and conn
-	set    driveSettings
-	conn   driveConnect
-	cancel context.CancelFunc // running device-flow poller
-	opMu   sync.Mutex         // serializes Drive writes
+	mu      sync.Mutex // guards set, conn, touched, userMu and last
+	set     driveSettings
+	conn    driveConnect
+	cancel  context.CancelFunc // running device-flow poller
+	touched map[int64]struct{} // users edited since the last quick pass
+	touchCh chan struct{}
+	userMu  map[int64]*sync.Mutex // one Drive operation per user at a time
+	last    driveRun
+
+	folderMu sync.Mutex    // folder creation
+	slots    chan struct{} // limits parallel Google requests
 }
 
+// driveRun summarizes the last full pass for the settings page.
+type driveRun struct {
+	At       *time.Time `json:"at,omitempty"`
+	Files    int        `json:"files"`
+	Uploaded int        `json:"uploaded"`
+	Failed   int        `json:"failed"`
+	Seconds  float64    `json:"seconds"`
+}
+
+// driveWorkers is how many files are uploaded in parallel. Google throttles
+// writes per account, so more does not help; retries absorb short bursts.
+const driveWorkers = 4
+
 func newDriveSyncer(s *Server, ep gdrive.Endpoints) *driveSyncer {
-	return &driveSyncer{s: s, client: gdrive.New(ep), trigger: make(chan struct{}, 1)}
+	return &driveSyncer{
+		s: s, client: gdrive.New(ep), trigger: make(chan struct{}, 1),
+		touched: map[int64]struct{}{}, touchCh: make(chan struct{}, 1),
+		userMu: map[int64]*sync.Mutex{}, slots: make(chan struct{}, driveWorkers),
+	}
+}
+
+func (d *driveSyncer) lockUser(id int64) func() {
+	d.mu.Lock()
+	m, ok := d.userMu[id]
+	if !ok {
+		m = &sync.Mutex{}
+		d.userMu[id] = m
+	}
+	d.mu.Unlock()
+	m.Lock()
+	return m.Unlock
+}
+
+// Touch schedules an immediate refresh of these users' Drive files.
+func (d *driveSyncer) Touch(ids ...int64) {
+	if len(ids) == 0 {
+		return
+	}
+	d.mu.Lock()
+	for _, id := range ids {
+		d.touched[id] = struct{}{}
+	}
+	d.mu.Unlock()
+	select {
+	case d.touchCh <- struct{}{}:
+	default:
+	}
 }
 
 func (d *driveSyncer) load(ctx context.Context) error {
@@ -129,7 +180,10 @@ func (d *driveSyncer) Trigger() {
 	}
 }
 
+// run refreshes edited users right away (Touch), everything after global
+// changes (Trigger) and, as a safety net, on the configured interval.
 func (d *driveSyncer) run(ctx context.Context) {
+	go d.runTouched(ctx)
 	for {
 		interval := time.Duration(d.settings().IntervalMinutes) * time.Minute
 		select {
@@ -150,6 +204,39 @@ func (d *driveSyncer) run(ctx context.Context) {
 		if err := d.syncAll(ctx); err != nil {
 			d.s.log.Warn("google drive sync failed", "err", err)
 		}
+	}
+}
+
+func (d *driveSyncer) runTouched(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-d.touchCh:
+		}
+		// A short pause merges a burst of edits (bulk actions) into one pass.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(300 * time.Millisecond):
+		}
+		d.mu.Lock()
+		ids := make([]int64, 0, len(d.touched))
+		for id := range d.touched {
+			ids = append(ids, id)
+		}
+		d.touched = map[int64]struct{}{}
+		d.mu.Unlock()
+		if len(ids) == 0 || !d.ready() {
+			continue
+		}
+		users := make([]*model.User, 0, len(ids))
+		for _, id := range ids {
+			if u, err := d.s.store.GetUser(ctx, id); err == nil {
+				users = append(users, u)
+			}
+		}
+		d.syncMany(ctx, users)
 	}
 }
 
@@ -189,17 +276,23 @@ func (d *driveSyncer) render(ctx context.Context, u *model.User) ([]byte, error)
 // syncUser uploads the user's current subscription. Without create it only
 // refreshes users that already have a Drive file.
 func (d *driveSyncer) syncUser(ctx context.Context, u *model.User, create bool) (*store.DriveFile, error) {
-	d.opMu.Lock()
-	defer d.opMu.Unlock()
+	rec, _, err := d.syncUserStat(ctx, u, create)
+	return rec, err
+}
+
+// syncUserStat is syncUser that also reports whether a file was uploaded.
+func (d *driveSyncer) syncUserStat(ctx context.Context, u *model.User, create bool) (*store.DriveFile, bool, error) {
+	unlock := d.lockUser(u.ID)
+	defer unlock()
 
 	rec, err := d.s.store.GetDriveFile(ctx, u.ID)
 	if errors.Is(err, store.ErrNotFound) {
 		if !create {
-			return nil, nil
+			return nil, false, nil
 		}
 		rec = &store.DriveFile{UserID: u.ID}
 	} else if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	if u.DeviceLimit > 0 {
@@ -209,25 +302,31 @@ func (d *driveSyncer) syncUser(ctx context.Context, u *model.User, create bool) 
 			}
 		}
 		if err := d.s.store.DeleteDriveFile(ctx, u.ID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if create {
-			return nil, errDriveDeviceLimit
+			return nil, false, errDriveDeviceLimit
 		}
-		return nil, nil
+		return nil, false, nil
 	}
 
 	content, err := d.render(ctx, u)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	sum := sha256.Sum256(append([]byte(d.settings().Format+"\n"), content...))
 	hash := hex.EncodeToString(sum[:])
 	if rec.FileID != "" && rec.Hash == hash && rec.Error == "" {
-		return rec, nil
+		return rec, false, nil
 	}
 
+	select { // wait for a free upload slot
+	case d.slots <- struct{}{}:
+	case <-ctx.Done():
+		return nil, false, ctx.Err()
+	}
 	upErr := d.upload(ctx, rec, content)
+	<-d.slots
 	now := time.Now().UTC()
 	rec.SyncedAt = &now
 	if upErr != nil {
@@ -237,10 +336,10 @@ func (d *driveSyncer) syncUser(ctx context.Context, u *model.User, create bool) 
 	}
 	if rec.FileID != "" || upErr == nil {
 		if err := d.s.store.SaveDriveFile(ctx, rec); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
-	return rec, upErr
+	return rec, upErr == nil, upErr
 }
 
 func (d *driveSyncer) upload(ctx context.Context, rec *store.DriveFile, content []byte) error {
@@ -277,8 +376,15 @@ func (d *driveSyncer) upload(ctx context.Context, rec *store.DriveFile, content 
 }
 
 func (d *driveSyncer) folder(ctx context.Context, recreate bool) (string, error) {
-	if id := d.settings().FolderID; id != "" && !recreate {
-		return id, nil
+	before := d.settings().FolderID
+	if before != "" && !recreate {
+		return before, nil
+	}
+	d.folderMu.Lock()
+	defer d.folderMu.Unlock()
+	// Another worker may have created (or re-created) it while we waited.
+	if cur := d.settings().FolderID; cur != "" && (!recreate || cur != before) {
+		return cur, nil
 	}
 	id, err := d.client.CreateFolder(ctx, "Cloudrix subscriptions")
 	if err != nil {
@@ -288,6 +394,7 @@ func (d *driveSyncer) folder(ctx context.Context, recreate bool) (string, error)
 }
 
 func (d *driveSyncer) syncAll(ctx context.Context) error {
+	start := time.Now()
 	recs, err := d.s.store.ListDriveFiles(ctx)
 	if err != nil || len(recs) == 0 {
 		return err
@@ -300,24 +407,54 @@ func (d *driveSyncer) syncAll(ctx context.Context) error {
 	for _, u := range users {
 		byID[u.ID] = u
 	}
-	var failed int
+	todo := make([]*model.User, 0, len(recs))
 	for _, rec := range recs {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		u, ok := byID[rec.UserID]
-		if !ok {
-			continue // user rows cascade; nothing to do
-		}
-		if _, err := d.syncUser(ctx, u, false); err != nil {
-			failed++
-			d.s.log.Debug("drive sync user", "user", u.Username, "err", err)
+		if u, ok := byID[rec.UserID]; ok {
+			todo = append(todo, u)
 		}
 	}
+	uploaded, failed := d.syncMany(ctx, todo)
+	now := time.Now().UTC()
+	d.mu.Lock()
+	d.last = driveRun{At: &now, Files: len(todo), Uploaded: uploaded, Failed: failed, Seconds: time.Since(start).Seconds()}
+	d.mu.Unlock()
 	if failed > 0 {
-		return fmt.Errorf("%d of %d files failed to sync", failed, len(recs))
+		return fmt.Errorf("%d of %d files failed to sync", failed, len(todo))
 	}
 	return nil
+}
+
+// syncMany refreshes existing Drive files of these users in parallel.
+func (d *driveSyncer) syncMany(ctx context.Context, users []*model.User) (uploaded, failed int) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	queue := make(chan *model.User)
+	for i := 0; i < driveWorkers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for u := range queue {
+				_, up, err := d.syncUserStat(ctx, u, false)
+				mu.Lock()
+				if err != nil {
+					failed++
+					d.s.log.Debug("drive sync user", "user", u.Username, "err", err)
+				} else if up {
+					uploaded++
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	for _, u := range users {
+		if ctx.Err() != nil {
+			break
+		}
+		queue <- u
+	}
+	close(queue)
+	wg.Wait()
+	return uploaded, failed
 }
 
 // forget deletes the user's Drive file in the background (before the user row goes away).
@@ -329,8 +466,6 @@ func (d *driveSyncer) forget(ctx context.Context, userID int64) {
 	go func(id string) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		d.opMu.Lock()
-		defer d.opMu.Unlock()
 		if err := d.client.Delete(ctx, id); err != nil {
 			d.s.log.Warn("delete drive file", "err", err)
 		}
@@ -346,14 +481,14 @@ func (d *driveSyncer) rotate(ctx context.Context, u *model.User) error {
 	if err != nil {
 		return err
 	}
-	d.opMu.Lock()
+	unlock := d.lockUser(u.ID)
 	if rec.FileID != "" {
 		if err := d.client.Delete(ctx, rec.FileID); err != nil {
 			d.s.log.Warn("delete drive file", "err", err)
 		}
 	}
 	err = d.s.store.DeleteDriveFile(ctx, u.ID)
-	d.opMu.Unlock()
+	unlock()
 	if err != nil || !d.ready() {
 		return err
 	}
@@ -441,8 +576,6 @@ func (d *driveSyncer) selfTest(ctx context.Context) error {
 	if set.APIKey == "" || set.RefreshToken == "" {
 		return errors.New("connect Google Drive and set the API key first")
 	}
-	d.opMu.Lock()
-	defer d.opMu.Unlock()
 	folder, err := d.folder(ctx, false)
 	if err != nil {
 		return err
@@ -485,16 +618,17 @@ type driveView struct {
 	Connect         driveConnect `json:"connect"`
 	Files           int          `json:"files"`
 	Errors          int          `json:"errors"`
+	LastRun         driveRun     `json:"last_run"`
 }
 
 func (s *Server) handleGetDrive(w http.ResponseWriter, r *http.Request) {
 	set := s.drive.settings()
 	s.drive.mu.Lock()
-	conn := s.drive.conn
+	conn, last := s.drive.conn, s.drive.last
 	s.drive.mu.Unlock()
 	v := driveView{
 		Enabled: set.Enabled, APIKey: set.APIKey, ClientID: set.ClientID, HasClientSecret: set.ClientSecret != "",
-		Connected: set.RefreshToken != "", Account: set.Account, Format: set.Format, IntervalMinutes: set.IntervalMinutes, Connect: conn,
+		Connected: set.RefreshToken != "", Account: set.Account, Format: set.Format, IntervalMinutes: set.IntervalMinutes, Connect: conn, LastRun: last,
 	}
 	recs, err := s.store.ListDriveFiles(r.Context())
 	if err != nil {
