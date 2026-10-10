@@ -410,10 +410,20 @@ ensure_build_memory() {
   fi
   SWAPFILE=/var/tmp/cloudrix-build.swap
   info "Памяти ${mem_mb} МБ — временно добавляю 2 ГБ swap на время сборки"
-  if { fallocate -l 2G "$SWAPFILE" 2>/dev/null || dd if=/dev/zero of="$SWAPFILE" bs=1M count=2048 status=none; } &&
-    chmod 600 "$SWAPFILE" && mkswap "$SWAPFILE" >/dev/null && swapon "$SWAPFILE"; then
-    return 0
-  fi
+  local how
+  # fallocate быстрее, но на части файловых систем swap из такого файла не включается — тогда dd.
+  for how in fallocate dd; do
+    rm -f "$SWAPFILE"
+    if [[ $how == fallocate ]]; then
+      fallocate -l 2G "$SWAPFILE" 2>/dev/null || continue
+    else
+      dd if=/dev/zero of="$SWAPFILE" bs=1M count=2048 status=none 2>/dev/null || continue
+    fi
+    chmod 600 "$SWAPFILE"
+    if mkswap "$SWAPFILE" >/dev/null 2>&1 && swapon "$SWAPFILE" 2>/dev/null; then
+      return 0
+    fi
+  done
   warn "Не удалось включить временный swap — продолжаю без него."
   rm -f "$SWAPFILE"
   SWAPFILE=""
