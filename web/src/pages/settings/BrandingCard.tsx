@@ -67,7 +67,7 @@ export default function BrandingCard() {
   return (
     <Card className="mb-6 p-6">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300">
           <MessageSquareText className="h-5 w-5" />
         </div>
         <h2 className="font-semibold text-slate-900 dark:text-white">{t('br.title')}</h2>
@@ -121,7 +121,7 @@ export default function BrandingCard() {
                 key={v}
                 onClick={() => insert(v)}
                 title={t(`br.var.${v}`)}
-                className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 transition-colors hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-brand-500/10"
+                className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
               >
                 {`{${v}}`} <span className="font-sans text-slate-400">· {t(`br.var.${v}`)}</span>
               </button>

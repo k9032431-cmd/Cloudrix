@@ -78,7 +78,7 @@ export default function UsersPage() {
 
   const sortHeader = (field: string, label: string) => (
     <button
-      className="inline-flex items-center gap-1 uppercase hover:text-slate-900 dark:hover:text-white"
+      className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white"
       onClick={() => setSort(sort === `-${field}` ? field : `-${field}`)}
     >
       {label}
@@ -130,8 +130,8 @@ export default function UsersPage() {
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-brand-50 to-violet-50/60 px-4 py-2.5 dark:border-slate-800 dark:from-brand-500/10 dark:to-violet-500/5">
-            <span className="mr-2 text-sm font-medium text-brand-700 dark:text-brand-300">{t('users.selected', { n: selected.size })}</span>
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
+            <span className="mr-2 text-sm font-medium text-slate-900 dark:text-white">{t('users.selected', { n: selected.size })}</span>
             <Button size="sm" variant="secondary" onClick={() => bulk('enable')}>
               {t('users.bulk.enable')}
             </Button>
@@ -179,8 +179,8 @@ export default function UsersPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: Math.min(idx, 20) * 0.025, ease: [0.22, 1, 0.36, 1] }}
                     className={cx(
-                      'group cursor-pointer transition-colors duration-150 hover:bg-gradient-to-r hover:from-brand-50/70 hover:to-transparent dark:hover:from-brand-500/[0.07]',
-                      selected.has(u.id) && 'bg-brand-50/50 dark:bg-brand-500/[0.06]',
+                      'group cursor-pointer transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/30',
+                      selected.has(u.id) && 'bg-slate-50 dark:bg-slate-800/40',
                     )}
                     onClick={() => setViewing(u)}
                   >
@@ -189,7 +189,7 @@ export default function UsersPage() {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-xs font-semibold uppercase text-slate-600 ring-1 ring-white transition-transform duration-300 group-hover:scale-110 dark:from-slate-700 dark:to-slate-800 dark:text-slate-200 dark:ring-slate-900">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-200">
                           {u.username.slice(0, 2)}
                         </span>
                         <div className="min-w-0">

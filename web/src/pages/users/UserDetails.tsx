@@ -110,14 +110,14 @@ export default function UserDetails({
             onClick={() => setTab(k)}
             className={cx(
               'relative px-3 py-2 text-sm font-medium transition-colors',
-              tab === k ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
+              tab === k ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
             )}
           >
             {k === 'sub' ? t('users.subscription') : k === 'links' ? `${t('users.links')} (${sub?.links.length ?? 0})` : t('users.devices')}
             {tab === k && (
               <motion.span
                 layoutId="user-tab-underline"
-                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-brand-500 to-violet-500"
+                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-slate-900 dark:bg-white"
                 transition={{ type: 'spring', stiffness: 500, damping: 38 }}
               />
             )}

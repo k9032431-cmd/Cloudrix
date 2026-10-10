@@ -25,7 +25,7 @@ export default function Nodes() {
           </Button>
         }
       />
-      <div className="mb-4 flex gap-2 rounded-lg bg-brand-50 px-3 py-2.5 text-sm text-brand-800 dark:bg-brand-500/10 dark:text-brand-200">
+      <div className="mb-4 flex gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         {t('nodes.agentNote')}
       </div>

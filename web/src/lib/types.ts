@@ -150,7 +150,9 @@ export interface Stats {
     on_hold: number
     online: number
     traffic: number
+    expiring_soon: number
   }
+  days: number
   traffic: DailyTraffic[]
   system: { version: string; uptime: number; goroutines: number; mem_alloc: number; cpus: number }
   nodes?: { total: number; connected: number }

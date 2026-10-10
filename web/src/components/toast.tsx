@@ -46,16 +46,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                 exit={{ opacity: 0, x: 40, scale: 0.95 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 34 }}
                 className={cx(
-                  'pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border px-4 py-3 text-sm shadow-2xl backdrop-blur-xl',
-                  'border-slate-200/70 bg-white/90 text-slate-800 dark:border-white/10 dark:bg-slate-900/90 dark:text-slate-100',
+                  'pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg shadow-slate-900/5',
+                  'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100',
                 )}
               >
                 <span
                   className={cx(
-                    'flex h-8 w-8 shrink-0 items-center justify-center rounded-xl',
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
                     t.tone === 'success' && 'bg-emerald-500/15 text-emerald-500',
                     t.tone === 'error' && 'bg-rose-500/15 text-rose-500',
-                    t.tone === 'info' && 'bg-brand-500/15 text-brand-500',
+                    t.tone === 'info' && 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
                   )}
                 >
                   {t.tone === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <Info className="h-5 w-5" />}

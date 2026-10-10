@@ -241,6 +241,8 @@ type UserStats struct {
 	OnHold   int   `json:"on_hold"`
 	Online   int   `json:"online"`
 	Traffic  int64 `json:"traffic"`
+	// ExpiringSoon counts active users whose subscription ends within 7 days.
+	ExpiringSoon int `json:"expiring_soon"`
 }
 
 func (s *Store) UserStats(ctx context.Context, adminID *int64, onlineSince time.Time) (UserStats, error) {
@@ -285,7 +287,17 @@ func (s *Store) UserStats(ctx context.Context, adminID *int64, onlineSince time.
 		onlineCond += " AND admin_id = ?"
 		onlineArgs = append(onlineArgs, *adminID)
 	}
-	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`+onlineCond, onlineArgs...).Scan(&st.Online)
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`+onlineCond, onlineArgs...).Scan(&st.Online); err != nil {
+		return st, err
+	}
+	now := time.Now()
+	expCond := " WHERE status = ? AND expire_at IS NOT NULL AND expire_at >= ? AND expire_at < ?"
+	expArgs := []any{model.StatusActive, unix(now), unix(now.Add(7 * 24 * time.Hour))}
+	if adminID != nil {
+		expCond += " AND admin_id = ?"
+		expArgs = append(expArgs, *adminID)
+	}
+	err = s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`+expCond, expArgs...).Scan(&st.ExpiringSoon)
 	return st, err
 }
 

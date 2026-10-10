@@ -13,12 +13,11 @@ export function cx(...c: (string | false | null | undefined)[]) {
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const variants: Record<Variant, string> = {
-  primary:
-    'bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/25 hover:shadow-lg hover:shadow-brand-600/35 hover:brightness-110',
+  primary: 'bg-slate-900 text-white shadow-sm hover:bg-slate-800 dark:bg-slate-50 dark:text-slate-900 dark:hover:bg-slate-200',
   secondary:
-    'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 shadow-sm hover:bg-slate-50 hover:ring-slate-300 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700',
-  danger: 'bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/25 hover:brightness-110',
-  ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
+    'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 shadow-sm hover:bg-slate-50 hover:text-slate-900 dark:bg-slate-900 dark:text-slate-200 dark:ring-slate-800 dark:hover:bg-slate-800',
+  danger: 'bg-rose-600 text-white shadow-sm hover:bg-rose-700',
+  ghost: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white',
 }
 
 export function Button({
@@ -34,8 +33,8 @@ export function Button({
       {...rest}
       disabled={rest.disabled || loading}
       className={cx(
-        'inline-flex select-none items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-9 px-3 text-xs sm:h-8' : 'h-11 px-4 text-sm sm:h-10',
+        'inline-flex select-none items-center justify-center gap-2 rounded-lg font-medium transition-colors duration-150 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 disabled:pointer-events-none disabled:opacity-50',
+        size === 'sm' ? 'h-9 px-3 text-xs sm:h-8' : 'h-10 px-3.5 text-sm sm:h-9',
         variants[variant],
         className,
       )}
@@ -59,16 +58,16 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
 }
 
 const fieldBase =
-  'rounded-xl border-0 bg-white px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 transition-shadow duration-200 placeholder:text-slate-400 hover:ring-slate-300 focus:outline-none focus:shadow-[0_0_0_4px_rgba(51,127,252,0.12)] focus:ring-2 focus:ring-brand-500 dark:bg-slate-900/80 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-slate-600'
+  'rounded-lg border-0 bg-white px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 transition-shadow duration-150 placeholder:text-slate-400 hover:ring-slate-300 focus:outline-none focus:shadow-[0_0_0_3px_rgba(148,163,184,0.25)] focus:ring-slate-400 dark:bg-slate-950 dark:text-slate-100 dark:ring-slate-800 dark:hover:ring-slate-700 dark:focus:ring-slate-500'
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   // 16px text on phones stops iOS from zooming into focused fields.
-  return <input {...rest} className={cx(fieldBase, 'h-11 text-base sm:h-10 sm:text-sm', !className?.includes('w-') && 'w-full', className)} />
+  return <input {...rest} className={cx(fieldBase, 'h-10 text-base sm:h-9 sm:text-sm', !className?.includes('w-') && 'w-full', className)} />
 }
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...rest} className={cx(fieldBase, 'h-11 pr-8 text-base sm:h-10 sm:text-sm', !className?.includes('w-') && 'w-full', className)}>
+    <select {...rest} className={cx(fieldBase, 'h-10 pr-8 text-base sm:h-9 sm:text-sm', !className?.includes('w-') && 'w-full', className)}>
       {children}
     </select>
   )
@@ -98,35 +97,27 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         onClick={() => onChange(!checked)}
         className={cx(
           'relative flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-300',
-          checked ? 'justify-end bg-gradient-to-r from-brand-500 to-brand-600 shadow-inner shadow-brand-800/30' : 'justify-start bg-slate-300 dark:bg-slate-700',
+          checked ? 'justify-end bg-slate-900 dark:bg-slate-100' : 'justify-start bg-slate-200 dark:bg-slate-800',
         )}
       >
-        <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 32 }} className="h-5 w-5 rounded-full bg-white shadow-md" />
+        <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 32 }} className={cx('h-5 w-5 rounded-full bg-white shadow-sm', checked ? 'dark:bg-slate-900' : 'dark:bg-slate-400')} />
       </button>
       <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
     </label>
   )
 }
 
-// Card fades and rises into place; pass delay to stagger a group of cards.
-// With hover it lifts slightly and a soft spotlight follows the cursor.
+// Card is a plain bordered surface that fades in; pass delay to stagger a group.
+// With hover the border darkens slightly.
 export function Card({ children, className, delay = 0, hover }: { children: ReactNode; className?: string; delay?: number; hover?: boolean }) {
-  const onMove = hover
-    ? (e: React.MouseEvent<HTMLDivElement>) => {
-        const r = e.currentTarget.getBoundingClientRect()
-        e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
-        e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
-      }
-    : undefined
   return (
     <motion.div
-      onMouseMove={onMove}
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.3, delay, ease: [0.22, 1, 0.36, 1] }}
       className={cx(
-        'rounded-2xl border border-slate-200/70 bg-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/60 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.6)]',
-        hover && 'spotlight transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.04),0_16px_40px_-16px_rgba(51,127,252,0.35)]',
+        'rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] dark:border-slate-800 dark:bg-slate-900/40',
+        hover && 'transition-colors duration-200 hover:border-slate-300 dark:hover:border-slate-700',
         className,
       )}
     >
@@ -172,7 +163,7 @@ const badgeTones = {
   green: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-400 dark:ring-emerald-500/20',
   red: 'bg-rose-50 text-rose-700 ring-rose-600/20 dark:bg-rose-500/10 dark:text-rose-400 dark:ring-rose-500/20',
   amber: 'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-500/20',
-  blue: 'bg-brand-50 text-brand-700 ring-brand-600/20 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-500/20',
+  blue: 'bg-sky-50 text-sky-700 ring-sky-600/20 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/20',
   gray: 'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-600/30',
   violet: 'bg-violet-50 text-violet-700 ring-violet-600/20 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/20',
 }
@@ -228,7 +219,7 @@ export function Modal({
           exit={{ pointerEvents: 'none' }}
         >
           <motion.div
-            className="absolute inset-0 bg-slate-950/50 backdrop-blur-md"
+            className="absolute inset-0 bg-slate-950/40 backdrop-blur-[2px]"
             onClick={onClose}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -243,7 +234,7 @@ export function Modal({
             exit={mobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 8 }}
             transition={{ type: 'spring', stiffness: 420, damping: 34 }}
             className={cx(
-              'relative flex max-h-[92vh] w-full flex-col rounded-t-3xl bg-white shadow-2xl ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10 sm:rounded-2xl',
+              'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-xl ring-1 ring-slate-200 dark:bg-slate-950 dark:ring-slate-800 sm:rounded-xl',
               wide ? 'sm:max-w-3xl' : 'sm:max-w-lg',
             )}
           >
@@ -366,20 +357,19 @@ export function QR({ value, size = 200 }: { value: string; size?: number }) {
       initial={{ opacity: 0, scale: 0.9, filter: 'blur(6px)' }}
       animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
       transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-      className="rounded-2xl bg-white p-2 shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5"
+      className="rounded-xl bg-white p-2 ring-1 ring-slate-200"
     />
   )
 }
 
 export function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
-  const tone =
-    pct >= 90 ? 'from-rose-400 to-rose-600' : pct >= 70 ? 'from-amber-400 to-amber-600' : 'from-brand-400 to-brand-600'
+  const tone = pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-slate-900 dark:bg-slate-200'
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
       {max > 0 && (
         <motion.div
-          className={cx('h-full rounded-full bg-gradient-to-r', tone)}
+          className={cx('h-full rounded-full', tone)}
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
           transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
@@ -392,13 +382,13 @@ export function ProgressBar({ value, max }: { value: number; max: number }) {
 export function PageHeader({ title, actions, subtitle }: { title: string; actions?: ReactNode; subtitle?: ReactNode }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25 }}
       className="mb-6 flex flex-wrap items-end justify-between gap-3"
     >
       <div>
-        <h1 className="bg-gradient-to-br from-slate-900 to-slate-600 bg-clip-text text-2xl font-semibold tracking-tight text-transparent dark:from-white dark:to-slate-400 sm:text-3xl">
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">
           {title}
         </h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
@@ -412,8 +402,8 @@ export function Empty({ children }: { children?: ReactNode }) {
   const { t } = useI18n()
   return (
     <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-3 py-16 text-center text-sm text-slate-400">
-      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 text-slate-400 ring-1 ring-slate-200/70 dark:from-slate-800 dark:to-slate-900 dark:ring-white/5">
-        <Sparkle className="h-7 w-7" />
+      <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 text-slate-400 dark:border-slate-800">
+        <Sparkle className="h-5 w-5" />
       </span>
       {children ?? t('common.empty')}
     </motion.div>
@@ -428,7 +418,7 @@ export function ErrorNote({ error }: { error: string | null }) {
           initial={{ opacity: 0, height: 0, marginBottom: 0 }}
           animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
           exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-          className="overflow-hidden rounded-xl bg-rose-50 text-sm text-rose-700 ring-1 ring-inset ring-rose-600/10 dark:bg-rose-500/10 dark:text-rose-300"
+          className="overflow-hidden rounded-lg bg-rose-50 text-sm text-rose-700 ring-1 ring-inset ring-rose-600/10 dark:bg-rose-500/10 dark:text-rose-300"
         >
           <div className="px-3 py-2">{error}</div>
         </motion.div>
@@ -447,14 +437,14 @@ export function Table({ children }: { children: ReactNode }) {
 
 export function Th({ children, className }: { children?: ReactNode; className?: string }) {
   return (
-    <th className={cx('whitespace-nowrap border-b border-slate-100 px-4 py-3 text-xs font-medium uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400', className)}>
+    <th className={cx('h-10 whitespace-nowrap border-b border-slate-200 px-4 text-xs font-medium text-slate-500 dark:border-slate-800 dark:text-slate-400', className)}>
       {children}
     </th>
   )
 }
 
 export function Td({ children, className }: { children?: ReactNode; className?: string }) {
-  return <td className={cx('border-b border-slate-100 px-4 py-3 align-middle dark:border-slate-800/80', className)}>{children}</td>
+  return <td className={cx('border-b border-slate-100 px-4 py-3 align-middle dark:border-slate-800/70', className)}>{children}</td>
 }
 
 // Segmented is a pill switch whose highlight slides between options.
@@ -472,21 +462,21 @@ export function Segmented<T extends string>({
   className?: string
 }) {
   return (
-    <div className={cx('inline-grid gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80', className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+    <div className={cx('inline-grid gap-0.5 rounded-lg bg-slate-100 p-0.5 dark:bg-slate-900', className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
       {options.map((o) => (
         <button
           type="button"
           key={o.value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'relative flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors',
+            'relative flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
             value === o.value ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
           )}
         >
           {value === o.value && (
             <motion.span
               layoutId={`seg-${id}`}
-              className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-950 dark:ring-white/10"
+              className="absolute inset-0 rounded-md bg-white shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-800 dark:ring-white/5"
               transition={{ type: 'spring', stiffness: 500, damping: 38 }}
             />
           )}

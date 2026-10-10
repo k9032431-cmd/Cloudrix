@@ -225,7 +225,10 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
-	history, err := s.store.TrafficHistory(r.Context(), nil, owner, 30)
+	// ?days= selects the period; twice that is returned so the UI can compare
+	// the current period with the previous one.
+	days := min(max(queryInt(r, "days", 30), 1), 366)
+	history, err := s.store.TrafficHistory(r.Context(), nil, owner, days*2)
 	if err != nil {
 		s.writeStoreError(w, err)
 		return
@@ -234,6 +237,7 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	runtime.ReadMemStats(&mem)
 	out := map[string]any{
 		"users":   users,
+		"days":    days,
 		"traffic": history,
 		"system": map[string]any{
 			"version":    Version,

@@ -218,7 +218,7 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
                 className={
                   'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
                   (ib.protocol === p
-                    ? 'bg-brand-600 text-white ring-brand-600'
+                    ? 'bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white'
                     : 'text-slate-600 ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800')
                 }
               >
@@ -474,7 +474,7 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <fieldset className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-      <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</legend>
+      <legend className="px-1 text-xs font-medium text-slate-500">{title}</legend>
       <div className="grid gap-4 sm:grid-cols-3">{children}</div>
     </fieldset>
   )

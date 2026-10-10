@@ -75,7 +75,7 @@ function DriveCard() {
     <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-brand-600 text-white shadow-lg shadow-brand-500/30">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300">
             <CloudUpload className="h-5 w-5" />
           </div>
           <div>
@@ -173,7 +173,7 @@ function DriveCard() {
       <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
         <div className="mb-1 text-xs font-medium text-slate-500">{t('gd.account')}</div>
         {conn?.pending ? (
-          <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4 dark:border-brand-500/30 dark:bg-brand-500/5">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
             <p className="mb-2 text-sm text-slate-700 dark:text-slate-300">
               {t('gd.deviceStep')}{' '}
               <a href={conn.verification_url} target="_blank" rel="noreferrer" className="font-medium text-brand-600 underline dark:text-brand-400">

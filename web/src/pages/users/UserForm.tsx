@@ -133,7 +133,7 @@ export default function UserForm({
                     <button
                       type="button"
                       key={d}
-                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-brand-50 hover:text-brand-700 dark:bg-slate-800 dark:text-slate-300"
+                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300"
                       onClick={() => set('expire_at', new Date(Date.now() + d * 86_400_000).toISOString())}
                     >
                       +{d}d
@@ -178,7 +178,7 @@ export default function UserForm({
                   className={cx(
                     'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors',
                     on
-                      ? 'bg-brand-50 text-brand-700 ring-brand-300 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-500/40'
+                      ? 'bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white'
                       : 'text-slate-600 ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800',
                     !ib.enabled && 'opacity-50',
                   )}

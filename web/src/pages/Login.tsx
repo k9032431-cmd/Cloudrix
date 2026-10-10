@@ -45,10 +45,10 @@ export default function Login() {
       </div>
       <motion.form
         onSubmit={submit}
-        initial={{ opacity: 0, y: 24, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 24 }}
-        className="relative w-full max-w-sm rounded-3xl border border-white/60 bg-white/70 p-8 shadow-2xl shadow-brand-900/10 backdrop-blur-2xl dark:border-white/10 dark:bg-slate-900/60 dark:shadow-black/40"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+        className="relative w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900"
       >
         <motion.div className="mb-6 flex justify-center" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Logo />
@@ -71,14 +71,12 @@ export default function Login() {
   )
 }
 
-// AuroraBackground: slowly drifting colour blobs behind the login card.
+// AuroraBackground: a faint dot grid that fades out towards the edges.
 export function AuroraBackground() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
-      <div className="absolute -left-32 -top-32 h-[28rem] w-[28rem] animate-float rounded-full bg-brand-500/30 blur-3xl dark:bg-brand-600/30" />
-      <div className="absolute -right-24 top-1/4 h-[24rem] w-[24rem] animate-float-slow rounded-full bg-violet-500/25 blur-3xl [animation-delay:-4s] dark:bg-violet-600/25" />
-      <div className="absolute -bottom-40 left-1/3 h-[26rem] w-[26rem] animate-float rounded-full bg-cyan-400/20 blur-3xl [animation-delay:-7s] dark:bg-cyan-500/15" />
-      <div className="absolute inset-0 bg-[radial-gradient(rgba(15,23,42,0.06)_1px,transparent_1px)] [background-size:22px_22px] dark:bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)]" />
-    </div>
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 -z-10 bg-slate-50 bg-[radial-gradient(rgba(15,23,42,0.08)_1px,transparent_1px)] [background-size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)] dark:bg-slate-950 dark:bg-[radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)]"
+    />
   )
 }
