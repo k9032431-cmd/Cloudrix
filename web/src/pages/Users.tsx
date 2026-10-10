@@ -78,7 +78,7 @@ export default function UsersPage() {
 
   const sortHeader = (field: string, label: string) => (
     <button
-      className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white"
+      className="inline-flex items-center gap-1 hover:text-foreground"
       onClick={() => setSort(sort === `-${field}` ? field : `-${field}`)}
     >
       {label}
@@ -106,9 +106,9 @@ export default function UsersPage() {
       <ErrorNote error={error ?? bulkError} />
 
       <Card>
-        <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 p-4 dark:border-slate-800">
+        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
           <div className="relative min-w-[200px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <Input className="pl-9" placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           <Select className="w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -130,8 +130,8 @@ export default function UsersPage() {
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             className="overflow-hidden"
           >
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/60">
-            <span className="mr-2 text-sm font-medium text-slate-900 dark:text-white">{t('users.selected', { n: selected.size })}</span>
+          <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/60 px-4 py-2.5">
+            <span className="mr-2 text-sm font-medium text-foreground">{t('users.selected', { n: selected.size })}</span>
             <Button size="sm" variant="secondary" onClick={() => bulk('enable')}>
               {t('users.bulk.enable')}
             </Button>
@@ -179,8 +179,8 @@ export default function UsersPage() {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3, delay: Math.min(idx, 20) * 0.025, ease: [0.22, 1, 0.36, 1] }}
                     className={cx(
-                      'group cursor-pointer transition-colors duration-150 hover:bg-slate-50 dark:hover:bg-slate-800/30',
-                      selected.has(u.id) && 'bg-slate-50 dark:bg-slate-800/40',
+                      'group cursor-pointer transition-colors duration-150 hover:bg-muted/60',
+                      selected.has(u.id) && 'bg-muted/60',
                     )}
                     onClick={() => setViewing(u)}
                   >
@@ -189,12 +189,12 @@ export default function UsersPage() {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-200">
+                        <span className="av av-md">
                           {u.username.slice(0, 2)}
                         </span>
                         <div className="min-w-0">
-                          <div className="font-medium text-slate-900 dark:text-white">{u.username}</div>
-                          {u.note && <div className="max-w-[220px] truncate text-xs text-slate-400">{u.note}</div>}
+                          <div className="font-medium text-foreground">{u.username}</div>
+                          {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
                         </div>
                       </div>
                     </Td>
@@ -202,24 +202,24 @@ export default function UsersPage() {
                       <UserStatusBadge status={u.status} />
                     </Td>
                     <Td>
-                      <div className="mb-1.5 flex justify-between gap-2 text-xs tabular-nums text-slate-600 dark:text-slate-400">
+                      <div className="mb-1.5 flex justify-between gap-2 text-xs tabular-nums text-muted-foreground">
                         <span>{formatBytes(u.used_traffic)}</span>
                         <span>{u.data_limit ? formatBytes(u.data_limit) : '∞'}</span>
                       </div>
                       <ProgressBar value={u.used_traffic} max={u.data_limit} />
                     </Td>
-                    <Td className="whitespace-nowrap text-slate-600 dark:text-slate-400">
+                    <Td className="whitespace-nowrap text-muted-foreground">
                       {u.status === 'on_hold' ? (
-                        <span className="text-violet-600 dark:text-violet-300">{t('users.daysLeft', { n: Math.round(u.on_hold_duration / 86400) })}</span>
+                        <span className="text-violet">{t('users.daysLeft', { n: Math.round(u.on_hold_duration / 86400) })}</span>
                       ) : left === null ? (
                         '∞'
                       ) : left < 0 ? (
-                        <span className="text-rose-600 dark:text-rose-400">{t('users.expiredAgo')}</span>
+                        <span className="text-destructive">{t('users.expiredAgo')}</span>
                       ) : (
-                        <span className={cx(left <= 3 && 'text-amber-600 dark:text-amber-400')}>{t('users.daysLeft', { n: left })}</span>
+                        <span className={cx(left <= 3 && 'text-warning')}>{t('users.daysLeft', { n: left })}</span>
                       )}
                     </Td>
-                    <Td className="whitespace-nowrap text-slate-500">
+                    <Td className="whitespace-nowrap text-muted-foreground">
                       <OnlineDot iso={u.online_at} />
                       {relativeTime(u.online_at, lang)}
                     </Td>
@@ -242,7 +242,7 @@ export default function UsersPage() {
         )}
 
         {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-slate-500">
+          <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
             <span>
               {page + 1} / {pages}
             </span>
@@ -300,5 +300,5 @@ export default function UsersPage() {
 
 function OnlineDot({ iso }: { iso: string | null }) {
   const online = iso && Date.now() - new Date(iso).getTime() < 2 * 60_000
-  return <span className={cx('mr-2 inline-block h-2 w-2 rounded-full', online ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700')} />
+  return <span className={cx('mr-2 inline-block h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-border-strong')} />
 }

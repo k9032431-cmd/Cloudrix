@@ -48,12 +48,12 @@ export default function Login() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
-        className="relative w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-sm dark:border-slate-800 dark:bg-slate-900"
+        className="relative w-full max-w-sm rounded-panel border border-border bg-card p-8 shadow-lg"
       >
         <motion.div className="mb-6 flex justify-center" initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
           <Logo />
         </motion.div>
-        <h1 className="mb-6 text-center text-lg font-semibold text-slate-900 dark:text-white">{t('login.title')}</h1>
+        <h1 className="mb-6 text-center text-lg font-semibold text-foreground">{t('login.title')}</h1>
         <ErrorNote error={error} />
         <div className="space-y-4">
           <Field label={t('login.username')}>
@@ -71,12 +71,13 @@ export default function Login() {
   )
 }
 
-// AuroraBackground: a faint dot grid that fades out towards the edges.
+// AuroraBackground: a faint dot grid on the sidebar ground, fading at the edges.
 export function AuroraBackground() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-0 -z-10 bg-slate-50 bg-[radial-gradient(rgba(15,23,42,0.08)_1px,transparent_1px)] [background-size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)] dark:bg-slate-950 dark:bg-[radial-gradient(rgba(255,255,255,0.06)_1px,transparent_1px)]"
+      className="pointer-events-none absolute inset-0 -z-10 bg-sidebar [background-size:20px_20px] [mask-image:radial-gradient(ellipse_at_center,black_35%,transparent_80%)]"
+      style={{ backgroundImage: 'radial-gradient(var(--border-strong) 1px, transparent 1px)' }}
     />
   )
 }

@@ -1,14 +1,14 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowDownRight, ArrowRight, ArrowUpRight, ChartUp, Clock, Cpu, Export, HardDrive, Hourglass, Server, Users, Wifi, Zap, type Icon } from '../components/icons'
+import { ChevronRight, Clock, Cpu, Export, HardDrive, Hourglass, Server, TrendingDown, TrendingUp, Users, Wifi, Zap, ChartUp, type Icon } from '../components/icons'
 import { UserStatusBadge } from '../components/StatusBadge'
+import { useToast } from '../components/toast'
 import { useAuth } from '../lib/auth'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { formatBytes, formatDuration, relativeTime } from '../lib/format'
 import type { AuditEntry, DailyTraffic, Stats, User } from '../lib/types'
-import { AnimatedNumber, Button, Card, ErrorNote, PageHeader, Segmented, Skeleton, cx } from '../components/ui'
+import { AnimatedNumber, Button, ErrorNote, PageHeader, Segmented, Skeleton, cx } from '../components/ui'
 
 type Period = '7' | '30' | '90' | '365'
 
@@ -23,40 +23,66 @@ function daySeries(data: DailyTraffic[], n: number): DailyTraffic[] {
   return out
 }
 
-const sum = (s: DailyTraffic[]) => s.reduce((a, d) => a + d.bytes, 0)
+interface Bucket {
+  start: string
+  end: string
+  bytes: number
+}
+
+// bucketize groups consecutive days; long ranges read better as weeks.
+function bucketize(days: DailyTraffic[], size: number): Bucket[] {
+  const out: Bucket[] = []
+  for (let i = 0; i < days.length; i += size) {
+    const part = days.slice(i, i + size)
+    out.push({ start: part[0].day, end: part[part.length - 1].day, bytes: part.reduce((a, d) => a + d.bytes, 0) })
+  }
+  return out
+}
+
+const sum = (s: { bytes: number }[]) => s.reduce((a, d) => a + d.bytes, 0)
+// change is null when there is no base to compare with (never NaN or Infinity)
+const change = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : null)
 
 export default function Dashboard() {
   const { t, lang } = useI18n()
   const { admin } = useAuth()
+  const toast = useToast()
   const sudo = admin?.role === 'sudo'
   const [period, setPeriod] = useState<Period>('30')
+  const [hidden, setHidden] = useState<Set<string>>(new Set())
   const days = Number(period)
   const { data, error, reload } = useFetch<Stats>(`/api/system/stats?days=${days}`)
 
   useEffect(() => {
-    const id = setInterval(reload, 15_000)
+    const id = setInterval(reload, 30_000)
     return () => clearInterval(id)
   }, [reload])
 
-  // The API returns two periods so the current one can be compared with the one before.
-  const { cur, prev } = useMemo(() => {
-    const all = daySeries(data?.days === days ? data.traffic : [], days * 2)
-    return { cur: all.slice(days), prev: all.slice(0, days) }
-  }, [data, days])
   const loaded = data?.days === days
+  const { cur, prev } = useMemo(() => {
+    const all = daySeries(loaded ? data.traffic : [], days * 2)
+    return { cur: all.slice(days), prev: all.slice(0, days) }
+  }, [data, days, loaded])
   const curTotal = sum(cur)
-  const prevTotal = sum(prev)
-  const delta = prevTotal > 0 ? ((curTotal - prevTotal) / prevTotal) * 100 : null
-
+  const delta = change(curTotal, sum(prev))
   const u = data?.users
+
   const exportCSV = () => {
-    const rows = ['date,bytes', ...cur.map((d) => `${d.day},${d.bytes}`)]
+    const rows = ['date,bytes,previous_period_bytes', ...cur.map((d, i) => `${d.day},${d.bytes},${prev[i].bytes}`)]
     const url = URL.createObjectURL(new Blob([rows.join('\n') + '\n'], { type: 'text/csv' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `cloudrix-traffic-${days}d.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const toggleSeries = (key: string) => {
+    const next = new Set(hidden)
+    if (next.has(key)) next.delete(key)
+    else if (2 - next.size <= 1) return toast(t('dash.oneSeries'), 'info')
+    else next.add(key)
+    setHidden(next)
   }
 
   return (
@@ -67,90 +93,104 @@ export default function Dashboard() {
         actions={
           <>
             <Segmented<Period>
-              id="period"
+              label={t('dash.trafficTitle')}
               value={period}
               onChange={setPeriod}
               options={(['7', '30', '90', '365'] as Period[]).map((p) => ({ value: p, label: t(`dash.period.${p}`) }))}
             />
-            <Button variant="secondary" onClick={exportCSV} disabled={!loaded}>
-              <Export className="h-4 w-4" />
-              {t('dash.export')}
+            <Button variant="secondary" onClick={exportCSV} disabled={!loaded} aria-label={t('dash.export')}>
+              <Export />
+              <span className="hide-sm">{t('dash.export')}</span>
             </Button>
           </>
         }
       />
       <ErrorNote error={error} />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid12">
         <Kpi
-          label={t('dash.periodTraffic')}
+          d={1}
           icon={ChartUp}
+          label={t('dash.periodTraffic')}
+          short={t('dash.kpiShort.traffic')}
           value={loaded ? curTotal : undefined}
           format={(n) => formatBytes(n)}
-          delay={0}
-          spark={loaded ? cur.map((d) => d.bytes) : undefined}
-          footer={
-            delta !== null ? (
-              <>
-                <Delta value={delta} />
-                {t('dash.vsPrev')}
-              </>
-            ) : (
-              t('dash.vsPrev') + ': —'
-            )
+          meta={
+            <>
+              {delta !== null ? <Trend value={delta} /> : <span>—</span>}
+              <span className="vs">{t('dash.vsPrev')}</span>
+            </>
           }
+          spark={loaded ? cur.map((d) => d.bytes) : undefined}
         />
         <Kpi
-          label={t('dash.activeUsers')}
+          d={2}
           icon={Users}
+          label={t('dash.activeUsers')}
+          short={t('dash.kpiShort.active')}
           value={u?.active}
-          delay={0.05}
-          footer={u ? t('dash.ofTotal', { n: u.total }) : undefined}
+          meta={u ? <span>{t('dash.ofTotal', { n: u.total })}</span> : undefined}
+          meter={u && u.total ? u.active / u.total : 0}
         />
         <Kpi
-          label={t('dash.onlineNow')}
+          d={3}
           icon={Wifi}
+          label={t('dash.onlineNow')}
+          short={t('dash.kpiShort.online')}
           value={u?.online}
-          delay={0.1}
           live
-          footer={u ? t('dash.ofActive', { pct: u.active > 0 ? Math.round((u.online / u.active) * 100) : 0 }) : undefined}
+          meta={u ? <span>{t('dash.ofActive', { pct: u.active > 0 ? Math.round((u.online / u.active) * 100) : 0 })}</span> : undefined}
+          meter={u && u.active ? u.online / u.active : 0}
         />
         <Kpi
-          label={t('dash.expiring')}
+          d={4}
           icon={Hourglass}
+          label={t('dash.expiring')}
+          short={t('dash.kpiShort.expiring')}
           value={u?.expiring_soon}
-          delay={0.15}
-          footer={u ? t('dash.expiredNow', { n: u.expired }) : undefined}
+          meta={u ? <span>{t('dash.expiredNow', { n: u.expired })}</span> : undefined}
+          meter={u && u.active ? u.expiring_soon / u.active : 0}
+          meterTone="warn"
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="p-5 lg:col-span-2" delay={0.2}>
-          <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+      <div className="grid12 mt-4">
+        <article className="card fill rise col-8" style={{ '--d': 5 } as CSSProperties}>
+          <div className="card-head">
             <div>
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dash.trafficTitle')}</h2>
-              <p className="mt-0.5 text-xs text-slate-500">{t('dash.daily', { n: days })}</p>
+              <h2 className="card-title">{t('dash.trafficTitle')}</h2>
+              <p className="card-desc">{t('dash.daily', { n: days })}</p>
             </div>
-            <div className="flex items-center gap-4 text-xs text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="h-0.5 w-4 rounded-full bg-slate-900 dark:bg-slate-100" />
-                {t('dash.current')}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="w-4 border-t-2 border-dashed border-slate-300 dark:border-slate-600" />
-                {t('dash.previous')}
-              </span>
+            <div className="legend">
+              {[
+                { key: 'cur', name: t('dash.legend.current'), color: 'var(--chart-1)', dash: false },
+                { key: 'prev', name: t('dash.legend.previous'), color: 'var(--chart-4)', dash: true },
+              ].map((s) => (
+                <button type="button" key={s.key} aria-pressed={!hidden.has(s.key)} onClick={() => toggleSeries(s.key)}>
+                  <span className={cx('sw', s.dash && 'dash')} style={{ background: s.color, color: s.color }} />
+                  {s.name}
+                </button>
+              ))}
             </div>
           </div>
-          <TrafficChart data={loaded ? data.traffic : []} days={days} compare />
-        </Card>
-        <Card className="p-5" delay={0.25}>
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{t('dash.byStatus')}</h2>
-          <StatusBreakdown users={u} />
-        </Card>
+          <div className="card-body">
+            <TrafficChart data={loaded ? data.traffic : []} days={days} compare hidden={hidden} />
+          </div>
+        </article>
+        <article className="card rise col-4" style={{ '--d': 6 } as CSSProperties}>
+          <div className="card-head">
+            <div>
+              <h2 className="card-title">{t('dash.byStatus')}</h2>
+              <p className="card-desc">{t('dash.totalUsers')}</p>
+            </div>
+          </div>
+          <div className="card-body">
+            <StatusBreakdown users={u} />
+          </div>
+        </article>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="grid12 mt-4">
         <NewUsers />
         {sudo ? <ActivityFeed /> : <SystemCard stats={data} lang={lang} />}
       </div>
@@ -158,283 +198,393 @@ export default function Dashboard() {
   )
 }
 
-function Delta({ value }: { value: number }) {
+function Trend({ value }: { value: number }) {
   const up = value >= 0
-  const Arrow = up ? ArrowUpRight : ArrowDownRight
+  const Arrow = up ? TrendingUp : TrendingDown
+  const v = Math.abs(value)
   return (
-    <span
-      className={cx(
-        'inline-flex items-center gap-0.5 rounded px-1 py-px font-medium tabular-nums',
-        up ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400',
-      )}
-    >
-      <Arrow className="h-3 w-3" />
-      {Math.abs(value) >= 1000 ? '999+' : Math.abs(value).toFixed(1)}%
+    <span className={cx('trend trend-chip', up ? 'up' : 'down')}>
+      <Arrow />
+      {up ? '+' : '−'}
+      {v >= 1000 ? '999+' : v.toFixed(1)}%
     </span>
   )
 }
 
 function Kpi({
-  label,
+  d,
   icon: Icon,
+  label,
+  short,
   value,
   format,
-  footer,
+  meta,
   spark,
-  delay,
+  meter,
+  meterTone,
   live,
 }: {
-  label: string
+  d: number
   icon: Icon
+  label: string
+  short: string
   value?: number
   format?: (n: number) => string
-  footer?: ReactNode
+  meta?: ReactNode
   spark?: number[]
-  delay: number
+  meter?: number
+  meterTone?: 'warn'
   live?: boolean
 }) {
   return (
-    <Card className="p-5" delay={delay} hover>
-      <div className="flex items-center justify-between gap-2">
-        <span className="truncate text-sm font-medium text-slate-500 dark:text-slate-400">{label}</span>
-        <Icon className="h-4 w-4 shrink-0 text-slate-400" />
+    <div className="card kpi rise col-3" style={{ '--d': d } as CSSProperties}>
+      <div className="kpi-top">
+        <span className="kpi-label">
+          <Icon />
+          <span className="full">{label}</span>
+          <span className="short">{short}</span>
+        </span>
       </div>
-      <div className="mt-2 flex items-end justify-between gap-3">
-        <div className="flex items-center gap-2 text-2xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-white">
-          {value === undefined ? <Skeleton className="h-8 w-24" /> : <AnimatedNumber value={value} format={format} />}
-          {live && value !== undefined && (
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-            </span>
-          )}
+      <div className="kpi-value">
+        {value === undefined ? <Skeleton className="h-8 w-24" /> : <AnimatedNumber value={value} format={format} />}
+        {live && value !== undefined && <span className="live-dot" aria-hidden />}
+      </div>
+      <div className="kpi-meta">{meta ?? <Skeleton className="h-4 w-28" />}</div>
+      {spark ? (
+        <div className="kpi-spark">
+          <Sparkline values={spark} />
         </div>
-        {spark && <Sparkline values={spark} />}
-      </div>
-      <div className="mt-2 flex min-h-[1.25rem] flex-wrap items-center gap-1.5 text-xs text-slate-500">{footer}</div>
-    </Card>
+      ) : spark === undefined && meter === undefined ? (
+        <div className="kpi-spark" />
+      ) : (
+        <div className={cx('meter mb-[18px] mt-4', meterTone)} aria-hidden>
+          <i style={{ '--v': Math.min(1, meter ?? 0) } as CSSProperties} />
+        </div>
+      )}
+    </div>
   )
 }
 
-function Sparkline({ values }: { values: number[] }) {
-  const max = Math.max(...values, 1)
-  const pts = values.map((v, i) => `${(i / Math.max(values.length - 1, 1)) * 100},${30 - (v / max) * 28}`).join(' ')
-  return (
-    <motion.svg
-      viewBox="0 0 100 32"
-      preserveAspectRatio="none"
-      className="mb-1 h-7 w-20 shrink-0 text-slate-900 dark:text-slate-100"
-      initial={{ clipPath: 'inset(0 100% 0 0)' }}
-      animate={{ clipPath: 'inset(0 0% 0 0)' }}
-      transition={{ duration: 0.8, delay: 0.2, ease: [0.22, 1, 0.36, 1] }}
-    >
-      <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-    </motion.svg>
-  )
+/* ---- chart engine (after the slate template): SVG drawn at the element's
+   pixel size, colours as CSS variables so theme switches need no redraw ---- */
+
+const f1 = (v: number) => Math.round(v * 10) / 10
+const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v))
+
+// Monotone cubic interpolation: smooth curves that never overshoot the data.
+function monoPath(pts: [number, number][]) {
+  const n = pts.length
+  if (n < 2) return n ? `M${f1(pts[0][0])},${f1(pts[0][1])}` : ''
+  const dx: number[] = []
+  const m: number[] = []
+  const tg: number[] = []
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = pts[i + 1][0] - pts[i][0]
+    m[i] = (pts[i + 1][1] - pts[i][1]) / (dx[i] || 1)
+  }
+  tg[0] = m[0]
+  tg[n - 1] = m[n - 2]
+  for (let i = 1; i < n - 1; i++) {
+    if (m[i - 1] * m[i] <= 0) tg[i] = 0
+    else {
+      const w1 = 2 * dx[i] + dx[i - 1]
+      const w2 = dx[i] + 2 * dx[i - 1]
+      tg[i] = (w1 + w2) / (w1 / m[i - 1] + w2 / m[i])
+    }
+  }
+  let d = `M${f1(pts[0][0])},${f1(pts[0][1])}`
+  for (let i = 0; i < n - 1; i++) {
+    const h = dx[i] / 3
+    d += `C${f1(pts[i][0] + h)},${f1(pts[i][1] + tg[i] * h)} ${f1(pts[i + 1][0] - h)},${f1(pts[i + 1][1] - tg[i + 1] * h)} ${f1(pts[i + 1][0])},${f1(pts[i + 1][1])}`
+  }
+  return d
 }
 
-// niceMax picks an axis maximum whose quarter steps are round numbers in the
-// value's own unit (KB, MB, GB…), e.g. 9.7 GB -> 10 GB with 2.5 GB steps.
-function niceMax(v: number) {
-  if (v <= 0) return 1024 ** 3
-  const unit = 1024 ** Math.floor(Math.log(v) / Math.log(1024))
-  const quarter = v / unit / 4
-  const p = Math.pow(10, Math.floor(Math.log10(quarter)))
-  const step = [1, 2, 2.5, 5, 10].find((m) => quarter <= m * p)! * p
-  return step * 4 * unit
+// niceScale picks an axis maximum whose quarter steps are round numbers in the
+// value's own unit (KB, MB, GB...), e.g. 9.7 GB -> 10 GB in 2.5 GB steps.
+function niceScale(v: number, ticks = 4) {
+  if (!(v > 0)) return { max: 4 * 1024 ** 3, step: 1024 ** 3 }
+  const unit = 1024 ** Math.max(0, Math.floor(Math.log(v) / Math.log(1024)))
+  const raw = v / unit / ticks
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)))
+  const step = [1, 2, 2.5, 5, 10].map((x) => x * mag).find((s) => s * ticks >= v / unit)! * unit
+  return { max: step * ticks, step }
 }
-
 const axisLabel = (b: number) => (b === 0 ? '0' : formatBytes(b, 1).replace('.0 ', ' '))
 
-// TrafficChart draws daily traffic as a line with a soft fill. With compare it expects
-// 2×days of history and draws the earlier half as a dashed "previous period" line.
-export function TrafficChart({ data, days = 30, compare = false }: { data: DailyTraffic[]; days?: number; compare?: boolean }) {
+function useSize<T extends HTMLElement>() {
+  const ref = useRef<T>(null)
+  const [size, setSize] = useState({ w: 0, h: 0 })
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const measure = () => setSize((s) => (Math.abs(s.w - el.clientWidth) > 1 || Math.abs(s.h - el.clientHeight) > 1 ? { w: el.clientWidth, h: el.clientHeight } : s))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return { ref, ...size }
+}
+
+const reduced = () => typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// TrafficChart draws daily traffic as an area line. With `compare` it expects
+// 2×days of history and adds the previous period as a dashed line, aligned
+// day by day. Hover or arrow keys show a tooltip with the change.
+export function TrafficChart({ data, days = 30, compare = false, hidden }: { data: DailyTraffic[]; days?: number; compare?: boolean; hidden?: Set<string> }) {
   const { t, lang } = useI18n()
-  const [hover, setHover] = useState<number | null>(null)
-  const all = daySeries(data, compare ? days * 2 : days)
-  const cur = compare ? all.slice(days) : all
-  const prev = compare ? all.slice(0, days) : null
-  const max = niceMax(Math.max(...cur.map((d) => d.bytes), ...(prev ?? []).map((d) => d.bytes)))
+  const { ref, w: W, h: H } = useSize<HTMLDivElement>()
+  const tip = useRef<HTMLDivElement>(null)
+  const [idx, setIdx] = useState(-1)
+  const [drawn, setDrawn] = useState(false)
+  const size = days > 120 ? 7 : 1
+
+  const { cur, prev } = useMemo(() => {
+    const all = daySeries(data, compare ? days * 2 : days)
+    return {
+      cur: bucketize(compare ? all.slice(days) : all, size),
+      prev: compare ? bucketize(all.slice(0, days), size) : null,
+    }
+  }, [data, days, compare, size])
+
+  const showCur = !hidden?.has('cur')
+  const showPrev = !!prev && !hidden?.has('prev')
   const n = cur.length
-  const x = (i: number) => (n > 1 ? (i / (n - 1)) * 100 : 50)
-  const y = (v: number) => 100 - (v / max) * 100
-  const line = (s: DailyTraffic[]) => s.map((d, i) => `${i ? 'L' : 'M'}${x(i).toFixed(3)},${y(d.bytes).toFixed(3)}`).join(' ')
-  const curPath = line(cur)
-  const fmtDay = (day: string) =>
-    new Date(day + 'T00:00:00Z').toLocaleDateString(lang, { day: 'numeric', month: 'short', ...(days > 90 ? { year: '2-digit' } : {}), timeZone: 'UTC' })
-  const ticks = [1, 0.75, 0.5, 0.25, 0]
-  const labelIdx = Array.from(new Set(Array.from({ length: 6 }, (_, k) => Math.round((k / 5) * (n - 1)))))
+  const narrow = W < 520
+  const pad = { l: narrow ? 42 : 52, r: 10, t: 10, b: 28 }
+  const pw = Math.max(10, W - pad.l - pad.r)
+  const ph = Math.max(10, H - pad.t - pad.b)
+  const vis = [...(showCur ? cur : []), ...(showPrev && prev ? prev : [])].map((b) => b.bytes)
+  const { max, step } = niceScale(Math.max(1, ...vis) * 1.04)
+  const x = (i: number) => pad.l + (n === 1 ? pw / 2 : (i * pw) / (n - 1))
+  const y = (v: number) => pad.t + ph - (v / max) * ph
+  const curD = monoPath(cur.map((b, i) => [x(i), y(b.bytes)]))
+  const prevD = prev ? monoPath(prev.map((b, i) => [x(i), y(b.bytes)])) : ''
   const empty = sum(cur) === 0 && (!prev || sum(prev) === 0)
 
-  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    setHover(Math.min(n - 1, Math.max(0, Math.round(((e.clientX - r.left) / r.width) * (n - 1)))))
+  const fmtDay = (day: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }) =>
+    new Date(day + 'T00:00:00Z').toLocaleDateString(lang, { ...opts, timeZone: 'UTC' })
+  const label = (b: Bucket) => (size === 1 ? fmtDay(b.end) : fmtDay(b.start))
+  const title = (b: Bucket) => (size === 1 ? fmtDay(b.end, { weekday: 'short', day: 'numeric', month: 'short' }) : `${fmtDay(b.start)} – ${fmtDay(b.end)}`)
+
+  // replay the left-to-right reveal when the range changes, not on resize
+  useEffect(() => {
+    if (reduced()) return setDrawn(true)
+    setDrawn(false)
+    let id = requestAnimationFrame(() => (id = requestAnimationFrame(() => setDrawn(true))))
+    return () => cancelAnimationFrame(id)
+  }, [days, compare])
+
+  const ticks: number[] = []
+  for (let v = 0; v <= max + 1e-6; v += step) ticks.push(v)
+  const longest = Math.max(...cur.map((b) => label(b).length), 4)
+  const every = Math.ceil(n / Math.max(2, Math.floor(pw / Math.max(64, longest * 7 + 26))))
+
+  const pick = (clientX: number) => {
+    const r = ref.current!.getBoundingClientRect()
+    const px = clientX - r.left
+    if (px < pad.l - 8 || px > W - pad.r + 8) return -1
+    return clamp(Math.round(((px - pad.l) / pw) * (n - 1)), 0, n - 1)
   }
-  const h = hover !== null ? { i: hover, cur: cur[hover], prev: prev?.[hover] } : null
+  const onKey = (e: React.KeyboardEvent) => {
+    const map: Record<string, number> = { ArrowLeft: -1, ArrowRight: 1 }
+    if (e.key in map) {
+      e.preventDefault()
+      setIdx((i) => clamp((i < 0 ? n - 1 : i) + map[e.key], 0, n - 1))
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      setIdx(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      setIdx(n - 1)
+    }
+  }
+
+  // position the tooltip beside the point, flipping at the right edge
+  useLayoutEffect(() => {
+    const el = tip.current
+    if (!el || idx < 0) return
+    const tw = el.offsetWidth
+    const th = el.offsetHeight
+    const cx = x(idx)
+    let tx = cx + 16
+    if (tx + tw > W - 4) tx = cx - tw - 16
+    tx = clamp(tx, 0, Math.max(0, W - tw))
+    const anchors = [showCur ? y(cur[idx].bytes) : H, showPrev && prev ? y(prev[idx].bytes) : H]
+    const ty = clamp(Math.min(...anchors) - th / 2, 0, Math.max(0, H - th - 24))
+    el.style.translate = `${Math.round(tx)}px ${Math.round(ty)}px`
+  })
+
+  const hb = idx >= 0 ? cur[idx] : null
+  const hp = idx >= 0 && prev ? prev[idx] : null
+  const hd = hb && hp ? change(hb.bytes, hp.bytes) : null
+  const vb = { width: W, height: H, viewBox: `0 0 ${W} ${H}` }
 
   return (
-    <div className="flex gap-3">
-      <div className="relative h-56 w-12 shrink-0 text-right text-[11px] tabular-nums text-slate-400 lg:h-64">
-        {ticks.map((f) => (
-          <span key={f} className="absolute right-0 -translate-y-1/2" style={{ top: `${(1 - f) * 100}%` }}>
-            {axisLabel(max * f)}
-          </span>
-        ))}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="relative h-56 touch-none lg:h-64" onPointerMove={onMove} onPointerDown={onMove} onPointerLeave={() => setHover(null)}>
-          {ticks.map((f) => (
-            <div
-              key={f}
-              className={cx('pointer-events-none absolute inset-x-0 border-t', f === 0 ? 'border-slate-200 dark:border-slate-800' : 'border-dashed border-slate-100 dark:border-slate-800/60')}
-              style={{ top: `${(1 - f) * 100}%` }}
-            />
-          ))}
-          <motion.svg
-            key={`${days}-${compare}`}
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            className="absolute inset-0 h-full w-full overflow-visible text-slate-900 dark:text-slate-100"
-            initial={{ clipPath: 'inset(0 100% 0 0)' }}
-            animate={{ clipPath: 'inset(0 0% 0 0)' }}
-            transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
-          >
-            <defs>
-              <linearGradient id="traffic-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stopColor="currentColor" stopOpacity="0.12" />
-                <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            {prev && (
-              <path
-                d={line(prev)}
-                fill="none"
-                className="stroke-slate-300 dark:stroke-slate-600"
-                strokeWidth="1.5"
-                strokeDasharray="4 4"
-                vectorEffect="non-scaling-stroke"
-              />
+    <div
+      ref={ref}
+      className={cx('chart', idx >= 0 && 'is-hover', drawn && 'drawn')}
+      tabIndex={0}
+      role="img"
+      aria-label={t('dash.chartAria')}
+      onPointerMove={(e) => setIdx(pick(e.clientX))}
+      onPointerDown={(e) => setIdx(pick(e.clientX))}
+      onPointerLeave={() => setIdx(-1)}
+      onFocus={() => setIdx((i) => (i < 0 ? n - 1 : i))}
+      onBlur={() => setIdx(-1)}
+      onKeyDown={onKey}
+    >
+      {W > 0 && (
+        <>
+          <svg {...vb} style={{ position: 'absolute', inset: 0 }} aria-hidden>
+            {ticks.map((v) => {
+              const yy = Math.round(y(v)) + 0.5
+              return (
+                <g key={v}>
+                  <line className={cx('grid-line', v === 0 && 'base')} x1={pad.l} x2={W - pad.r} y1={yy} y2={yy} />
+                  <text className="axis" x={pad.l - 10} y={yy + 3.5} textAnchor="end">
+                    {axisLabel(v)}
+                  </text>
+                </g>
+              )
+            })}
+            {cur.map((b, i) =>
+              i % every === 0 ? (
+                <text key={b.end} className="axis" x={f1(x(i))} y={H - 8} textAnchor={i === 0 ? 'start' : 'middle'}>
+                  {label(b)}
+                </text>
+              ) : null,
             )}
-            {!empty && <path d={`${curPath} L100,100 L0,100 Z`} fill="url(#traffic-fill)" />}
-            <path d={curPath} fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-          </motion.svg>
-          {empty && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-slate-400">{t('dash.noData')}</div>
-          )}
-          {h && (
-            <>
-              <div className="pointer-events-none absolute inset-y-0 w-px bg-slate-300 dark:bg-slate-600" style={{ left: `${x(h.i)}%` }} />
-              {h.prev && (
-                <span
-                  className="pointer-events-none absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-950"
-                  style={{ left: `${x(h.i)}%`, top: `${y(h.prev.bytes)}%` }}
-                />
+          </svg>
+          <div className="reveal-clip" style={{ position: 'absolute', inset: 0 }}>
+            <svg {...vb} aria-hidden>
+              <defs>
+                <linearGradient id="traffic-area" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" style={{ stopColor: 'var(--chart-1)', stopOpacity: 0.2 }} />
+                  <stop offset=".75" style={{ stopColor: 'var(--chart-1)', stopOpacity: 0.04 }} />
+                  <stop offset="1" style={{ stopColor: 'var(--chart-1)', stopOpacity: 0 }} />
+                </linearGradient>
+              </defs>
+              {prev && (
+                <g className={cx('series', !showPrev && 'off')}>
+                  <path d={prevD} fill="none" style={{ stroke: 'var(--chart-4)' }} strokeWidth={1.6} strokeDasharray="3 4" strokeLinejoin="round" strokeLinecap="round" />
+                </g>
               )}
-              <span
-                className="pointer-events-none absolute h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-slate-900 shadow dark:border-slate-950 dark:bg-white"
-                style={{ left: `${x(h.i)}%`, top: `${y(h.cur.bytes)}%` }}
-              />
-              <div
-                className={cx(
-                  'pointer-events-none absolute top-2 z-10 w-max whitespace-nowrap rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg shadow-slate-900/5 dark:border-slate-800 dark:bg-slate-900',
-                  x(h.i) > 60 ? '-translate-x-[calc(100%+12px)]' : 'translate-x-3',
+              <g className={cx('series', !showCur && 'off')}>
+                {!empty && <path d={`${curD}L${f1(x(n - 1))},${f1(y(0))}L${f1(x(0))},${f1(y(0))}Z`} style={{ fill: 'url(#traffic-area)' }} />}
+                <path d={curD} fill="none" style={{ stroke: 'var(--chart-1)' }} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
+              </g>
+            </svg>
+          </div>
+          <svg {...vb} style={{ position: 'absolute', inset: 0 }} aria-hidden>
+            <line className="xhair" y1={pad.t} y2={H - pad.b} x1={idx >= 0 ? f1(x(idx)) : 0} x2={idx >= 0 ? f1(x(idx)) : 0} />
+            {hp && showPrev && <circle className="hover-dot" r={4} cx={f1(x(idx))} cy={f1(y(hp.bytes))} style={{ fill: 'var(--chart-4)' }} />}
+            {hb && showCur && <circle className="hover-dot" r={4} cx={f1(x(idx))} cy={f1(y(hb.bytes))} style={{ fill: 'var(--chart-1)' }} />}
+          </svg>
+          {empty && <div className="chart-empty">{t('dash.noData')}</div>}
+          <div ref={tip} className="chart-tip" aria-hidden>
+            {hb && (
+              <>
+                <div className="tip-title">{title(hb)}</div>
+                {showCur && (
+                  <div className="tip-row">
+                    <span className="sw" style={{ background: 'var(--chart-1)' }} />
+                    {prev ? t('dash.legend.current') : t('dash.traffic.col')}
+                    <span className="v">{formatBytes(hb.bytes)}</span>
+                  </div>
                 )}
-                style={{ left: `${x(h.i)}%` }}
-              >
-                <div className="mb-1.5 font-medium text-slate-900 dark:text-white">{fmtDay(h.cur.day)}</div>
-                <TipRow swatch={<span className="h-0.5 w-3 rounded-full bg-slate-900 dark:bg-white" />} label={prev ? t('dash.current') : t('dash.traffic.col')} value={formatBytes(h.cur.bytes)} />
-                {h.prev && (
-                  <TipRow
-                    swatch={<span className="w-3 border-t-2 border-dashed border-slate-300 dark:border-slate-600" />}
-                    label={`${t('dash.previous')} · ${fmtDay(h.prev.day)}`}
-                    value={formatBytes(h.prev.bytes)}
-                  />
+                {hp && showPrev && (
+                  <div className="tip-row">
+                    <span className="sw line" style={{ background: 'var(--chart-4)' }} />
+                    {title(hp)}
+                    <span className="v">{formatBytes(hp.bytes)}</span>
+                  </div>
                 )}
-              </div>
-            </>
-          )}
-        </div>
-        <div className="relative mt-2 h-4 text-[11px] text-slate-400">
-          {labelIdx.map((i, k) => (
-            <span
-              key={i}
-              className={cx('absolute whitespace-nowrap', k === 0 ? '' : k === labelIdx.length - 1 ? '-translate-x-full' : '-translate-x-1/2', k % 2 === 1 && 'hidden sm:inline')}
-              style={{ left: `${x(i)}%` }}
-            >
-              {fmtDay(cur[i].day)}
-            </span>
-          ))}
-        </div>
-      </div>
+                {hp && (
+                  <div className="tip-foot">
+                    {hd === null ? '—' : <Trend value={hd} />} {t('dash.vsPrevShort')}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </>
+      )}
     </div>
   )
 }
 
-function TipRow({ swatch, label, value }: { swatch: ReactNode; label: string; value: string }) {
+// Sparkline stretches to its box; the stroke stays crisp.
+function Sparkline({ values }: { values: number[] }) {
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const span = max - min || 1
+  const pts = values.map((v, i) => [(i / (values.length - 1 || 1)) * 100, 36 - ((v - min) / span) * 28 + 2] as [number, number])
+  const d = monoPath(pts)
   return (
-    <div className="flex items-center gap-2 py-0.5">
-      {swatch}
-      <span className="text-slate-500">{label}</span>
-      <span className="ml-auto pl-3 font-medium tabular-nums text-slate-900 dark:text-white">{value}</span>
-    </div>
+    <svg viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id="kpi-spark" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: 'var(--chart-1)', stopOpacity: 0.2 }} />
+          <stop offset="1" style={{ stopColor: 'var(--chart-1)', stopOpacity: 0 }} />
+        </linearGradient>
+      </defs>
+      <path d={`${d}L100,40L0,40Z`} style={{ fill: 'url(#kpi-spark)' }} />
+      <path d={d} fill="none" style={{ stroke: 'var(--chart-1)' }} strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+    </svg>
   )
 }
 
 function StatusBreakdown({ users }: { users?: Stats['users'] }) {
   const { t } = useI18n()
   const parts = [
-    { key: 'active', n: users?.active ?? 0, color: 'bg-emerald-500', label: t('status.active') },
-    { key: 'limited', n: users?.limited ?? 0, color: 'bg-amber-500', label: t('status.limited') },
-    { key: 'expired', n: users?.expired ?? 0, color: 'bg-rose-500', label: t('status.expired') },
-    { key: 'on_hold', n: users?.on_hold ?? 0, color: 'bg-violet-500', label: t('status.on_hold') },
-    { key: 'disabled', n: users?.disabled ?? 0, color: 'bg-slate-300 dark:bg-slate-600', label: t('status.disabled') },
+    { key: 'active', n: users?.active ?? 0, color: 'var(--success)', label: t('status.active') },
+    { key: 'limited', n: users?.limited ?? 0, color: 'var(--warning)', label: t('status.limited') },
+    { key: 'expired', n: users?.expired ?? 0, color: 'var(--destructive)', label: t('status.expired') },
+    { key: 'on_hold', n: users?.on_hold ?? 0, color: 'var(--violet)', label: t('status.on_hold') },
+    { key: 'disabled', n: users?.disabled ?? 0, color: 'var(--chart-5)', label: t('status.disabled') },
   ]
   const total = parts.reduce((a, p) => a + p.n, 0)
   return (
     <div>
-      <div className="mb-4 mt-3 flex items-baseline gap-2">
-        <span className="text-2xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-white">
-          {users ? <AnimatedNumber value={total} /> : <Skeleton className="h-8 w-16" />}
-        </span>
-        <span className="text-xs text-slate-500">{t('dash.totalUsers')}</span>
+      <div className="mb-3 flex items-baseline gap-2">
+        <span className="text-2xl font-semibold tabular-nums tracking-tight text-foreground">{users ? <AnimatedNumber value={total} /> : <Skeleton className="h-8 w-16" />}</span>
       </div>
-      <div className="flex h-2 w-full gap-[3px] overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="stackbar" aria-hidden>
         {total > 0 &&
           parts
             .filter((p) => p.n > 0)
-            .map((p, i) => (
-              <motion.div
-                key={p.key}
-                className={cx('h-full', p.color)}
-                initial={{ width: 0 }}
-                animate={{ width: `${(p.n / total) * 100}%` }}
-                transition={{ duration: 0.7, delay: 0.2 + i * 0.06, ease: [0.22, 1, 0.36, 1] }}
-                title={`${p.label}: ${p.n}`}
-              />
-            ))}
+            .map((p, i) => <i key={p.key} style={{ width: `${(p.n / total) * 100}%`, background: p.color, '--i': i } as CSSProperties} title={`${p.label}: ${p.n}`} />)}
       </div>
-      <dl className="mt-4 divide-y divide-slate-100 dark:divide-slate-800">
+      <div className="rows mt-3">
         {parts.map((p) => (
-          <div key={p.key} className="flex items-center gap-2.5 py-2 text-sm">
-            <span className={cx('h-2 w-2 rounded-full', p.color)} />
-            <dt className="text-slate-600 dark:text-slate-400">{p.label}</dt>
-            <dd className="ml-auto font-medium tabular-nums text-slate-900 dark:text-white">{users ? p.n : '—'}</dd>
-            <dd className="w-11 text-right text-xs tabular-nums text-slate-400">{total > 0 ? `${Math.round((p.n / total) * 100)}%` : '—'}</dd>
+          <div key={p.key} className="r">
+            <span className="sw" style={{ background: p.color }} />
+            <span className="name">{p.label}</span>
+            <span className="v">{users ? p.n : '—'}</span>
+            <span className="s">{total > 0 ? `${Math.round((p.n / total) * 100)}%` : '—'}</span>
           </div>
         ))}
-      </dl>
+      </div>
     </div>
   )
 }
 
-function CardHead({ title, desc, action }: { title: string; desc: string; action?: ReactNode }) {
+function CardHead({ title, desc, to }: { title: string; desc: string; to?: string }) {
+  const { t } = useI18n()
   return (
-    <div className="flex items-start justify-between gap-3 px-5 pb-3 pt-5">
+    <div className="card-head">
       <div>
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">{title}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{desc}</p>
+        <h2 className="card-title">{title}</h2>
+        <p className="card-desc">{desc}</p>
       </div>
-      {action}
+      {to && (
+        <Link to={to} className="btn btn-ghost btn-sm">
+          {t('dash.viewAll')}
+          <ChevronRight />
+        </Link>
+      )}
     </div>
   )
 }
@@ -442,41 +592,32 @@ function CardHead({ title, desc, action }: { title: string; desc: string; action
 function NewUsers() {
   const { t, lang } = useI18n()
   const navigate = useNavigate()
-  const { data } = useFetch<{ users: User[] }>('/api/users?limit=5&sort=-created_at')
+  const { data } = useFetch<{ users: User[] }>('/api/users?limit=6&sort=-created_at')
   return (
-    <Card className="overflow-hidden lg:col-span-2" delay={0.3}>
-      <CardHead
-        title={t('dash.newUsers')}
-        desc={t('dash.newUsersDesc')}
-        action={
-          <Link to="/users" className="group inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white">
-            {t('dash.viewAll')}
-            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        }
-      />
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
+    <article className="card rise col-8 overflow-hidden" style={{ '--d': 7 } as CSSProperties}>
+      <CardHead title={t('dash.newUsers')} desc={t('dash.newUsersDesc')} to="/users" />
+      <div className="table-wrap mt-3">
+        <table className="dt">
           <thead>
-            <tr className="border-y border-slate-100 bg-slate-50/60 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40">
-              <th className="px-5 py-2 font-medium">{t('users.username')}</th>
-              <th className="px-3 py-2 font-medium">{t('users.status')}</th>
-              <th className="hidden px-3 py-2 font-medium sm:table-cell">{t('dash.traffic.col')}</th>
-              <th className="px-5 py-2 text-right font-medium">{t('users.created')}</th>
+            <tr>
+              <th>{t('users.username')}</th>
+              <th>{t('users.status')}</th>
+              <th className="hide-sm r">{t('dash.traffic.col')}</th>
+              <th className="hide-sm r">{t('users.created')}</th>
             </tr>
           </thead>
           <tbody>
             {!data &&
-              Array.from({ length: 3 }, (_, i) => (
-                <tr key={i} className="border-b border-slate-100 last:border-0 dark:border-slate-800/70">
-                  <td className="px-5 py-3" colSpan={4}>
+              Array.from({ length: 4 }, (_, i) => (
+                <tr key={i}>
+                  <td colSpan={4}>
                     <Skeleton className="h-5 w-full" />
                   </td>
                 </tr>
               ))}
             {data?.users.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-sm text-slate-400">
+                <td colSpan={4} className="!h-28 text-center text-muted-foreground">
                   {t('dash.noData')}
                 </td>
               </tr>
@@ -484,33 +625,33 @@ function NewUsers() {
             {data?.users.map((u) => (
               <tr
                 key={u.id}
+                className="clickable"
+                tabIndex={0}
                 onClick={() => navigate(`/users?open=${u.id}`)}
-                className="cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-slate-50 dark:border-slate-800/70 dark:hover:bg-slate-800/30"
+                onKeyDown={(e) => e.key === 'Enter' && navigate(`/users?open=${u.id}`)}
               >
-                <td className="px-5 py-2.5">
-                  <div className="flex items-center gap-2.5">
-                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-medium uppercase text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {u.username[0]}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium text-slate-900 dark:text-white">{u.username}</div>
-                      {u.note && <div className="truncate text-xs text-slate-500">{u.note}</div>}
+                <td>
+                  <div className="ent">
+                    <span className="av">{u.username[0]}</span>
+                    <div>
+                      <div className="ent-name">{u.username}</div>
+                      {u.note && <div className="ent-sub">{u.note}</div>}
                     </div>
                   </div>
                 </td>
-                <td className="px-3 py-2.5">
+                <td>
                   <UserStatusBadge status={u.status} />
                 </td>
-                <td className="hidden whitespace-nowrap px-3 py-2.5 tabular-nums text-slate-600 dark:text-slate-400 sm:table-cell">
-                  {formatBytes(u.used_traffic)} <span className="text-slate-400">/ {u.data_limit > 0 ? formatBytes(u.data_limit) : '∞'}</span>
+                <td className="hide-sm r whitespace-nowrap tabular-nums">
+                  {formatBytes(u.used_traffic)} <span className="text-faint">/ {u.data_limit > 0 ? formatBytes(u.data_limit) : '∞'}</span>
                 </td>
-                <td className="whitespace-nowrap px-5 py-2.5 text-right text-xs text-slate-500">{relativeTime(u.created_at, lang)}</td>
+                <td className="hide-sm r whitespace-nowrap text-muted-foreground">{relativeTime(u.created_at, lang)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-    </Card>
+    </article>
   )
 }
 
@@ -523,43 +664,26 @@ function ActivityFeed() {
     return s === key ? action : s
   }
   return (
-    <Card className="overflow-hidden" delay={0.35}>
-      <CardHead
-        title={t('dash.activity')}
-        desc={t('dash.activityDesc')}
-        action={
-          <Link to="/audit" className="group inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white">
-            {t('dash.viewAll')}
-            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
-          </Link>
-        }
-      />
-      <ol className="px-5 pb-4">
-        {!data && Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="my-2 block h-9 w-full" />)}
-        {data?.length === 0 && <li className="py-8 text-center text-sm text-slate-400">{t('dash.noData')}</li>}
-        {data?.map((e, i) => (
-          <motion.li
-            key={e.id}
-            initial={{ opacity: 0, x: -4 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.35 + i * 0.04 }}
-            className="relative flex gap-3 pb-4 last:pb-0"
-          >
-            {i < data.length - 1 && <span className="absolute left-[13px] top-8 h-[calc(100%-2rem)] w-px bg-slate-200 dark:bg-slate-800" />}
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-medium uppercase text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-              {e.admin[0] ?? '?'}
-            </span>
-            <div className="min-w-0 pt-0.5">
-              <p className="text-sm leading-snug text-slate-600 dark:text-slate-400">
-                <span className="font-medium text-slate-900 dark:text-white">{e.admin}</span> {phrase(e.action)}{' '}
-                {e.target && !(e.action === 'login' && e.target === e.admin) && <span className="break-all font-medium text-slate-900 dark:text-white">{e.target}</span>}
-              </p>
-              <p className="mt-0.5 text-xs text-slate-400">{relativeTime(e.created_at, lang)}</p>
+    <article className="card rise col-4" style={{ '--d': 8 } as CSSProperties}>
+      <CardHead title={t('dash.activity')} desc={t('dash.activityDesc')} to="/audit" />
+      <div className="card-body !pt-1.5">
+        <div className="feed">
+          {!data && Array.from({ length: 4 }, (_, i) => <Skeleton key={i} className="my-2 block h-9 w-full" />)}
+          {data?.length === 0 && <p className="py-8 text-center text-[13px] text-muted-foreground">{t('dash.noData')}</p>}
+          {data?.map((e) => (
+            <div key={e.id} className="feed-item">
+              <span className="av">{e.admin[0] ?? '?'}</span>
+              <div className="min-w-0">
+                <p className="feed-text">
+                  <b>{e.admin}</b> {phrase(e.action)} {e.target && !(e.action === 'login' && e.target === e.admin) && <b>{e.target}</b>}
+                </p>
+                <p className="feed-time">{relativeTime(e.created_at, lang)}</p>
+              </div>
             </div>
-          </motion.li>
-        ))}
-      </ol>
-    </Card>
+          ))}
+        </div>
+      </div>
+    </article>
   )
 }
 
@@ -573,19 +697,19 @@ function SystemCard({ stats, lang }: { stats: Stats | null; lang: Parameters<typ
   ]
   if (stats?.nodes) rows.unshift([Server, t('dash.nodes'), `${stats.nodes.connected} / ${stats.nodes.total}`])
   return (
-    <Card className="p-5" delay={0.35}>
-      <h2 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">{t('dash.system')}</h2>
-      <dl className="divide-y divide-slate-100 dark:divide-slate-800">
-        {rows.map(([Icon, label, value]) => (
-          <div key={label} className="flex items-center justify-between py-2 text-sm">
-            <dt className="flex items-center gap-2 text-slate-500">
-              <Icon className="h-4 w-4 text-slate-400" />
-              {label}
-            </dt>
-            <dd className="font-medium tabular-nums text-slate-900 dark:text-white">{value ?? <Skeleton className="h-4 w-14" />}</dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
+    <article className="card rise col-4" style={{ '--d': 8 } as CSSProperties}>
+      <CardHead title={t('dash.system')} desc={t('nav.workspace')} />
+      <div className="card-body">
+        <div className="rows">
+          {rows.map(([Icon, label, value]) => (
+            <div key={label} className="r">
+              <Icon className="h-4 w-4 text-faint" />
+              <span className="name text-muted-foreground">{label}</span>
+              <span className="v">{value ?? <Skeleton className="h-4 w-14" />}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </article>
   )
 }

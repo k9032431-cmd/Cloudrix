@@ -67,17 +67,17 @@ export default function BrandingCard() {
   return (
     <Card className="mb-6 p-6">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300">
+        <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted-foreground">
           <MessageSquareText className="h-5 w-5" />
         </div>
-        <h2 className="font-semibold text-slate-900 dark:text-white">{t('br.title')}</h2>
+        <h2 className="font-semibold text-foreground">{t('br.title')}</h2>
       </div>
-      <p className="mb-5 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('br.desc')}</p>
+      <p className="mb-5 max-w-3xl text-sm text-muted-foreground">{t('br.desc')}</p>
       {note && (
         <div
           className={
             'mb-4 rounded-lg px-3 py-2 text-sm ' +
-            (note.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300')
+            (note.ok ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')
           }
         >
           {note.text}
@@ -100,7 +100,7 @@ export default function BrandingCard() {
             hint={
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span>{t('br.announceHint')}</span>
-                <span className={preview.length > 200 ? 'text-amber-600 dark:text-amber-400' : ''}>{t('br.chars', { n: preview.length })}</span>
+                <span className={preview.length > 200 ? 'text-warning' : ''}>{t('br.chars', { n: preview.length })}</span>
               </span>
             }
           >
@@ -121,9 +121,9 @@ export default function BrandingCard() {
                 key={v}
                 onClick={() => insert(v)}
                 title={t(`br.var.${v}`)}
-                className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+                className="rounded-md bg-muted px-2 py-1 font-mono text-[11px] text-foreground transition-colors hover:bg-accent hover:text-foreground"
               >
-                {`{${v}}`} <span className="font-sans text-slate-400">· {t(`br.var.${v}`)}</span>
+                {`{${v}}`} <span className="font-sans text-faint">· {t(`br.var.${v}`)}</span>
               </button>
             ))}
           </div>
@@ -142,7 +142,7 @@ export default function BrandingCard() {
         </form>
 
         <div>
-          <div className="mb-2 text-xs font-medium text-slate-500">{t('br.preview')}</div>
+          <div className="mb-2 text-xs font-medium text-muted-foreground">{t('br.preview')}</div>
           {/* Mimics how Happ renders a subscription card. */}
           <div className="overflow-hidden rounded-2xl bg-[#25235a] text-white shadow-lg ring-1 ring-black/10">
             <div className="flex items-center gap-3 px-4 py-3">
@@ -160,9 +160,9 @@ export default function BrandingCard() {
               <span className="whitespace-nowrap">Expires: 29.10.2026</span>
             </div>
             {preview && <div className="whitespace-pre-line break-words px-4 py-4 text-center text-sm leading-relaxed">{preview}</div>}
-            {form.support_url && <div className="border-t border-white/10 px-4 py-2 text-center text-xs text-white/70">💬 {t('sub.support')}</div>}
+            {form.support_url && <div className="border-t border-white/10 px-4 py-2 text-center text-xs text-white/70">{t('sub.support')}</div>}
           </div>
-          <p className="mt-2 text-xs text-slate-400">{t('br.previewNote')}</p>
+          <p className="mt-2 text-xs text-faint">{t('br.previewNote')}</p>
         </div>
       </div>
     </Card>

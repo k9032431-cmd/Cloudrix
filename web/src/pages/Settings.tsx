@@ -75,14 +75,14 @@ function DriveCard() {
     <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-800 dark:text-slate-300">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-border text-muted-foreground">
             <CloudUpload className="h-5 w-5" />
           </div>
           <div>
-            <h2 className="font-semibold text-slate-900 dark:text-white">{t('gd.title')}</h2>
-            {data && <p className="text-xs text-slate-500">{t('gd.stats', { files: data.files, errors: data.errors })}</p>}
+            <h2 className="font-semibold text-foreground">{t('gd.title')}</h2>
+            {data && <p className="text-xs text-muted-foreground">{t('gd.stats', { files: data.files, errors: data.errors })}</p>}
             {data?.last_run?.at && (
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-faint">
                 {t('gd.lastRun', {
                   when: relativeTime(data.last_run.at, lang),
                   uploaded: data.last_run.uploaded,
@@ -99,33 +99,33 @@ function DriveCard() {
           </Badge>
         )}
       </div>
-      <p className="mb-2 max-w-3xl text-sm text-slate-600 dark:text-slate-400">{t('gd.desc')}</p>
-      <p className="mb-5 max-w-3xl text-xs text-slate-500 dark:text-slate-400">⚡ {t('gd.instant')}</p>
+      <p className="mb-2 max-w-3xl text-sm text-muted-foreground">{t('gd.desc')}</p>
+      <p className="mb-5 max-w-3xl text-xs text-muted-foreground">⚡ {t('gd.instant')}</p>
       <ErrorNote error={error} />
       {note && (
         <div
           className={
             'mb-4 rounded-lg px-3 py-2 text-sm ' +
-            (note.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-500/10 dark:text-rose-300')
+            (note.ok ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive')
           }
         >
           {note.text}
         </div>
       )}
 
-      <details className="mb-5 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/50" open={!data?.connected}>
-        <summary className="cursor-pointer font-medium text-slate-800 dark:text-slate-200">{t('gd.setupTitle')}</summary>
-        <ol className="mt-3 list-decimal space-y-2 pl-5 text-slate-600 dark:text-slate-400">
+      <details className="mb-5 rounded-card bg-muted/60 p-4 text-sm" open={!data?.connected}>
+        <summary className="cursor-pointer font-medium text-foreground">{t('gd.setupTitle')}</summary>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-muted-foreground">
           <li>
             {t('gd.step1')}{' '}
-            <a className="text-brand-600 hover:underline dark:text-brand-400" href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noreferrer">
+            <a className="text-chart-1 hover:underline" href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noreferrer">
               <ExternalLink className="inline h-3.5 w-3.5" />
             </a>
           </li>
           <li>{t('gd.step2')}</li>
           <li>
             {t('gd.step3')}{' '}
-            <a className="text-brand-600 hover:underline dark:text-brand-400" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
+            <a className="text-chart-1 hover:underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">
               <ExternalLink className="inline h-3.5 w-3.5" />
             </a>
           </li>
@@ -170,28 +170,28 @@ function DriveCard() {
         </div>
       </form>
 
-      <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
-        <div className="mb-1 text-xs font-medium text-slate-500">{t('gd.account')}</div>
+      <div className="mt-6 border-t border-border pt-5">
+        <div className="mb-1 text-xs font-medium text-muted-foreground">{t('gd.account')}</div>
         {conn?.pending ? (
-          <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
-            <p className="mb-2 text-sm text-slate-700 dark:text-slate-300">
+          <div className="rounded-lg border border-border bg-muted/60 p-4">
+            <p className="mb-2 text-sm text-foreground">
               {t('gd.deviceStep')}{' '}
-              <a href={conn.verification_url} target="_blank" rel="noreferrer" className="font-medium text-brand-600 underline dark:text-brand-400">
+              <a href={conn.verification_url} target="_blank" rel="noreferrer" className="font-medium text-chart-1 underline">
                 {conn.verification_url}
               </a>
             </p>
             <div className="mb-3 flex items-center gap-3">
-              <code className="rounded-lg bg-white px-4 py-2 text-2xl font-semibold tracking-widest text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white">{conn.user_code}</code>
+              <code className="rounded-lg bg-card px-4 py-2 text-2xl font-semibold tracking-widest text-foreground shadow-sm">{conn.user_code}</code>
               <CopyButton text={conn.user_code ?? ''} />
             </div>
-            <p className="flex items-center gap-2 text-xs text-slate-500">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <RefreshCw className="h-3.5 w-3.5 animate-spin" />
               {t('gd.waiting')}
             </p>
           </div>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
-            {conn?.error && <span className="mr-2 text-sm text-rose-600 dark:text-rose-400">{conn.error}</span>}
+            {conn?.error && <span className="mr-2 text-sm text-destructive">{conn.error}</span>}
             <Button
               variant={data?.connected ? 'secondary' : 'primary'}
               loading={busy === 'connect'}

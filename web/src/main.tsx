@@ -2,8 +2,8 @@ import { StrictMode, lazy, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Loader2 } from './components/icons'
-import '@fontsource-variable/inter'
-import '@fontsource-variable/fira-code'
+import '@fontsource-variable/geist'
+import '@fontsource-variable/geist-mono'
 import './index.css'
 import { MotionConfig } from 'framer-motion'
 import { I18nProvider } from './lib/i18n'
@@ -24,7 +24,7 @@ const Subscription = lazy(() => import('./pages/Subscription'))
 function Spinner() {
   return (
     <div className="flex min-h-[40vh] items-center justify-center">
-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      <Loader2 className="h-6 w-6 animate-spin text-faint" />
     </div>
   )
 }

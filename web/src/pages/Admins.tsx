@@ -45,7 +45,7 @@ export default function Admins() {
           <tbody>
             {data?.map((a) => (
               <tr key={a.id}>
-                <Td className="font-medium text-slate-900 dark:text-white">{a.username}</Td>
+                <Td className="font-medium text-foreground">{a.username}</Td>
                 <Td>
                   <Badge tone={roleTone[a.role]}>{t(`admins.role.${a.role}`)}</Badge>
                 </Td>
@@ -55,7 +55,7 @@ export default function Admins() {
                     {a.disabled ? t('common.disabled') : t('common.enabled')}
                   </Badge>
                 </Td>
-                <Td className="text-slate-500">{formatDate(a.created_at, lang)}</Td>
+                <Td className="text-muted-foreground">{formatDate(a.created_at, lang)}</Td>
                 <Td>
                   <div className="flex justify-end gap-1">
                     <IconButton onClick={() => setEditing(a)} aria-label={t('common.edit')}>

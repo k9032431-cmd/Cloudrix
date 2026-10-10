@@ -79,21 +79,21 @@ export default function Inbounds() {
               {data?.map((ib) => (
                 <tr key={ib.id} className={ib.enabled ? '' : 'opacity-50'}>
                   <Td>
-                    <div className="font-medium text-slate-900 dark:text-white">{ib.tag}</div>
-                    <div className="text-xs text-slate-400">{ib.remark}</div>
+                    <div className="font-medium text-foreground">{ib.tag}</div>
+                    <div className="text-xs text-faint">{ib.remark}</div>
                   </Td>
                   <Td>
                     <Badge tone="blue">{ib.protocol}</Badge>
                   </Td>
                   <Td className="tabular-nums">{ib.port}</Td>
-                  <Td className="text-slate-500">
+                  <Td className="text-muted-foreground">
                     {XRAY.includes(ib.protocol) && ib.protocol !== 'shadowsocks'
                       ? `${ib.settings.network || 'tcp'} / ${ib.settings.security || 'none'}`
                       : ib.protocol === 'shadowsocks'
                         ? ib.settings.ss_method
                         : 'udp'}
                   </Td>
-                  <Td className="text-slate-500">{nodes?.find((n) => n.id === ib.node_id)?.name ?? t('inbounds.local')}</Td>
+                  <Td className="text-muted-foreground">{nodes?.find((n) => n.id === ib.node_id)?.name ?? t('inbounds.local')}</Td>
                   <Td>
                     <Badge tone={coreOf(ib.protocol) === 'xray' ? 'gray' : 'violet'}>{coreOf(ib.protocol)}</Badge>
                   </Td>
@@ -218,8 +218,8 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
                 className={
                   'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
                   (ib.protocol === p
-                    ? 'bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white'
-                    : 'text-slate-600 ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800')
+                    ? 'bg-primary text-primary-foreground ring-primary'
+                    : 'text-muted-foreground ring-border hover:bg-muted/60')
                 }
               >
                 {p}
@@ -473,8 +473,8 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <fieldset className="rounded-xl border border-slate-200 p-4 dark:border-slate-800">
-      <legend className="px-1 text-xs font-medium text-slate-500">{title}</legend>
+    <fieldset className="rounded-card border border-border p-4">
+      <legend className="px-1 text-xs font-medium text-muted-foreground">{title}</legend>
       <div className="grid gap-4 sm:grid-cols-3">{children}</div>
     </fieldset>
   )
@@ -501,7 +501,7 @@ function CorePreview({ nodes, onClose }: { nodes: Node[]; onClose: () => void })
   }, [])
   return (
     <Modal open onClose={onClose} wide title={t('inbounds.preview')}>
-      <p className="mb-3 text-sm text-slate-500">{t('inbounds.previewHint')}</p>
+      <p className="mb-3 text-sm text-muted-foreground">{t('inbounds.previewHint')}</p>
       <div className="mb-3 flex flex-wrap gap-2">
         <Select
           className="w-auto"
@@ -533,7 +533,7 @@ function CorePreview({ nodes, onClose }: { nodes: Node[]; onClose: () => void })
         {text && <CopyButton text={text} />}
       </div>
       <ErrorNote error={error} />
-      <pre className="max-h-[55vh] overflow-auto rounded-lg bg-slate-950 p-4 text-xs leading-relaxed text-slate-200">{text}</pre>
+      <pre className="max-h-[55vh] overflow-auto rounded-lg bg-muted p-4 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-border">{text}</pre>
     </Modal>
   )
 }

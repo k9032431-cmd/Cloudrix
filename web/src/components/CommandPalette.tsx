@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
-import { Search, Users, type Icon } from './icons'
+import { ArrowDown, ArrowUp, CornerDownLeft, Search, Users, type Icon } from './icons'
 import { get } from '../lib/api'
 import { useDebounced } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import type { User } from '../lib/types'
 import { UserStatusBadge } from './StatusBadge'
-import { cx } from './ui'
 
 export interface Command {
   id: string
@@ -54,11 +52,12 @@ export default function CommandPalette({ commands }: { commands: Command[] }) {
   }, [])
 
   useEffect(() => {
-    if (open) {
-      setQuery('')
-      setActive(0)
-      requestAnimationFrame(() => input.current?.focus())
-    }
+    if (!open) return
+    const prev = document.activeElement as HTMLElement | null
+    setQuery('')
+    setActive(0)
+    requestAnimationFrame(() => input.current?.focus())
+    return () => prev?.focus?.()
   }, [open])
 
   useEffect(() => {
@@ -117,80 +116,73 @@ export default function CommandPalette({ commands }: { commands: Command[] }) {
   }, [active])
 
   let lastGroup = ''
+  // The palette is used many times a day, so it opens and closes instantly.
+  if (!open) return null
   return createPortal(
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          key="palette"
-          className="fixed inset-0 z-[55] flex items-start justify-center p-4 pt-[12vh]"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0, pointerEvents: 'none', transition: { duration: 0.15 } }}
-        >
-          <div className="absolute inset-0 bg-slate-950/40" onClick={() => setOpen(false)} />
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            initial={{ opacity: 0, scale: 0.96, y: -8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -6 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 36 }}
-            className="relative w-full max-w-xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900"
-            onKeyDown={onKeyDown}
-          >
-            <div className="flex items-center gap-3 border-b border-slate-200 px-4 dark:border-slate-800">
-              <Search className="h-4 w-4 text-slate-400" />
-              <input
-                ref={input}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('cmd.placeholder')}
-                className="h-14 flex-1 border-0 bg-transparent text-base text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-0 dark:text-white sm:text-sm"
-              />
-              <kbd className="hidden rounded-md border border-slate-200 px-1.5 py-0.5 font-mono text-[10px] text-slate-400 dark:border-white/10 sm:block">ESC</kbd>
-            </div>
-            <div ref={list} className="max-h-[50vh] overflow-y-auto p-2">
-              {items.length === 0 && <p className="px-3 py-8 text-center text-sm text-slate-400">{t('cmd.empty')}</p>}
-              {items.map((c, i) => {
-                const header = c.group !== lastGroup
-                lastGroup = c.group
-                const Icon = c.icon
-                return (
-                  <div key={c.id}>
-                    {header && <div className="px-3 pb-1 pt-3 text-xs font-medium text-slate-500">{c.group}</div>}
-                    <button
-                      data-index={i}
-                      onMouseMove={() => setActive(i)}
-                      onClick={() => run(c)}
-                      className={cx(
-                        'relative flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left text-sm transition-colors duration-150',
-                        i === active
-                          ? 'bg-slate-100 text-slate-900 dark:bg-slate-800 dark:text-white'
-                          : 'text-slate-600 dark:text-slate-300',
-                      )}
-                    >
-                      <span className="relative flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="relative flex-1 truncate">{c.label}</span>
-                      {c.hint && <span className="relative">{c.hint}</span>}
-                    </button>
-                  </div>
-                )
-              })}
-            </div>
-            <div className="flex items-center gap-4 border-t border-slate-200 px-4 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-              <span>
-                <kbd className="font-mono">↑↓</kbd> {t('cmd.navigate')}
-              </span>
-              <span>
-                <kbd className="font-mono">↵</kbd> {t('cmd.open')}
-              </span>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>,
+    <div className="fixed inset-0 z-[80]">
+      <div className="layer-scrim" onClick={() => setOpen(false)} />
+      <div className="palette" role="dialog" aria-modal="true" aria-label={t('cmd.placeholder')} onKeyDown={onKeyDown}>
+        <div className="palette-in">
+          <Search />
+          <input
+            ref={input}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('cmd.placeholder')}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="palette-list"
+            aria-activedescendant={items[active] ? `pi-${items[active].id}` : undefined}
+          />
+          <kbd className="kbd hidden sm:inline-flex">Esc</kbd>
+        </div>
+        <div ref={list} id="palette-list" role="listbox" className="palette-list">
+          {items.length === 0 && <p className="palette-empty">{t('cmd.empty')}</p>}
+          {items.map((c, i) => {
+            const header = c.group !== lastGroup
+            lastGroup = c.group
+            const Icon = c.icon
+            return (
+              <div key={c.id}>
+                {header && <div className="palette-group">{c.group}</div>}
+                <button
+                  type="button"
+                  id={`pi-${c.id}`}
+                  role="option"
+                  aria-selected={i === active}
+                  data-index={i}
+                  tabIndex={-1}
+                  onMouseMove={() => setActive(i)}
+                  onClick={() => run(c)}
+                  className="palette-item"
+                >
+                  <Icon />
+                  <span className="min-w-0 flex-1 truncate">{c.label}</span>
+                  {c.hint && <span className="sub">{c.hint}</span>}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+        <div className="palette-foot">
+          <span>
+            <kbd className="kbd">
+              <ArrowUp />
+            </kbd>
+            <kbd className="kbd">
+              <ArrowDown />
+            </kbd>
+            {t('cmd.navigate')}
+          </span>
+          <span>
+            <kbd className="kbd">
+              <CornerDownLeft />
+            </kbd>
+            {t('cmd.open')}
+          </span>
+        </div>
+      </div>
+    </div>,
     document.body,
   )
 }

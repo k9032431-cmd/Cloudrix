@@ -30,16 +30,16 @@ export default function Audit() {
             <tbody>
               {data?.map((e) => (
                 <tr key={e.id}>
-                  <Td className="whitespace-nowrap text-slate-500">{formatDate(e.created_at, lang)}</Td>
-                  <Td className="font-medium text-slate-900 dark:text-white">{e.admin}</Td>
+                  <Td className="whitespace-nowrap text-muted-foreground">{formatDate(e.created_at, lang)}</Td>
+                  <Td className="font-medium text-foreground">{e.admin}</Td>
                   <Td>
                     <Badge tone={tone(e.action)}>{e.action}</Badge>
                   </Td>
-                  <Td className="text-slate-600 dark:text-slate-300">
+                  <Td className="text-muted-foreground">
                     {e.target}
-                    {e.details && <span className="ml-2 text-xs text-slate-400">{e.details}</span>}
+                    {e.details && <span className="ml-2 text-xs text-faint">{e.details}</span>}
                   </Td>
-                  <Td className="font-mono text-xs text-slate-500">{e.ip}</Td>
+                  <Td className="font-mono text-xs text-muted-foreground">{e.ip}</Td>
                 </tr>
               ))}
             </tbody>

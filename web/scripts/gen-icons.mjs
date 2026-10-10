@@ -1,82 +1,102 @@
-// Generates src/components/icons.gen.ts from Phosphor Icons (MIT, phosphoricons.com).
-// Only the icons and weights the panel uses are embedded, which keeps the bundle
-// small. Run `npm run icons` after changing the list below.
+// Generates src/components/icons.gen.ts from Lucide (ISC, lucide.dev).
+// The slate console uses the Lucide grammar: 24 viewBox, stroke icons with
+// round caps and joins. Only the icons the panel uses are embedded, which
+// keeps the bundle small. Run `npm run icons` after changing the list below.
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-const assets = join(root, 'node_modules/@phosphor-icons/core/assets')
+const assets = join(root, 'node_modules/lucide-static/icons')
 
-// [export name, Phosphor icon, weight]
+// [export name, Lucide icon]
 const ICONS = [
-  ['LayoutDashboard', 'SquaresFour', 'regular'],
-  ['Users', 'UsersThree', 'regular'],
-  ['Network', 'Graph', 'regular'],
-  ['Server', 'HardDrives', 'regular'],
-  ['ShieldCheck', 'ShieldCheck', 'regular'],
-  ['ScrollText', 'Scroll', 'regular'],
-  ['Settings', 'GearSix', 'regular'],
-  ['LogOut', 'SignOut', 'regular'],
-  ['Moon', 'Moon', 'regular'],
-  ['Sun', 'Sun', 'regular'],
-  ['Languages', 'Translate', 'regular'],
-  ['KeyRound', 'Key', 'regular'],
-  ['Activity', 'Pulse', 'regular'],
-  ['Zap', 'Lightning', 'regular'],
-  ['Wifi', 'WifiHigh', 'regular'],
-  ['Gauge', 'Gauge', 'regular'],
-  ['Clock', 'Clock', 'regular'],
-  ['Cpu', 'Cpu', 'regular'],
-  ['HardDrive', 'Memory', 'regular'],
-  ['QrCode', 'QrCode', 'regular'],
-  ['CloudUpload', 'CloudArrowUp', 'regular'],
-  ['Code2', 'Code', 'regular'],
-  ['Download', 'DownloadSimple', 'regular'],
-  ['Info', 'Info', 'regular'],
-  ['Link2Off', 'LinkBreak', 'regular'],
-  ['MessageCircle', 'ChatCircleDots', 'regular'],
-  ['MessageSquareText', 'ChatText', 'regular'],
-  ['Smartphone', 'DeviceMobile', 'regular'],
-  ['Wand2', 'MagicWand', 'regular'],
-  ['CheckCircle2', 'CheckCircle', 'regular'],
-  ['RotateCcw', 'ArrowCounterClockwise', 'regular'],
-  ['Pencil', 'PencilSimple', 'regular'],
-  ['Trash2', 'Trash', 'regular'],
-  ['ChartUp', 'ChartLineUp', 'regular'],
-  ['Sparkle', 'Sparkle', 'regular'],
-  ['Globe', 'GlobeHemisphereWest', 'regular'],
-  ['UserCircle', 'UserCircle', 'regular'],
-  ['Plus', 'Plus', 'bold'],
-  ['X', 'X', 'bold'],
-  ['Check', 'Check', 'bold'],
-  ['Copy', 'Copy', 'bold'],
-  ['ChevronLeft', 'CaretLeft', 'bold'],
-  ['ChevronRight', 'CaretRight', 'bold'],
-  ['Menu', 'List', 'bold'],
-  ['Search', 'MagnifyingGlass', 'bold'],
-  ['RefreshCw', 'ArrowsClockwise', 'bold'],
-  ['ExternalLink', 'ArrowSquareOut', 'bold'],
-  ['MoreHorizontal', 'DotsThreeOutline', 'bold'],
-  ['Loader2', 'CircleNotch', 'bold'],
-  ['PanelLeft', 'SidebarSimple', 'regular'],
-  ['ChevronsUpDown', 'CaretUpDown', 'bold'],
-  ['ArrowUpRight', 'ArrowUpRight', 'bold'],
-  ['ArrowDownRight', 'ArrowDownRight', 'bold'],
-  ['ArrowRight', 'ArrowRight', 'bold'],
-  ['Export', 'Export', 'regular'],
-  ['Calendar', 'CalendarBlank', 'regular'],
-  ['Hourglass', 'HourglassMedium', 'regular'],
+  ['LayoutDashboard', 'layout-dashboard'],
+  ['Users', 'users'],
+  ['Network', 'network'],
+  ['Server', 'server'],
+  ['ShieldCheck', 'shield-check'],
+  ['ScrollText', 'scroll-text'],
+  ['Settings', 'settings'],
+  ['LogOut', 'log-out'],
+  ['Moon', 'moon'],
+  ['Sun', 'sun'],
+  ['Monitor', 'monitor'],
+  ['Contrast', 'contrast'],
+  ['Bell', 'bell'],
+  ['Languages', 'languages'],
+  ['KeyRound', 'key-round'],
+  ['Activity', 'activity'],
+  ['Zap', 'zap'],
+  ['Wifi', 'wifi'],
+  ['Gauge', 'gauge'],
+  ['Clock', 'clock'],
+  ['Cpu', 'cpu'],
+  ['HardDrive', 'memory-stick'],
+  ['QrCode', 'qr-code'],
+  ['CloudUpload', 'cloud-upload'],
+  ['Code2', 'code-xml'],
+  ['Download', 'download'],
+  ['Info', 'info'],
+  ['Link2Off', 'link-2-off'],
+  ['MessageCircle', 'message-circle'],
+  ['MessageSquareText', 'message-square-text'],
+  ['Smartphone', 'smartphone'],
+  ['Wand2', 'wand-sparkles'],
+  ['CheckCircle2', 'circle-check'],
+  ['CircleAlert', 'circle-alert'],
+  ['Inbox', 'inbox'],
+  ['SearchX', 'search-x'],
+  ['RotateCcw', 'rotate-ccw'],
+  ['Pencil', 'pencil'],
+  ['Trash2', 'trash-2'],
+  ['ChartUp', 'chart-line'],
+  ['Sparkle', 'sparkle'],
+  ['Globe', 'globe'],
+  ['UserCircle', 'circle-user'],
+  ['UserPlus', 'user-plus'],
+  ['Calendar', 'calendar'],
+  ['Hourglass', 'hourglass'],
+  ['TrendingUp', 'trending-up'],
+  ['TrendingDown', 'trending-down'],
+  ['Rows', 'rows-3'],
+  ['Command', 'command'],
+  ['CornerDownLeft', 'corner-down-left'],
+  ['Plus', 'plus'],
+  ['X', 'x'],
+  ['Check', 'check'],
+  ['Copy', 'copy'],
+  ['ChevronLeft', 'chevron-left'],
+  ['ChevronRight', 'chevron-right'],
+  ['ChevronDown', 'chevron-down'],
+  ['ChevronsUpDown', 'chevrons-up-down'],
+  ['Menu', 'menu'],
+  ['Search', 'search'],
+  ['RefreshCw', 'refresh-cw'],
+  ['ExternalLink', 'external-link'],
+  ['MoreHorizontal', 'ellipsis'],
+  ['Loader2', 'loader-circle'],
+  ['PanelLeft', 'panel-left'],
+  ['ArrowUp', 'arrow-up'],
+  ['ArrowDown', 'arrow-down'],
+  ['ArrowUpDown', 'arrow-up-down'],
+  ['ArrowUpRight', 'arrow-up-right'],
+  ['ArrowDownRight', 'arrow-down-right'],
+  ['ArrowRight', 'arrow-right'],
+  ['Export', 'download'],
 ]
 
-const kebab = (s) => s.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()
-
-let out = '// Generated by scripts/gen-icons.mjs from Phosphor Icons (MIT License). Do not edit.\n'
+let out = '// Generated by scripts/gen-icons.mjs from Lucide (ISC License). Do not edit.\n'
 out += 'export const ICON_PATHS: Record<string, string> = {\n'
-for (const [name, icon, weight] of ICONS) {
-  const file = join(assets, weight, `${kebab(icon)}${weight === 'regular' ? '' : '-' + weight}.svg`)
-  const svg = readFileSync(file, 'utf8')
-  const inner = svg.replace(/^<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim()
+for (const [name, icon] of ICONS) {
+  const svg = readFileSync(join(assets, `${icon}.svg`), 'utf8')
+  const inner = svg
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/^[\s\S]*?<svg[^>]*>/, '')
+    .replace(/<\/svg>\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .replace(/> </g, '><')
+    .trim()
   out += `  ${name}: ${JSON.stringify(inner)},\n`
 }
 out += '}\n'

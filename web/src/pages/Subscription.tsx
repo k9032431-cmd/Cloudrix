@@ -45,35 +45,35 @@ export default function Subscription() {
           </div>
         </div>
 
-        {error && !loading && <Card delay={0.07} className="p-8 text-center text-slate-500">{t('sub.notFound')}</Card>}
+        {error && !loading && <Card delay={0.07} className="p-8 text-center text-muted-foreground">{t('sub.notFound')}</Card>}
 
         {data && (
           <div className="space-y-4">
             <Card delay={0.14} className="p-6">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs text-slate-500">{data.title || t('sub.title')}</div>
-                  <div className="text-xl font-semibold text-slate-900 dark:text-white">{data.username}</div>
+                  <div className="text-xs text-muted-foreground">{data.title || t('sub.title')}</div>
+                  <div className="text-xl font-semibold text-foreground">{data.username}</div>
                 </div>
                 <UserStatusBadge status={data.status} />
               </div>
               <div className="mb-2 flex justify-between text-sm">
-                <span className="text-slate-500">{t('sub.used')}</span>
-                <span className="font-medium tabular-nums text-slate-900 dark:text-white">
+                <span className="text-muted-foreground">{t('sub.used')}</span>
+                <span className="font-medium tabular-nums text-foreground">
                   {formatBytes(data.used_traffic)} / {data.data_limit ? formatBytes(data.data_limit) : '∞'}
                 </span>
               </div>
               <ProgressBar value={data.used_traffic} max={data.data_limit} />
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <div className="text-slate-500">{t('sub.left')}</div>
-                  <div className="font-medium tabular-nums text-slate-900 dark:text-white">
+                  <div className="text-muted-foreground">{t('sub.left')}</div>
+                  <div className="font-medium tabular-nums text-foreground">
                     {data.data_limit ? formatBytes(Math.max(data.data_limit - data.used_traffic, 0)) : '∞'}
                   </div>
                 </div>
                 <div>
-                  <div className="text-slate-500">{t('sub.expires')}</div>
-                  <div className="font-medium text-slate-900 dark:text-white">
+                  <div className="text-muted-foreground">{t('sub.expires')}</div>
+                  <div className="font-medium text-foreground">
                     {data.expire_at ? `${formatDate(data.expire_at, lang)}${left !== null && left >= 0 ? ` · ${t('users.daysLeft', { n: left })}` : ''}` : '∞'}
                   </div>
                 </div>
@@ -82,7 +82,7 @@ export default function Subscription() {
 
             {(data.announce || data.support_url) && (
               <Card delay={0.21} className="p-6 text-center">
-                {data.announce && <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-700 dark:text-slate-300">{data.announce}</p>}
+                {data.announce && <p className="whitespace-pre-line break-words text-sm leading-relaxed text-foreground">{data.announce}</p>}
                 {data.support_url && (
                   <a href={data.support_url} target="_blank" rel="noreferrer" className={data.announce ? 'mt-4 inline-block' : 'inline-block'}>
                     <Button variant="secondary" size="sm">
@@ -116,12 +116,12 @@ export default function Subscription() {
                 />
               )}
               <QR value={url} size={200} />
-              <p className="text-center text-sm text-slate-500">{kind === 'gdrive' ? t('sub.gdriveHint') : t('sub.scan')}</p>
+              <p className="text-center text-sm text-muted-foreground">{kind === 'gdrive' ? t('sub.gdriveHint') : t('sub.scan')}</p>
               <CopyButton text={url} label={t('sub.copyLink')} />
             </Card>
 
             <Card delay={0.35} className="p-6">
-              <h2 className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">{t('sub.addToApp')}</h2>
+              <h2 className="mb-3 text-sm font-medium text-foreground">{t('sub.addToApp')}</h2>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {APPS.map((a) => (
                   <a key={a.name} href={a.link(url)}>
@@ -135,11 +135,11 @@ export default function Subscription() {
 
             {(data.links.length > 0 || data.wireguard.length > 0) && (
               <Card delay={0.42} className="p-6">
-                <h2 className="mb-3 text-sm font-medium text-slate-700 dark:text-slate-300">{t('sub.configs')}</h2>
+                <h2 className="mb-3 text-sm font-medium text-foreground">{t('sub.configs')}</h2>
                 <div className="space-y-2">
                   {data.links.map((l, i) => (
-                    <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/60">
-                      <code className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300">{decodeURIComponent(l.split('#')[1] ?? l.split('://')[0])}</code>
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2">
+                      <code className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{decodeURIComponent(l.split('#')[1] ?? l.split('://')[0])}</code>
                       <CopyButton text={l} />
                     </div>
                   ))}

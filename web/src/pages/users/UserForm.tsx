@@ -133,13 +133,13 @@ export default function UserForm({
                     <button
                       type="button"
                       key={d}
-                      className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300"
+                      className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
                       onClick={() => set('expire_at', new Date(Date.now() + d * 86_400_000).toISOString())}
                     >
                       +{d}d
                     </button>
                   ))}
-                  <button type="button" className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300" onClick={() => set('expire_at', null)}>
+                  <button type="button" className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground hover:bg-accent" onClick={() => set('expire_at', null)}>
                     ∞ {t('users.expireNone')}
                   </button>
                 </span>
@@ -178,8 +178,8 @@ export default function UserForm({
                   className={cx(
                     'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors',
                     on
-                      ? 'bg-slate-900 text-white ring-slate-900 dark:bg-white dark:text-slate-900 dark:ring-white'
-                      : 'text-slate-600 ring-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:ring-slate-700 dark:hover:bg-slate-800',
+                      ? 'bg-primary text-primary-foreground ring-primary'
+                      : 'text-muted-foreground ring-border hover:bg-muted/60',
                     !ib.enabled && 'opacity-50',
                   )}
                 >

@@ -1,77 +1,8 @@
+/* Tokens and components live in slate.css (the slate admin console design
+   system, see .claude/skills/bs-slate-admin-console). It is imported first so
+   Tailwind utilities still win over component classes. */
+@import './slate.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@layer base {
-  html {
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-    color-scheme: light;
-    font-feature-settings: 'cv11', 'ss01';
-  }
-  html.dark {
-    color-scheme: dark;
-  }
-  body {
-    @apply min-h-screen bg-white text-slate-900 dark:bg-slate-950 dark:text-slate-100;
-  }
-  ::selection {
-    background: rgba(100, 116, 139, 0.25);
-  }
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(100, 116, 139, 0.35) transparent;
-  }
-  button,
-  [role='button'],
-  a,
-  summary,
-  label:has(input[type='checkbox']) {
-    cursor: pointer;
-  }
-  button:disabled {
-    cursor: not-allowed;
-  }
-  code,
-  kbd,
-  .font-mono {
-    font-variant-ligatures: none;
-  }
-  input[type='checkbox'] {
-    @apply h-4 w-4 cursor-pointer rounded border-slate-300 text-slate-900 transition focus:ring-slate-400 dark:border-slate-600 dark:bg-slate-900;
-  }
-}
-
-@layer utilities {
-  /* loading shimmer for skeletons */
-  .shimmer {
-    position: relative;
-    overflow: hidden;
-  }
-  .shimmer::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    transform: translateX(-100%);
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-    animation: shimmer 1.4s infinite;
-  }
-  html.dark .shimmer::after {
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
-  }
-  @keyframes shimmer {
-    100% {
-      transform: translateX(100%);
-    }
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}

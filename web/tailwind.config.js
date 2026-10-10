@@ -1,3 +1,8 @@
+// Colours come from the slate design tokens in src/slate.css, so every
+// utility follows light/dark mode and the theme preset. color-mix keeps
+// opacity modifiers (bg-card/80) working with oklch tokens.
+const tok = (name) => `color-mix(in oklab, var(--${name}) calc(<alpha-value> * 100%), transparent)`
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
@@ -5,24 +10,32 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'],
-        mono: ['"Fira Code Variable"', '"Fira Code"', 'ui-monospace', 'monospace'],
-      },
-      keyframes: {
-        float: { '0%,100%': { transform: 'translate3d(0,0,0) scale(1)' }, '50%': { transform: 'translate3d(0,-24px,0) scale(1.05)' } },
-        'gradient-x': { '0%,100%': { backgroundPosition: '0% 50%' }, '50%': { backgroundPosition: '100% 50%' } },
-      },
-      animation: {
-        float: 'float 9s ease-in-out infinite',
-        'float-slow': 'float 14s ease-in-out infinite',
-        'gradient-x': 'gradient-x 8s ease infinite',
+        sans: ['"Geist Variable"', 'Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['"Geist Mono Variable"', '"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
-        brand: {
-          50: '#eef6ff', 100: '#d9eaff', 200: '#bcdaff', 300: '#8ec3ff', 400: '#59a2ff',
-          500: '#337ffc', 600: '#1d60f1', 700: '#154ade', 800: '#183db4', 900: '#1a378d', 950: '#152356',
-        },
+        background: tok('background'),
+        foreground: tok('foreground'),
+        card: { DEFAULT: tok('card'), foreground: tok('card-foreground') },
+        popover: { DEFAULT: tok('popover'), foreground: tok('popover-foreground') },
+        primary: { DEFAULT: tok('primary'), foreground: tok('primary-foreground') },
+        secondary: { DEFAULT: tok('secondary'), foreground: tok('secondary-foreground') },
+        muted: { DEFAULT: tok('muted'), foreground: tok('muted-foreground') },
+        faint: tok('faint-foreground'),
+        accent: { DEFAULT: tok('accent'), foreground: tok('accent-foreground') },
+        border: { DEFAULT: tok('border'), strong: tok('border-strong') },
+        input: tok('input'),
+        ring: tok('ring'),
+        sidebar: { DEFAULT: tok('sidebar'), accent: tok('sidebar-accent'), border: tok('sidebar-border') },
+        chart: { 1: tok('chart-1'), 2: tok('chart-2'), 3: tok('chart-3'), 4: tok('chart-4'), 5: tok('chart-5') },
+        success: tok('success'),
+        warning: tok('warning'),
+        destructive: tok('destructive'),
+        violet: tok('violet'),
       },
+      borderRadius: { panel: '0.875rem', card: '0.625rem' },
+      boxShadow: { xs: 'var(--shadow-xs)', sm: 'var(--shadow-sm)', md: 'var(--shadow-md)', lg: 'var(--shadow-lg)' },
+      transitionTimingFunction: { out: 'cubic-bezier(0.23, 1, 0.32, 1)' },
     },
   },
   plugins: [],

@@ -25,7 +25,7 @@ export default function Nodes() {
           </Button>
         }
       />
-      <div className="mb-4 flex gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300">
+      <div className="mb-4 flex gap-2 rounded-lg border border-border bg-muted/60 px-3 py-2.5 text-sm text-foreground">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         {t('nodes.agentNote')}
       </div>
@@ -49,17 +49,17 @@ export default function Nodes() {
             <tbody>
               {data?.map((n) => (
                 <tr key={n.id}>
-                  <Td className="font-medium text-slate-900 dark:text-white">{n.name}</Td>
-                  <Td className="font-mono text-xs text-slate-500">
+                  <Td className="font-medium text-foreground">{n.name}</Td>
+                  <Td className="font-mono text-xs text-muted-foreground">
                     {n.address}:{n.api_port}
                   </Td>
                   <Td>
                     <NodeStatusBadge status={n.status} />
-                    {n.message && <div className="mt-1 max-w-[200px] truncate text-xs text-rose-500">{n.message}</div>}
+                    {n.message && <div className="mt-1 max-w-[200px] truncate text-xs text-destructive">{n.message}</div>}
                   </Td>
                   <Td className="tabular-nums">×{n.usage_coefficient}</Td>
-                  <Td className="tabular-nums text-slate-500">{formatBytes(n.upload_bytes + n.download_bytes)}</Td>
-                  <Td className="text-slate-500">{relativeTime(n.last_seen, lang)}</Td>
+                  <Td className="tabular-nums text-muted-foreground">{formatBytes(n.upload_bytes + n.download_bytes)}</Td>
+                  <Td className="text-muted-foreground">{relativeTime(n.last_seen, lang)}</Td>
                   <Td>
                     <div className="flex justify-end gap-1">
                       <IconButton onClick={() => setEditing(n)} aria-label={t('common.edit')}>

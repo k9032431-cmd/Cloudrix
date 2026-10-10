@@ -5,12 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="color-scheme" content="light dark" />
     <title>Cloudrix</title>
     <script>
-      // Light by default; a saved choice wins.
-      var theme = 'light'
-      try { theme = localStorage.getItem('theme') || 'light' } catch (e) {}
-      if (theme === 'dark') document.documentElement.classList.add('dark')
+      // Mark JS as available (entrance styles only apply under .js) and apply
+      // the stored appearance before first paint so there is no flash.
+      (function () {
+        var d = document.documentElement
+        d.className += ' js'
+        var s = {}
+        try {
+          s = JSON.parse(localStorage.getItem('cloudrix.prefs') || '{}')
+          if (!s.mode) s.mode = localStorage.getItem('theme') || 'light'
+        } catch (e) {}
+        var mode = s.mode
+        if (mode === 'system') mode = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        if (mode === 'dark') d.classList.add('dark')
+        d.setAttribute('data-theme-preset', s.preset === 'tangerine' ? 'tangerine' : 'slate')
+        if (s.density === 'compact') d.setAttribute('data-density', 'compact')
+      })()
     </script>
   </head>
   <body>

@@ -83,7 +83,7 @@ export default function UserDetails({
       <div className="mb-5 grid gap-4 sm:grid-cols-3">
         <Info label={t('users.usage')}>
           <div className="mb-1.5 tabular-nums">
-            {formatBytes(user.used_traffic)} <span className="text-slate-400">/ {user.data_limit ? formatBytes(user.data_limit) : '∞'}</span>
+            {formatBytes(user.used_traffic)} <span className="text-faint">/ {user.data_limit ? formatBytes(user.data_limit) : '∞'}</span>
           </div>
           <ProgressBar value={user.used_traffic} max={user.data_limit} />
         </Info>
@@ -92,7 +92,7 @@ export default function UserDetails({
         <Info label={t('users.online')}>{relativeTime(user.online_at, lang)}</Info>
         <Info label={t('users.lastSub')}>
           {relativeTime(user.sub_updated_at, lang)}
-          {user.sub_user_agent && <div className="truncate text-xs text-slate-400">{user.sub_user_agent}</div>}
+          {user.sub_user_agent && <div className="truncate text-xs text-faint">{user.sub_user_agent}</div>}
         </Info>
         <Info label={t('users.created')}>{formatDate(user.created_at, lang)}</Info>
       </div>
@@ -103,21 +103,21 @@ export default function UserDetails({
         </div>
       )}
 
-      <div className="mb-4 flex gap-1 border-b border-slate-100 dark:border-slate-800">
+      <div className="mb-4 flex gap-1 border-b border-border">
         {(['sub', 'links', 'devices'] as const).map((k) => (
           <button
             key={k}
             onClick={() => setTab(k)}
             className={cx(
               'relative px-3 py-2 text-sm font-medium transition-colors',
-              tab === k ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
+              tab === k ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {k === 'sub' ? t('users.subscription') : k === 'links' ? `${t('users.links')} (${sub?.links.length ?? 0})` : t('users.devices')}
             {tab === k && (
               <motion.span
                 layoutId="user-tab-underline"
-                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-slate-900 dark:bg-white"
+                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-primary"
                 transition={{ type: 'spring', stiffness: 500, damping: 38 }}
               />
             )}
@@ -131,8 +131,8 @@ export default function UserDetails({
       {tab === 'links' && (
         <div className="space-y-2">
           {sub?.links.map((l, i) => (
-            <div key={i} className="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/60">
-              <code className="min-w-0 flex-1 truncate text-xs text-slate-600 dark:text-slate-300">{l}</code>
+            <div key={i} className="flex items-center gap-2 rounded-lg bg-muted/60 p-2">
+              <code className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{l}</code>
               <CopyButton text={l} />
             </div>
           ))}
@@ -141,15 +141,15 @@ export default function UserDetails({
 
       {tab === 'devices' && (
         <div className="space-y-2">
-          {devices.data?.length === 0 && <p className="py-6 text-center text-sm text-slate-400">{t('users.noDevices')}</p>}
+          {devices.data?.length === 0 && <p className="py-6 text-center text-sm text-faint">{t('users.noDevices')}</p>}
           {devices.data?.map((d) => (
-            <div key={d.hwid} className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/60">
-              <Smartphone className="h-4 w-4 shrink-0 text-slate-400" />
+            <div key={d.hwid} className="flex items-center gap-3 rounded-lg bg-muted/60 p-3">
+              <Smartphone className="h-4 w-4 shrink-0 text-faint" />
               <div className="min-w-0 flex-1 text-sm">
-                <div className="truncate font-medium text-slate-900 dark:text-white">
+                <div className="truncate font-medium text-foreground">
                   {[d.device_model, d.platform, d.os_version].filter(Boolean).join(' · ') || d.hwid}
                 </div>
-                <div className="truncate text-xs text-slate-400">
+                <div className="truncate text-xs text-faint">
                   {d.user_agent} · {relativeTime(d.last_seen, lang)}
                 </div>
               </div>
@@ -189,8 +189,8 @@ export default function UserDetails({
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <div className="mb-1 text-xs text-slate-500 dark:text-slate-400">{label}</div>
-      <div className="text-sm font-medium text-slate-900 dark:text-white">{children}</div>
+      <div className="mb-1 text-xs text-muted-foreground">{label}</div>
+      <div className="text-sm font-medium text-foreground">{children}</div>
     </div>
   )
 }
@@ -240,14 +240,14 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
         ]}
       />
 
-      {kind === 'gdrive' && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t('sub.gdriveHint')}</p>}
+      {kind === 'gdrive' && <p className="mb-3 text-xs text-muted-foreground">{t('sub.gdriveHint')}</p>}
       <ErrorNote error={error ?? (kind === 'gdrive' ? drive.error ?? null : null)} />
 
       {url ? (
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           <QR value={url} size={180} />
           <div className="min-w-0 flex-1 space-y-3">
-            <code className="block break-all rounded-lg bg-slate-50 p-3 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-300">{url}</code>
+            <code className="block break-all rounded-lg bg-muted/60 p-3 text-xs text-foreground">{url}</code>
             <div className="flex flex-wrap items-center gap-2">
               <CopyButton text={url} />
               <a href={url} target="_blank" rel="noreferrer">
@@ -256,7 +256,7 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
                 </Button>
               </a>
               {kind === 'gdrive' && drive.synced_at && (
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-faint">
                   {t('sub.gdriveSynced')}: {relativeTime(drive.synced_at, lang)}
                 </span>
               )}
@@ -264,11 +264,11 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
           </div>
         </div>
       ) : !drive.available ? (
-        <p className="rounded-lg bg-slate-50 p-4 text-sm text-slate-500 dark:bg-slate-800/60">
+        <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
           {admin?.role === 'sudo' ? t('sub.gdriveNotSetUp') : t('sub.gdriveNotSetUpAdmin')}
         </p>
       ) : user.device_limit > 0 ? (
-        <p className="rounded-lg bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-300">{t('sub.gdriveDeviceLimit')}</p>
+        <p className="rounded-lg bg-warning/10 p-4 text-sm text-warning">{t('sub.gdriveDeviceLimit')}</p>
       ) : (
         <Button onClick={createDrive} loading={busy}>
           <CloudUpload className="h-4 w-4" />

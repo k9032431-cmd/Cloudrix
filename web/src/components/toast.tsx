@@ -1,8 +1,7 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CheckCircle2, Info, X } from './icons'
-import { cx } from './ui'
+import { CheckCircle2, CircleAlert, Info, X } from './icons'
 
 type Tone = 'success' | 'error' | 'info'
 interface Toast {
@@ -13,7 +12,8 @@ interface Toast {
 
 const Ctx = createContext<(text: string, tone?: Tone) => void>(() => {})
 
-// ToastProvider shows short-lived notifications in the corner (bottom on phones).
+// ToastProvider shows short-lived notifications: a bottom-right stack of
+// three (full width at the bottom on phones).
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
   const seq = useRef(0)
@@ -22,7 +22,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback(
     (text: string, tone: Tone = 'success') => {
       const id = ++seq.current
-      setToasts((t) => [...t.slice(-3), { id, text, tone }])
+      setToasts((t) => [...t.slice(-2), { id, text, tone }])
       window.setTimeout(() => dismiss(id), tone === 'error' ? 6000 : 3200)
     },
     [dismiss],
@@ -32,37 +32,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <Ctx.Provider value={push}>
       {children}
       {createPortal(
-        <div
-          aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-center gap-2 p-4 sm:inset-x-auto sm:right-0 sm:items-end"
-        >
+        <div aria-live="polite" className="toasts">
           <AnimatePresence initial={false}>
             {toasts.map((t) => (
               <motion.div
                 key={t.id}
                 layout
-                initial={{ opacity: 0, y: 24, scale: 0.9 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, x: 40, scale: 0.95 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 34 }}
-                className={cx(
-                  'pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-lg border px-4 py-3 text-sm shadow-lg shadow-slate-900/5',
-                  'border-slate-200 bg-white text-slate-800 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100',
-                )}
+                initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1, transition: { duration: 0.32, ease: [0.23, 1, 0.32, 1] } }}
+                exit={{ opacity: 0, y: 4, scale: 0.98, transition: { duration: 0.16 } }}
+                className="toast"
+                role={t.tone === 'error' ? 'alert' : 'status'}
               >
-                <span
-                  className={cx(
-                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
-                    t.tone === 'success' && 'bg-emerald-500/15 text-emerald-500',
-                    t.tone === 'error' && 'bg-rose-500/15 text-rose-500',
-                    t.tone === 'info' && 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                  )}
-                >
-                  {t.tone === 'success' ? <CheckCircle2 className="h-5 w-5" /> : <Info className="h-5 w-5" />}
-                </span>
-                <span className="min-w-0 flex-1">{t.text}</span>
-                <button onClick={() => dismiss(t.id)} className="rounded-lg p-1 text-slate-400 transition-colors hover:text-slate-700 dark:hover:text-white" aria-label="close">
-                  <X className="h-3.5 w-3.5" />
+                {t.tone === 'success' ? <CheckCircle2 className="ok" /> : t.tone === 'error' ? <CircleAlert className="bad" /> : <Info className="info" />}
+                <span className="t">{t.text}</span>
+                <button type="button" onClick={() => dismiss(t.id)} className="btn btn-ghost btn-icon btn-sm -my-1 -mr-1" aria-label="close">
+                  <X />
                 </button>
               </motion.div>
             ))}
