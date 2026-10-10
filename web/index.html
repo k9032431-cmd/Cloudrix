@@ -7,7 +7,10 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <title>Cloudrix</title>
     <script>
-      try { if ((localStorage.getItem('theme') ?? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')) === 'dark') document.documentElement.classList.add('dark') } catch {}
+      // Dark by default; a saved choice wins.
+      var theme = 'dark'
+      try { theme = localStorage.getItem('theme') || 'dark' } catch (e) {}
+      if (theme === 'dark') document.documentElement.classList.add('dark')
     </script>
   </head>
   <body>

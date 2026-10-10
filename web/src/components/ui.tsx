@@ -35,7 +35,7 @@ export function Button({
       disabled={rest.disabled || loading}
       className={cx(
         'inline-flex select-none items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 disabled:pointer-events-none disabled:opacity-50',
-        size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm',
+        size === 'sm' ? 'h-9 px-3 text-xs sm:h-8' : 'h-11 px-4 text-sm sm:h-10',
         variants[variant],
         className,
       )}
@@ -51,7 +51,7 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
     <button
       {...rest}
       className={cx(
-        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 active:scale-90 disabled:pointer-events-none disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white',
+        'inline-flex h-10 w-10 items-center justify-center rounded-lg sm:h-8 sm:w-8 text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 active:scale-90 disabled:pointer-events-none disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white',
         className,
       )}
     />
@@ -59,22 +59,23 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
 }
 
 const fieldBase =
-  'rounded-xl border-0 bg-white px-3 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 transition-shadow duration-200 placeholder:text-slate-400 hover:ring-slate-300 focus:outline-none focus:shadow-[0_0_0_4px_rgba(51,127,252,0.12)] focus:ring-2 focus:ring-brand-500 dark:bg-slate-900/80 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-slate-600'
+  'rounded-xl border-0 bg-white px-3 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 transition-shadow duration-200 placeholder:text-slate-400 hover:ring-slate-300 focus:outline-none focus:shadow-[0_0_0_4px_rgba(51,127,252,0.12)] focus:ring-2 focus:ring-brand-500 dark:bg-slate-900/80 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-slate-600'
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...rest} className={cx(fieldBase, 'h-10', !className?.includes('w-') && 'w-full', className)} />
+  // 16px text on phones stops iOS from zooming into focused fields.
+  return <input {...rest} className={cx(fieldBase, 'h-11 text-base sm:h-10 sm:text-sm', !className?.includes('w-') && 'w-full', className)} />
 }
 
 export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select {...rest} className={cx(fieldBase, 'h-10 pr-8', !className?.includes('w-') && 'w-full', className)}>
+    <select {...rest} className={cx(fieldBase, 'h-11 pr-8 text-base sm:h-10 sm:text-sm', !className?.includes('w-') && 'w-full', className)}>
       {children}
     </select>
   )
 }
 
 export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
-  return <textarea ref={ref} {...rest} className={cx(fieldBase, 'w-full py-2', className)} />
+  return <textarea ref={ref} {...rest} className={cx(fieldBase, 'w-full py-2 text-base sm:text-sm', className)} />
 })
 
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
@@ -108,15 +109,24 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 }
 
 // Card fades and rises into place; pass delay to stagger a group of cards.
+// With hover it lifts slightly and a soft spotlight follows the cursor.
 export function Card({ children, className, delay = 0, hover }: { children: ReactNode; className?: string; delay?: number; hover?: boolean }) {
+  const onMove = hover
+    ? (e: React.MouseEvent<HTMLDivElement>) => {
+        const r = e.currentTarget.getBoundingClientRect()
+        e.currentTarget.style.setProperty('--mx', `${e.clientX - r.left}px`)
+        e.currentTarget.style.setProperty('--my', `${e.clientY - r.top}px`)
+      }
+    : undefined
   return (
     <motion.div
+      onMouseMove={onMove}
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
       className={cx(
         'rounded-2xl border border-slate-200/70 bg-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/60 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.6)]',
-        hover && 'transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.04),0_16px_40px_-16px_rgba(51,127,252,0.35)]',
+        hover && 'spotlight transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.04),0_16px_40px_-16px_rgba(51,127,252,0.35)]',
         className,
       )}
     >
@@ -212,7 +222,11 @@ export function Modal({
   return createPortal(
     <AnimatePresence>
       {open && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+        <motion.div
+          key="modal"
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+          exit={{ pointerEvents: 'none' }}
+        >
           <motion.div
             className="absolute inset-0 bg-slate-950/50 backdrop-blur-md"
             onClick={onClose}
@@ -243,7 +257,7 @@ export function Modal({
         <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">{footer}</div>}
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>,
     document.body,

@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { NavLink, useLocation, useOutlet } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate, useOutlet } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Activity, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Network, ScrollText, Server, Settings, ShieldCheck, Sun, Users, X } from './icons'
+import { Activity, KeyRound, LayoutDashboard, Languages, LogOut, Menu, Moon, Network, Plus, ScrollText, Search, Server, Settings, ShieldCheck, Sun, Users, X } from './icons'
+import CommandPalette, { openPalette, shortcut, type Command } from './CommandPalette'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { useTheme } from '../lib/hooks'
@@ -36,6 +37,7 @@ export default function Layout() {
   const [pwOpen, setPwOpen] = useState(false)
   const location = useLocation()
   const outlet = useOutlet()
+  const navigate = useNavigate()
   const sudo = admin?.role === 'sudo'
 
   const nav = [
@@ -47,6 +49,15 @@ export default function Layout() {
     { to: '/audit', label: t('nav.audit'), icon: ScrollText, show: sudo },
     { to: '/settings', label: t('nav.settings'), icon: Settings, show: sudo },
   ].filter((n) => n.show)
+
+  const commands: Command[] = [
+    ...nav.map((n) => ({ id: `page-${n.to}`, label: n.label, group: t('cmd.pages'), icon: n.icon, run: () => navigate(n.to) })),
+    { id: 'new-user', label: t('users.new'), group: t('cmd.actions'), icon: Plus, run: () => navigate('/users?new=1') },
+    { id: 'theme', label: t('cmd.theme'), group: t('cmd.actions'), icon: dark ? Sun : Moon, run: toggle },
+    { id: 'lang', label: t('cmd.lang'), group: t('cmd.actions'), icon: Languages, run: () => setLang(lang === 'ru' ? 'en' : 'ru') },
+    { id: 'password', label: t('nav.password'), group: t('cmd.actions'), icon: KeyRound, run: () => setPwOpen(true) },
+    { id: 'logout', label: t('nav.logout'), group: t('cmd.actions'), icon: LogOut, run: logout },
+  ]
 
   // `instance` keeps the sliding highlight of the desktop and mobile menus apart.
   const sidebar = (instance: string) => (
@@ -177,8 +188,30 @@ export default function Layout() {
             <Menu className="h-5 w-5" />
           </IconButton>
           <Logo />
-          <Activity className="ml-auto h-5 w-5 text-emerald-500" />
+          <IconButton onClick={openPalette} className="ml-auto h-10 w-10" aria-label={t('cmd.search')}>
+            <Search className="h-5 w-5" />
+          </IconButton>
         </header>
+        <div className="sticky top-0 z-20 hidden h-16 items-center gap-3 border-b border-slate-200/60 bg-white/60 px-8 backdrop-blur-xl dark:border-white/[0.05] dark:bg-[#020617]/60 lg:flex">
+          <button
+            onClick={openPalette}
+            className="group flex h-10 w-full max-w-md items-center gap-3 rounded-xl border border-slate-200/80 bg-white/70 px-3 text-sm text-slate-400 shadow-sm transition-all duration-200 hover:border-brand-300 hover:text-slate-600 hover:shadow-md dark:border-white/10 dark:bg-white/[0.03] dark:hover:border-brand-500/40 dark:hover:text-slate-300"
+          >
+            <Search className="h-4 w-4 transition-transform duration-200 group-hover:scale-110" />
+            <span className="flex-1 text-left">{t('cmd.search')}</span>
+            <kbd className="rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-500 dark:border-white/10 dark:bg-white/5">
+              {shortcut}
+            </kbd>
+          </button>
+          <span className="ml-auto flex items-center gap-2 text-xs text-slate-500">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+            <Activity className="h-4 w-4 text-emerald-500" />
+            online
+          </span>
+        </div>
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -194,6 +227,7 @@ export default function Layout() {
         </main>
       </div>
       <PasswordModal open={pwOpen} onClose={() => setPwOpen(false)} />
+      <CommandPalette commands={commands} />
     </div>
   )
 }

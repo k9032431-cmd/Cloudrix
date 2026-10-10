@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Plus, QrCode, RefreshCw, Search } from '../components/icons'
-import { post } from '../lib/api'
+import { useSearchParams } from 'react-router-dom'
+import { get, post } from '../lib/api'
+import { useToast } from '../components/toast'
 import { useDebounced, useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { useAuth } from '../lib/auth'
@@ -25,6 +27,16 @@ export default function UsersPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [editing, setEditing] = useState<User | 'new' | null>(null)
   const [viewing, setViewing] = useState<User | null>(null)
+  const toast = useToast()
+  const [params, setParams] = useSearchParams()
+
+  // Deep links from the command palette: ?new=1 opens the form, ?open=<id> a user.
+  useEffect(() => {
+    const open = params.get('open')
+    if (params.get('new')) setEditing('new')
+    if (open) get<User>(`/api/users/${open}`).then(setViewing).catch(() => {})
+    if (params.get('new') || open) setParams({}, { replace: true })
+  }, [params, setParams])
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const q = useDebounced(search)
@@ -55,9 +67,10 @@ export default function UsersPage() {
   const bulk = async (action: string, extra: Record<string, number> = {}) => {
     setBulkError(null)
     try {
-      await post('/api/users/bulk', { ids: [...selected], action, ...extra })
+      const res = await post<{ affected: number }>('/api/users/bulk', { ids: [...selected], action, ...extra })
       setSelected(new Set())
       reload()
+      toast(t('toast.done', { n: res.affected }))
     } catch (e) {
       setBulkError((e as Error).message)
     }
@@ -251,6 +264,7 @@ export default function UsersPage() {
           isSudo={admin?.role === 'sudo'}
           onClose={() => setEditing(null)}
           onSaved={(u) => {
+            toast(editing === 'new' ? t('toast.created') : t('toast.saved'))
             setEditing(null)
             reload()
             setViewing(u)
@@ -267,6 +281,7 @@ export default function UsersPage() {
           }}
           onChanged={(u) => {
             reload()
+            toast(u ? t('toast.saved') : t('toast.deleted'))
             if (u) setViewing(u)
             else setViewing(null)
           }}

@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Loader2 } from './components/icons'
 import '@fontsource-variable/inter'
+import '@fontsource-variable/fira-code'
 import './index.css'
 import { MotionConfig } from 'framer-motion'
 import { I18nProvider } from './lib/i18n'
 import { AuthProvider, useAuth } from './lib/auth'
+import { ToastProvider } from './components/toast'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -67,9 +69,11 @@ createRoot(document.getElementById('root')!).render(
     <MotionConfig reducedMotion="user">
     <I18nProvider>
       <AuthProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <ToastProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </ToastProvider>
       </AuthProvider>
     </I18nProvider>
     </MotionConfig>

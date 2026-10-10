@@ -4,7 +4,10 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
-      fontFamily: { sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'] },
+      fontFamily: {
+        sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['"Fira Code Variable"', '"Fira Code"', 'ui-monospace', 'monospace'],
+      },
       keyframes: {
         float: { '0%,100%': { transform: 'translate3d(0,0,0) scale(1)' }, '50%': { transform: 'translate3d(0,-24px,0) scale(1.05)' } },
         'gradient-x': { '0%,100%': { backgroundPosition: '0% 50%' }, '50%': { backgroundPosition: '100% 50%' } },
