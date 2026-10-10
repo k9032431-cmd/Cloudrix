@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Plus, QrCode, RefreshCw, Search } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { ChevronLeft, ChevronRight, Plus, QrCode, RefreshCw, Search } from '../components/icons'
 import { post } from '../lib/api'
 import { useDebounced, useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -107,8 +108,16 @@ export default function UsersPage() {
           </Select>
         </div>
 
+        <AnimatePresence initial={false}>
         {selected.size > 0 && (
-          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-brand-50/60 px-4 py-2.5 dark:border-slate-800 dark:bg-brand-500/5">
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+          <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-gradient-to-r from-brand-50 to-violet-50/60 px-4 py-2.5 dark:border-slate-800 dark:from-brand-500/10 dark:to-violet-500/5">
             <span className="mr-2 text-sm font-medium text-brand-700 dark:text-brand-300">{t('users.selected', { n: selected.size })}</span>
             <Button size="sm" variant="secondary" onClick={() => bulk('enable')}>
               {t('users.bulk.enable')}
@@ -126,7 +135,9 @@ export default function UsersPage() {
               {t('users.bulk.delete')}
             </Button>
           </div>
+          </motion.div>
         )}
+        </AnimatePresence>
 
         {users.length === 0 && !loading ? (
           <Empty />
@@ -146,16 +157,33 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {users.map((u) => {
+              {users.map((u, idx) => {
                 const left = daysLeft(u.expire_at)
                 return (
-                  <tr key={u.id} className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => setViewing(u)}>
+                  <motion.tr
+                    key={u.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, delay: Math.min(idx, 20) * 0.025, ease: [0.22, 1, 0.36, 1] }}
+                    className={cx(
+                      'group cursor-pointer transition-colors duration-150 hover:bg-gradient-to-r hover:from-brand-50/70 hover:to-transparent dark:hover:from-brand-500/[0.07]',
+                      selected.has(u.id) && 'bg-brand-50/50 dark:bg-brand-500/[0.06]',
+                    )}
+                    onClick={() => setViewing(u)}
+                  >
                     <Td className="w-10">
                       <input type="checkbox" className="rounded" checked={selected.has(u.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(u.id)} aria-label={`select ${u.username}`} />
                     </Td>
                     <Td>
-                      <div className="font-medium text-slate-900 dark:text-white">{u.username}</div>
-                      {u.note && <div className="max-w-[220px] truncate text-xs text-slate-400">{u.note}</div>}
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-xs font-semibold uppercase text-slate-600 ring-1 ring-white transition-transform duration-300 group-hover:scale-110 dark:from-slate-700 dark:to-slate-800 dark:text-slate-200 dark:ring-slate-900">
+                          {u.username.slice(0, 2)}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="font-medium text-slate-900 dark:text-white">{u.username}</div>
+                          {u.note && <div className="max-w-[220px] truncate text-xs text-slate-400">{u.note}</div>}
+                        </div>
+                      </div>
                     </Td>
                     <Td>
                       <UserStatusBadge status={u.status} />
@@ -193,7 +221,7 @@ export default function UsersPage() {
                         <QrCode className="h-4 w-4" />
                       </IconButton>
                     </Td>
-                  </tr>
+                  </motion.tr>
                 )
               })}
             </tbody>

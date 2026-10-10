@@ -4,7 +4,7 @@ import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { GB, fromLocalInput, toLocalInput } from '../../lib/format'
 import type { Admin, ResetStrategy, User, UserInput } from '../../lib/types'
-import { Badge, Button, ErrorNote, Field, Input, Modal, Select, Textarea, cx } from '../../components/ui'
+import { Badge, Button, ErrorNote, Field, Input, Modal, Select, Textarea, cx, Segmented } from '../../components/ui'
 
 interface BriefInbound {
   tag: string
@@ -87,21 +87,13 @@ export default function UserForm({
             <Input value={form.username} onChange={(e) => set('username', e.target.value)} required pattern="[a-zA-Z0-9_.@\-]{3,64}" autoFocus={!user} />
           </Field>
           <Field label={t('users.status')}>
-            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-              {(['active', 'disabled', 'on_hold'] as const).map((s) => (
-                <button
-                  type="button"
-                  key={s}
-                  onClick={() => set('status', s)}
-                  className={cx(
-                    'h-8 rounded-md text-xs font-medium transition-colors',
-                    form.status === s ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
-                  )}
-                >
-                  {t(`status.${s}`)}
-                </button>
-              ))}
-            </div>
+            <Segmented
+              id="user-status"
+              className="w-full"
+              value={form.status}
+              onChange={(v) => set('status', v)}
+              options={(['active', 'disabled', 'on_hold'] as const).map((s) => ({ value: s, label: t(`status.${s}`) }))}
+            />
           </Field>
 
           <Field label={t('users.dataLimit')} hint={t('users.dataLimitHint')}>

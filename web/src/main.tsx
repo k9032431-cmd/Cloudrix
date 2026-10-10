@@ -1,8 +1,10 @@
 import { StrictMode, lazy, Suspense, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
-import { Loader2 } from 'lucide-react'
+import { Loader2 } from './components/icons'
+import '@fontsource-variable/inter'
 import './index.css'
+import { MotionConfig } from 'framer-motion'
 import { I18nProvider } from './lib/i18n'
 import { AuthProvider, useAuth } from './lib/auth'
 import Layout from './components/Layout'
@@ -62,6 +64,7 @@ function App() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    <MotionConfig reducedMotion="user">
     <I18nProvider>
       <AuthProvider>
         <BrowserRouter>
@@ -69,5 +72,6 @@ createRoot(document.getElementById('root')!).render(
         </BrowserRouter>
       </AuthProvider>
     </I18nProvider>
+    </MotionConfig>
   </StrictMode>,
 )

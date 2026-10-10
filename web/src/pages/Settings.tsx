@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { CheckCircle2, CloudUpload, ExternalLink, Link2Off, RefreshCw, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, CloudUpload, ExternalLink, Link2Off, RefreshCw, ShieldCheck } from '../components/icons'
 import { post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { relativeTime } from '../lib/format'
@@ -75,7 +75,7 @@ function DriveCard() {
     <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-600 dark:bg-brand-500/10 dark:text-brand-300">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-400 to-brand-600 text-white shadow-lg shadow-brand-500/30">
             <CloudUpload className="h-5 w-5" />
           </div>
           <div>

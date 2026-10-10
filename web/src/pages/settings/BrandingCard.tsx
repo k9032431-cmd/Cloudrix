@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { Gauge, Info, MessageSquareText, MoreHorizontal, RefreshCw } from 'lucide-react'
+import { Gauge, Info, MessageSquareText, MoreHorizontal, RefreshCw } from '../../components/icons'
 import { put } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
@@ -67,7 +67,7 @@ export default function BrandingCard() {
   return (
     <Card className="mb-6 p-6">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/30">
           <MessageSquareText className="h-5 w-5" />
         </div>
         <h2 className="font-semibold text-slate-900 dark:text-white">{t('br.title')}</h2>

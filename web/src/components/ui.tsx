@@ -1,7 +1,8 @@
 import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
+import { AnimatePresence, animate, motion, useInView, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
-import { Check, Copy, Loader2, X } from 'lucide-react'
+import { Check, Copy, Loader2, Sparkle, X } from './icons'
 import { copyText } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 
@@ -12,10 +13,11 @@ export function cx(...c: (string | false | null | undefined)[]) {
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost'
 
 const variants: Record<Variant, string> = {
-  primary: 'bg-brand-600 text-white hover:bg-brand-700 shadow-sm shadow-brand-600/20',
+  primary:
+    'bg-gradient-to-b from-brand-500 to-brand-700 text-white shadow-md shadow-brand-600/25 hover:shadow-lg hover:shadow-brand-600/35 hover:brightness-110',
   secondary:
-    'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700',
-  danger: 'bg-rose-600 text-white hover:bg-rose-700',
+    'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 shadow-sm hover:bg-slate-50 hover:ring-slate-300 dark:bg-slate-800/80 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700',
+  danger: 'bg-gradient-to-b from-rose-500 to-rose-700 text-white shadow-md shadow-rose-600/25 hover:brightness-110',
   ghost: 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
 }
 
@@ -32,7 +34,7 @@ export function Button({
       {...rest}
       disabled={rest.disabled || loading}
       className={cx(
-        'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-50',
+        'inline-flex select-none items-center justify-center gap-2 rounded-xl font-medium transition-all duration-200 active:scale-[0.97] focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-950 disabled:pointer-events-none disabled:opacity-50',
         size === 'sm' ? 'h-8 px-3 text-xs' : 'h-10 px-4 text-sm',
         variants[variant],
         className,
@@ -49,7 +51,7 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
     <button
       {...rest}
       className={cx(
-        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white',
+        'inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-slate-100 hover:text-slate-900 active:scale-90 disabled:pointer-events-none disabled:opacity-40 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white',
         className,
       )}
     />
@@ -57,7 +59,7 @@ export function IconButton({ className, ...rest }: ButtonHTMLAttributes<HTMLButt
 }
 
 const fieldBase =
-  'rounded-lg border-0 bg-white px-3 text-sm text-slate-900 ring-1 ring-inset ring-slate-200 placeholder:text-slate-400 focus:ring-2 focus:ring-brand-500 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700'
+  'rounded-xl border-0 bg-white px-3 text-sm text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 transition-shadow duration-200 placeholder:text-slate-400 hover:ring-slate-300 focus:outline-none focus:shadow-[0_0_0_4px_rgba(51,127,252,0.12)] focus:ring-2 focus:ring-brand-500 dark:bg-slate-900/80 dark:text-slate-100 dark:ring-slate-700 dark:hover:ring-slate-600'
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...rest} className={cx(fieldBase, 'h-10', !className?.includes('w-') && 'w-full', className)} />
@@ -93,21 +95,67 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={cx('relative h-6 w-11 shrink-0 rounded-full transition-colors', checked ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700')}
+        className={cx(
+          'relative flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors duration-300',
+          checked ? 'justify-end bg-gradient-to-r from-brand-500 to-brand-600 shadow-inner shadow-brand-800/30' : 'justify-start bg-slate-300 dark:bg-slate-700',
+        )}
       >
-        <span className={cx('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all', checked ? 'left-[22px]' : 'left-0.5')} />
+        <motion.span layout transition={{ type: 'spring', stiffness: 600, damping: 32 }} className="h-5 w-5 rounded-full bg-white shadow-md" />
       </button>
       <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
     </label>
   )
 }
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
+// Card fades and rises into place; pass delay to stagger a group of cards.
+export function Card({ children, className, delay = 0, hover }: { children: ReactNode; className?: string; delay?: number; hover?: boolean }) {
   return (
-    <div className={cx('rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60', className)}>
+    <motion.div
+      initial={{ opacity: 0, y: 14 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.45, delay, ease: [0.22, 1, 0.36, 1] }}
+      className={cx(
+        'rounded-2xl border border-slate-200/70 bg-white/90 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_24px_-12px_rgba(15,23,42,0.12)] backdrop-blur-sm dark:border-white/[0.06] dark:bg-slate-900/60 dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.6)]',
+        hover && 'transition-[transform,box-shadow] duration-300 hover:-translate-y-0.5 hover:shadow-[0_2px_4px_rgba(15,23,42,0.04),0_16px_40px_-16px_rgba(51,127,252,0.35)]',
+        className,
+      )}
+    >
       {children}
-    </div>
+    </motion.div>
   )
+}
+
+// AnimatedNumber counts up to value when it scrolls into view.
+export function AnimatedNumber({ value, format = (n) => Math.round(n).toLocaleString() }: { value: number; format?: (n: number) => string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true })
+  const reduce = useReducedMotion()
+  const from = useRef(0)
+  const fmt = useRef(format)
+  fmt.current = format
+  useEffect(() => {
+    const format = fmt.current
+    const el = ref.current
+    if (!el || !inView) return
+    if (reduce) {
+      el.textContent = format(value)
+      return
+    }
+    const controls = animate(from.current, value, {
+      duration: 1.1,
+      ease: [0.22, 1, 0.36, 1],
+      onUpdate: (v) => {
+        el.textContent = format(v)
+      },
+    })
+    from.current = value
+    return () => controls.stop()
+  }, [value, inView, reduce])
+  return <span ref={ref}>{format(0)}</span>
+}
+
+export function Skeleton({ className }: { className?: string }) {
+  return <span className={cx('shimmer inline-block rounded-md bg-slate-100 dark:bg-slate-800', className)} />
 }
 
 const badgeTones = {
@@ -120,10 +168,15 @@ const badgeTones = {
 }
 export type Tone = keyof typeof badgeTones
 
-export function Badge({ tone = 'gray', children, dot }: { tone?: Tone; children: ReactNode; dot?: boolean }) {
+export function Badge({ tone = 'gray', children, dot, pulse }: { tone?: Tone; children: ReactNode; dot?: boolean; pulse?: boolean }) {
   return (
-    <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset', badgeTones[tone])}>
-      {dot && <span className="h-1.5 w-1.5 rounded-full bg-current" />}
+    <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset', badgeTones[tone])}>
+      {dot && (
+        <span className="relative flex h-1.5 w-1.5">
+          {pulse && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />}
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
+        </span>
+      )}
       {children}
     </span>
   )
@@ -155,18 +208,32 @@ export function Modal({
       document.body.style.overflow = prev
     }
   }, [open, onClose])
-  if (!open) return null
+  const mobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
-      <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={onClose} />
-      <div
-        role="dialog"
-        aria-modal="true"
-        className={cx(
-          'relative flex max-h-[92vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl dark:bg-slate-900 sm:rounded-2xl',
-          wide ? 'sm:max-w-3xl' : 'sm:max-w-lg',
-        )}
-      >
+    <AnimatePresence>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
+          <motion.div
+            className="absolute inset-0 bg-slate-950/50 backdrop-blur-md"
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+          />
+          <motion.div
+            role="dialog"
+            aria-modal="true"
+            initial={mobile ? { y: '100%' } : { opacity: 0, scale: 0.94, y: 12 }}
+            animate={mobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
+            exit={mobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+            className={cx(
+              'relative flex max-h-[92vh] w-full flex-col rounded-t-3xl bg-white shadow-2xl ring-1 ring-slate-900/5 dark:bg-slate-900 dark:ring-white/10 sm:rounded-2xl',
+              wide ? 'sm:max-w-3xl' : 'sm:max-w-lg',
+            )}
+          >
+            {mobile && <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-slate-300 dark:bg-slate-700" />}
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
           <h2 className="text-base font-semibold text-slate-900 dark:text-white">{title}</h2>
           <IconButton onClick={onClose} aria-label="close">
@@ -175,8 +242,10 @@ export function Modal({
         </div>
         <div className="overflow-y-auto px-5 py-4">{children}</div>
         {footer && <div className="flex justify-end gap-2 border-t border-slate-100 px-5 py-3 dark:border-slate-800">{footer}</div>}
-      </div>
-    </div>,
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>,
     document.body,
   )
 }
@@ -248,7 +317,18 @@ export function CopyButton({ text, label }: { text: string; label?: string }) {
         }
       }}
     >
-      {done ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={done ? 'done' : 'copy'}
+          initial={{ scale: 0.4, opacity: 0, rotate: -30 }}
+          animate={{ scale: 1, opacity: 1, rotate: 0 }}
+          exit={{ scale: 0.4, opacity: 0 }}
+          transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+          className="inline-flex"
+        >
+          {done ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+        </motion.span>
+      </AnimatePresence>
       {done ? t('common.copied') : label ?? t('common.copy')}
     </Button>
   )
@@ -261,40 +341,86 @@ export function QR({ value, size = 200 }: { value: string; size?: number }) {
       .then(setSrc)
       .catch(() => setSrc(''))
   }, [value, size])
-  if (!src) return <div style={{ width: size, height: size }} className="animate-pulse rounded-xl bg-slate-100 dark:bg-slate-800" />
-  return <img src={src} width={size} height={size} alt="QR" className="rounded-xl bg-white p-2" />
+  if (!src) return <div style={{ width: size, height: size }} className="shimmer rounded-2xl bg-slate-100 dark:bg-slate-800" />
+  return (
+    <motion.img
+      key={src}
+      src={src}
+      width={size}
+      height={size}
+      alt="QR"
+      initial={{ opacity: 0, scale: 0.9, filter: 'blur(6px)' }}
+      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+      transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+      className="rounded-2xl bg-white p-2 shadow-lg shadow-slate-900/10 ring-1 ring-slate-900/5"
+    />
+  )
 }
 
 export function ProgressBar({ value, max }: { value: number; max: number }) {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
-  const tone = pct >= 90 ? 'bg-rose-500' : pct >= 70 ? 'bg-amber-500' : 'bg-brand-500'
+  const tone =
+    pct >= 90 ? 'from-rose-400 to-rose-600' : pct >= 70 ? 'from-amber-400 to-amber-600' : 'from-brand-400 to-brand-600'
   return (
     <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-      {max > 0 && <div className={cx('h-full rounded-full transition-all', tone)} style={{ width: `${pct}%` }} />}
+      {max > 0 && (
+        <motion.div
+          className={cx('h-full rounded-full bg-gradient-to-r', tone)}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        />
+      )}
     </div>
   )
 }
 
 export function PageHeader({ title, actions, subtitle }: { title: string; actions?: ReactNode; subtitle?: ReactNode }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="mb-6 flex flex-wrap items-end justify-between gap-3"
+    >
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">{title}</h1>
+        <h1 className="bg-gradient-to-br from-slate-900 to-slate-600 bg-clip-text text-2xl font-semibold tracking-tight text-transparent dark:from-white dark:to-slate-400 sm:text-3xl">
+          {title}
+        </h1>
         {subtitle && <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>}
       </div>
       {actions && <div className="flex flex-wrap gap-2">{actions}</div>}
-    </div>
+    </motion.div>
   )
 }
 
 export function Empty({ children }: { children?: ReactNode }) {
   const { t } = useI18n()
-  return <div className="py-16 text-center text-sm text-slate-400">{children ?? t('common.empty')}</div>
+  return (
+    <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-3 py-16 text-center text-sm text-slate-400">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 text-slate-400 ring-1 ring-slate-200/70 dark:from-slate-800 dark:to-slate-900 dark:ring-white/5">
+        <Sparkle className="h-7 w-7" />
+      </span>
+      {children ?? t('common.empty')}
+    </motion.div>
+  )
 }
 
 export function ErrorNote({ error }: { error: string | null }) {
-  if (!error) return null
-  return <div className="mb-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:bg-rose-500/10 dark:text-rose-300">{error}</div>
+  return (
+    <AnimatePresence>
+      {error && (
+        <motion.div
+          initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+          animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+          exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+          className="overflow-hidden rounded-xl bg-rose-50 text-sm text-rose-700 ring-1 ring-inset ring-rose-600/10 dark:bg-rose-500/10 dark:text-rose-300"
+        >
+          <div className="px-3 py-2">{error}</div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
 }
 
 export function Table({ children }: { children: ReactNode }) {
@@ -315,4 +441,44 @@ export function Th({ children, className }: { children?: ReactNode; className?: 
 
 export function Td({ children, className }: { children?: ReactNode; className?: string }) {
   return <td className={cx('border-b border-slate-100 px-4 py-3 align-middle dark:border-slate-800/80', className)}>{children}</td>
+}
+
+// Segmented is a pill switch whose highlight slides between options.
+export function Segmented<T extends string>({
+  value,
+  onChange,
+  options,
+  id,
+  className,
+}: {
+  value: T
+  onChange: (v: T) => void
+  options: { value: T; label: ReactNode }[]
+  id: string
+  className?: string
+}) {
+  return (
+    <div className={cx('inline-grid gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800/80', className)} style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` }}>
+      {options.map((o) => (
+        <button
+          type="button"
+          key={o.value}
+          onClick={() => onChange(o.value)}
+          className={cx(
+            'relative flex h-8 items-center justify-center gap-1.5 rounded-lg px-3 text-xs font-medium transition-colors',
+            value === o.value ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
+          )}
+        >
+          {value === o.value && (
+            <motion.span
+              layoutId={`seg-${id}`}
+              className="absolute inset-0 rounded-lg bg-white shadow-sm ring-1 ring-slate-900/5 dark:bg-slate-950 dark:ring-white/10"
+              transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+            />
+          )}
+          <span className="relative flex items-center gap-1.5">{o.label}</span>
+        </button>
+      ))}
+    </div>
+  )
 }

@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { CloudUpload, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { CloudUpload, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from '../../components/icons'
 import { del, post } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { useAuth } from '../../lib/auth'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
 import type { DailyTraffic, Device, User, UserDrive } from '../../lib/types'
-import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx } from '../../components/ui'
+import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented } from '../../components/ui'
 import { UserStatusBadge } from '../../components/StatusBadge'
 import { TrafficChart } from '../Dashboard'
 
@@ -108,15 +109,23 @@ export default function UserDetails({
             key={k}
             onClick={() => setTab(k)}
             className={cx(
-              '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
-              tab === k ? 'border-brand-600 text-brand-700 dark:text-brand-300' : 'border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white',
+              'relative px-3 py-2 text-sm font-medium transition-colors',
+              tab === k ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
             )}
           >
             {k === 'sub' ? t('users.subscription') : k === 'links' ? `${t('users.links')} (${sub?.links.length ?? 0})` : t('users.devices')}
+            {tab === k && (
+              <motion.span
+                layoutId="user-tab-underline"
+                className="absolute inset-x-1 -bottom-px h-0.5 rounded-full bg-gradient-to-r from-brand-500 to-violet-500"
+                transition={{ type: 'spring', stiffness: 500, damping: 38 }}
+              />
+            )}
           </button>
         ))}
       </div>
 
+      <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
       {tab === 'sub' && sub && <SubscriptionLinks user={user} sub={sub} onDriveChanged={reloadSub} />}
 
       {tab === 'links' && (
@@ -157,6 +166,7 @@ export default function UserDetails({
           ))}
         </div>
       )}
+      </motion.div>
 
       <Confirm
         open={confirm === 'delete'}
@@ -211,21 +221,24 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
 
   return (
     <div>
-      <div className="mb-4 inline-grid grid-cols-2 gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-800">
-        {(['direct', 'gdrive'] as const).map((k) => (
-          <button
-            key={k}
-            onClick={() => setKind(k)}
-            className={cx(
-              'flex h-8 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors',
-              kind === k ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-950 dark:text-white' : 'text-slate-500 hover:text-slate-900 dark:hover:text-white',
-            )}
-          >
-            {k === 'gdrive' && <CloudUpload className="h-3.5 w-3.5" />}
-            {t(`sub.kind.${k}`)}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        id="sub-kind"
+        className="mb-4"
+        value={kind}
+        onChange={setKind}
+        options={[
+          { value: 'direct', label: t('sub.kind.direct') },
+          {
+            value: 'gdrive',
+            label: (
+              <>
+                <CloudUpload className="h-3.5 w-3.5" />
+                {t('sub.kind.gdrive')}
+              </>
+            ),
+          },
+        ]}
+      />
 
       {kind === 'gdrive' && <p className="mb-3 text-xs text-slate-500 dark:text-slate-400">{t('sub.gdriveHint')}</p>}
       <ErrorNote error={error ?? (kind === 'gdrive' ? drive.error ?? null : null)} />
