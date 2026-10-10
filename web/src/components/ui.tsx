@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
+import { forwardRef, useEffect, useRef, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'qrcode'
 import { Check, Copy, Loader2, X } from 'lucide-react'
@@ -71,9 +71,9 @@ export function Select({ className, children, ...rest }: SelectHTMLAttributes<HT
   )
 }
 
-export function Textarea({ className, ...rest }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...rest} className={cx(fieldBase, 'w-full py-2', className)} />
-}
+export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(function Textarea({ className, ...rest }, ref) {
+  return <textarea ref={ref} {...rest} className={cx(fieldBase, 'w-full py-2', className)} />
+})
 
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (

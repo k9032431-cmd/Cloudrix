@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -27,6 +28,8 @@ type Server struct {
 	limiter *loginLimiter
 	started time.Time
 	drive   *driveSyncer
+	brandMu sync.RWMutex
+	brand   branding
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }
@@ -38,11 +41,15 @@ func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logg
 		started: time.Now(),
 	}
 	s.drive = newDriveSyncer(s, gdrive.Google)
+	s.brand = s.defaultBranding()
 	return s
 }
 
 // Start loads persisted settings and runs background workers until ctx ends.
 func (s *Server) Start(ctx context.Context) error {
+	if err := s.loadBranding(ctx); err != nil {
+		return err
+	}
 	if err := s.drive.load(ctx); err != nil {
 		return err
 	}
@@ -108,6 +115,8 @@ func (s *Server) Handler() http.Handler {
 				r.Put("/nodes/{id}", s.handleUpdateNode)
 				r.Delete("/nodes/{id}", s.handleDeleteNode)
 
+				r.Get("/settings/subscription", s.handleGetBranding)
+				r.Put("/settings/subscription", s.handleUpdateBranding)
 				r.Get("/settings/gdrive", s.handleGetDrive)
 				r.Put("/settings/gdrive", s.handleUpdateDrive)
 				r.Post("/settings/gdrive/connect", s.handleDriveConnect)

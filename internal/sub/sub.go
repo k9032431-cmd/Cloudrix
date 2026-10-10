@@ -44,34 +44,41 @@ func Resolve(u *model.User, inbounds []*model.Inbound, nodeHosts map[int64]strin
 	return out
 }
 
-// RenderRemark expands template variables in an inbound remark:
-// {USERNAME} {PROTOCOL} {TAG} {DATA_LEFT} {DAYS_LEFT} {EXPIRE_DATE} {STATUS}.
+// RenderRemark expands template variables in an inbound remark (see RenderTemplate).
 func RenderRemark(in *model.Inbound, u *model.User) string {
 	remark := in.Remark
 	if remark == "" {
 		remark = in.Tag
 	}
-	if !strings.Contains(remark, "{") {
-		return remark
+	return strings.ReplaceAll(RenderTemplate(remark, u), "{PROTOCOL}", string(in.Protocol))
+}
+
+// RenderTemplate fills user variables into admin-written text:
+// {USERNAME} {NOTE} {STATUS} {DATA_USED} {DATA_LIMIT} {DATA_LEFT} {DAYS_LEFT} {EXPIRE_DATE}.
+func RenderTemplate(text string, u *model.User) string {
+	if !strings.Contains(text, "{") {
+		return text
 	}
-	dataLeft, daysLeft, expire := "∞", "∞", "∞"
+	dataLeft, dataLimit, daysLeft, expire := "∞", "∞", "∞", "∞"
 	if u.DataLimit > 0 {
 		dataLeft = FormatBytes(max(u.DataLimit-u.UsedTraffic, 0))
+		dataLimit = FormatBytes(u.DataLimit)
 	}
 	if u.ExpireAt != nil {
 		days := math.Ceil(time.Until(*u.ExpireAt).Hours() / 24)
 		daysLeft = fmt.Sprint(max(int(days), 0))
-		expire = u.ExpireAt.Format("2006-01-02")
+		expire = u.ExpireAt.Format("02.01.2006")
 	}
 	return strings.NewReplacer(
 		"{USERNAME}", u.Username,
-		"{PROTOCOL}", string(in.Protocol),
-		"{TAG}", in.Tag,
+		"{NOTE}", u.Note,
+		"{STATUS}", string(u.Status),
+		"{DATA_USED}", FormatBytes(u.UsedTraffic),
+		"{DATA_LIMIT}", dataLimit,
 		"{DATA_LEFT}", dataLeft,
 		"{DAYS_LEFT}", daysLeft,
 		"{EXPIRE_DATE}", expire,
-		"{STATUS}", string(u.Status),
-	).Replace(remark)
+	).Replace(text)
 }
 
 func FormatBytes(b int64) string {

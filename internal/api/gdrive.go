@@ -169,8 +169,15 @@ func (d *driveSyncer) render(ctx context.Context, u *model.User) ([]byte, error)
 		expire = u.ExpireAt.Unix()
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "#profile-title: base64:%s\n", base64.StdEncoding.EncodeToString([]byte(d.s.cfg.SubTitle)))
-	fmt.Fprintf(&b, "#profile-update-interval: %d\n", d.s.cfg.SubUpdateHours)
+	brand := d.s.branding()
+	fmt.Fprintf(&b, "#profile-title: %s\n", b64Header(brand.Title))
+	fmt.Fprintf(&b, "#profile-update-interval: %d\n", brand.UpdateHours)
+	if a := brand.userAnnounce(u); a != "" {
+		fmt.Fprintf(&b, "#announce: %s\n", b64Header(a))
+	}
+	if brand.SupportURL != "" {
+		fmt.Fprintf(&b, "#support-url: %s\n", brand.SupportURL)
+	}
 	fmt.Fprintf(&b, "#subscription-userinfo: upload=0; download=%d; total=%d; expire=%d\n", u.UsedTraffic, u.DataLimit, expire)
 	for _, l := range links {
 		b.WriteString(l)

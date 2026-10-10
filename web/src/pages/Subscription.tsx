@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { CloudUpload, Download, Languages, Moon, Sun } from 'lucide-react'
+import { CloudUpload, Download, Languages, MessageCircle, Moon, Sun } from 'lucide-react'
 import { useFetch, useTheme } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { daysLeft, formatBytes, formatDate } from '../lib/format'
@@ -51,7 +51,7 @@ export default function Subscription() {
             <Card className="p-6">
               <div className="mb-5 flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-xs text-slate-500">{t('sub.title')}</div>
+                  <div className="text-xs text-slate-500">{data.title || t('sub.title')}</div>
                   <div className="text-xl font-semibold text-slate-900 dark:text-white">{data.username}</div>
                 </div>
                 <UserStatusBadge status={data.status} />
@@ -78,6 +78,20 @@ export default function Subscription() {
                 </div>
               </div>
             </Card>
+
+            {(data.announce || data.support_url) && (
+              <Card className="p-6 text-center">
+                {data.announce && <p className="whitespace-pre-line break-words text-sm leading-relaxed text-slate-700 dark:text-slate-300">{data.announce}</p>}
+                {data.support_url && (
+                  <a href={data.support_url} target="_blank" rel="noreferrer" className={data.announce ? 'mt-4 inline-block' : 'inline-block'}>
+                    <Button variant="secondary" size="sm">
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      {t('sub.support')}
+                    </Button>
+                  </a>
+                )}
+              </Card>
+            )}
 
             <Card className="flex flex-col items-center gap-4 p-6">
               {data.gdrive_url && (

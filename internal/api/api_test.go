@@ -241,3 +241,71 @@ func itoa(n int64) string {
 	b, _ := json.Marshal(n)
 	return string(b)
 }
+
+func TestSubscriptionBranding(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	exp := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	var u model.User
+	e.do("POST", "/api/users", root, userInput{Username: "vip", Note: "VIP User", DataLimit: 250 << 30, ExpireAt: &exp}, &u)
+
+	bad := branding{Title: "", UpdateHours: 1}
+	if resp := e.do("PUT", "/api/settings/subscription", root, bad, nil); resp.StatusCode != 400 {
+		t.Fatalf("empty title accepted: %d", resp.StatusCode)
+	}
+	bad = branding{Title: "x", UpdateHours: 1, SupportURL: "javascript:alert(1)"}
+	if resp := e.do("PUT", "/api/settings/subscription", root, bad, nil); resp.StatusCode != 400 {
+		t.Fatalf("bad link accepted: %d", resp.StatusCode)
+	}
+
+	want := branding{
+		Title:       "VIP COREX",
+		Announce:    "✦ VIP COREX ✦\n⚡ Your Exclusive Connection\n👤 Username: {NOTE}\n📅 Expires: {EXPIRE_DATE}\nLeft: {DATA_LEFT}",
+		UpdateHours: 1,
+		SupportURL:  "https://t.me/corex_support",
+		WebPageURL:  "https://corex.example.com",
+	}
+	if resp := e.do("PUT", "/api/settings/subscription", root, want, nil); resp.StatusCode != 200 {
+		t.Fatalf("save branding: %d", resp.StatusCode)
+	}
+	var got branding
+	e.do("GET", "/api/settings/subscription", root, nil, &got)
+	if got != want {
+		t.Fatalf("branding not persisted: %+v", got)
+	}
+
+	resp, err := http.Get(e.srv.URL + "/sub/" + u.SubToken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	decodeHdr := func(name string) string {
+		v := strings.TrimPrefix(resp.Header.Get(name), "base64:")
+		b, _ := base64.StdEncoding.DecodeString(v)
+		return string(b)
+	}
+	if decodeHdr("Profile-Title") != "VIP COREX" || resp.Header.Get("Profile-Update-Interval") != "1" {
+		t.Fatalf("title/interval headers: %q %q", decodeHdr("Profile-Title"), resp.Header.Get("Profile-Update-Interval"))
+	}
+	announce := decodeHdr("Announce")
+	if !strings.Contains(announce, "Username: VIP User") || !strings.Contains(announce, "Expires: 29.10.2026") || !strings.Contains(announce, "Left: 250.0 GB") {
+		t.Fatalf("announce not rendered for user: %q", announce)
+	}
+	if resp.Header.Get("Support-Url") != want.SupportURL || resp.Header.Get("Profile-Web-Page-Url") != want.WebPageURL {
+		t.Fatalf("link headers: %v", resp.Header)
+	}
+
+	var info subscriptionInfo
+	e.do("GET", "/sub/"+u.SubToken+"/info", "", nil, &info)
+	if info.Title != "VIP COREX" || info.Announce != announce || info.SupportURL != want.SupportURL {
+		t.Fatalf("info: %+v", info)
+	}
+
+	// Non-sudo admins cannot change branding.
+	e.do("POST", "/api/admins", root, adminInput{Username: "helper", Password: "helperpass", Role: model.RoleAdmin}, nil)
+	helper := e.login("helper", "helperpass")
+	if resp := e.do("PUT", "/api/settings/subscription", helper, want, nil); resp.StatusCode != 403 {
+		t.Fatalf("admin changed branding: %d", resp.StatusCode)
+	}
+}

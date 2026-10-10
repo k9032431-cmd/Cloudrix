@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/http"
 	"strings"
@@ -114,12 +113,12 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		}
 		if !allowed {
 			eps = nil
-			w.Header().Set("announce", "base64:"+base64.StdEncoding.EncodeToString([]byte("Device limit reached")))
+			w.Header().Set("Announce", b64Header("Device limit reached"))
 		}
 	} else if u.DeviceLimit > 0 {
 		// Without an HWID the limit cannot be enforced; refuse rather than leak.
 		eps = nil
-		w.Header().Set("announce", "base64:"+base64.StdEncoding.EncodeToString([]byte("This client does not report a device ID")))
+		w.Header().Set("Announce", b64Header("This client does not report a device ID"))
 	}
 
 	s.writeSubHeaders(w, u)
@@ -151,13 +150,26 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) writeSubHeaders(w http.ResponseWriter, u *model.User) {
 	h := w.Header()
+	b := s.branding()
 	var expire int64
 	if u.ExpireAt != nil {
 		expire = u.ExpireAt.Unix()
 	}
 	h.Set("Subscription-Userinfo", fmt.Sprintf("upload=0; download=%d; total=%d; expire=%d", u.UsedTraffic, u.DataLimit, expire))
-	h.Set("Profile-Title", "base64:"+base64.StdEncoding.EncodeToString([]byte(s.cfg.SubTitle)))
-	h.Set("Profile-Update-Interval", fmt.Sprint(s.cfg.SubUpdateHours))
+	h.Set("Profile-Title", b64Header(b.Title))
+	h.Set("Profile-Update-Interval", fmt.Sprint(b.UpdateHours))
+	// A device-limit warning set earlier takes priority over the admin's announcement.
+	if h.Get("Announce") == "" {
+		if a := b.userAnnounce(u); a != "" {
+			h.Set("Announce", b64Header(a))
+		}
+	}
+	if b.SupportURL != "" {
+		h.Set("Support-Url", b.SupportURL)
+	}
+	if b.WebPageURL != "" {
+		h.Set("Profile-Web-Page-Url", b.WebPageURL)
+	}
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, u.Username))
 	h.Set("Cache-Control", "no-store")
 }
@@ -171,6 +183,9 @@ type subscriptionInfo struct {
 	ResetStrategy model.ResetStrategy `json:"reset_strategy"`
 	URL           string              `json:"url"`
 	DriveURL      string              `json:"gdrive_url,omitempty"` // backup link through googleapis.com
+	Title         string              `json:"title"`
+	Announce      string              `json:"announce,omitempty"`
+	SupportURL    string              `json:"support_url,omitempty"`
 	Links         []string            `json:"links"`
 	WireGuard     []string            `json:"wireguard"` // inbound tags with downloadable .conf
 }
@@ -190,6 +205,8 @@ func (s *Server) handleSubscriptionInfo(w http.ResponseWriter, r *http.Request) 
 		Username: u.Username, Status: u.Status, DataLimit: u.DataLimit, UsedTraffic: u.UsedTraffic,
 		ExpireAt: u.ExpireAt, ResetStrategy: u.ResetStrategy, URL: s.subURL(r, u), Links: []string{}, WireGuard: []string{},
 	}
+	b := s.branding()
+	info.Title, info.Announce, info.SupportURL = b.Title, b.userAnnounce(u), b.SupportURL
 	if d := s.userDrive(r.Context(), u); d.URL != "" && u.DeviceLimit == 0 {
 		info.DriveURL = d.URL
 	}

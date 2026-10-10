@@ -177,6 +177,14 @@ export interface DriveSettings {
   errors: number
 }
 
+export interface Branding {
+  title: string
+  announce: string
+  update_hours: number
+  support_url: string
+  web_page_url: string
+}
+
 export interface SubscriptionInfo {
   username: string
   status: UserStatus
@@ -186,6 +194,9 @@ export interface SubscriptionInfo {
   reset_strategy: ResetStrategy
   url: string
   gdrive_url?: string
+  title: string
+  announce?: string
+  support_url?: string
   links: string[]
   wireguard: string[]
 }

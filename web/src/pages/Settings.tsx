@@ -4,6 +4,7 @@ import { post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import type { DriveSettings } from '../lib/types'
+import BrandingCard from './settings/BrandingCard'
 import { Badge, Button, Card, CopyButton, ErrorNote, Field, Input, PageHeader, Select, Toggle } from '../components/ui'
 
 export default function Settings() {
@@ -11,6 +12,7 @@ export default function Settings() {
   return (
     <>
       <PageHeader title={t('nav.settings')} />
+      <BrandingCard />
       <DriveCard />
     </>
   )
