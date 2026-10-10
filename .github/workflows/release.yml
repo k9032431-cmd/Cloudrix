@@ -29,7 +29,8 @@ jobs:
               -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=${GITHUB_REF_NAME}" \
               -o build/cloudrix ./cmd/cloudrix
             cp install.sh build/install.sh
-            tar -czf dist/cloudrix-linux-$arch.tar.gz -C build cloudrix install.sh
+            echo "$GITHUB_REF_NAME" > build/REF
+            tar -czf dist/cloudrix-linux-$arch.tar.gz -C build cloudrix install.sh REF
           done
           cp install.sh dist/install.sh
           (cd dist && sha256sum * > SHA256SUMS)

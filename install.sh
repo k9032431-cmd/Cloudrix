@@ -333,6 +333,101 @@ download_release() {
   [[ -x $WORK/cloudrix ]] || return 1
 }
 
+# download_edge берёт готовую сборку нужного коммита, которую GitHub Actions
+# публикует в пре-релиз "edge-<ветка>" после каждого пуша. Если сборка этого
+# коммита ещё не готова, немного ждёт: обычно GitHub собирает 1–2 минуты.
+download_edge() {
+  [[ $TARGET_REF =~ ^[0-9a-f]{40}$ ]] || return 1
+  local tag="edge-${BRANCH//\//-}" ref waited=0
+  local url="https://github.com/$REPO/releases/download/$tag/cloudrix-linux-$ARCH.tar.gz"
+  # Пре-релиза нет вовсе (Actions выключены) — сразу собираем сами.
+  github_api "/releases/tags/$tag" >/dev/null || return 1
+  local deadline=$((SECONDS + ${CLOUDRIX_EDGE_WAIT:-300}))
+  while true; do
+    rm -rf "$WORK/edge" && mkdir -p "$WORK/edge"
+    if curl -fsSL --retry 2 -o "$WORK/edge.tar.gz" "$url" 2>/dev/null &&
+      tar -xzf "$WORK/edge.tar.gz" -C "$WORK/edge" 2>/dev/null; then
+      ref=$(cat "$WORK/edge/REF" 2>/dev/null || true)
+      if [[ $ref == "$TARGET_REF" && -x $WORK/edge/cloudrix ]]; then
+        ((waited)) && echo
+        mv "$WORK/edge/cloudrix" "$WORK/cloudrix"
+        [[ -f $WORK/edge/install.sh ]] && mv "$WORK/edge/install.sh" "$WORK/install.sh"
+        ok "Скачана готовая сборка $(short_ref "$TARGET_REF") с GitHub"
+        return 0
+      fi
+    fi
+    if ((SECONDS >= deadline)); then
+      ((waited)) && echo
+      warn "Готовая сборка $(short_ref "$TARGET_REF") так и не появилась на GitHub."
+      return 1
+    fi
+    if ((!waited)); then
+      info "GitHub ещё собирает версию $(short_ref "$TARGET_REF") — жду готовую сборку (обычно 1–2 минуты)"
+      waited=1
+    fi
+    printf '\r  ⏳ ждём %s ' "$(elapsed "$((SECONDS - deadline + ${CLOUDRIX_EDGE_WAIT:-300}))")"
+    sleep 15
+  done
+}
+
+elapsed() { printf '%d:%02d' $(($1 / 60)) $(($1 % 60)); }
+
+# run_with_progress "текст" команда… — запускает долгую команду и показывает
+# таймер, чтобы было видно, что установка не зависла.
+run_with_progress() {
+  local label=$1 start=$SECONDS pid rc=0
+  shift
+  "$@" &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    printf '\r%s➜%s %s %s%s%s ' "$C_BLUE" "$C_RESET" "$label" "$C_DIM" "$(elapsed $((SECONDS - start)))" "$C_RESET"
+    sleep 2
+  done
+  wait "$pid" || rc=$?
+  printf '\r%s➜%s %s %s%s%s\n' "$C_BLUE" "$C_RESET" "$label" "$C_DIM" "$(elapsed $((SECONDS - start)))" "$C_RESET"
+  return "$rc"
+}
+
+# ensure_build_memory добавляет временный swap, если памяти мало: сборка
+# встроенной SQLite требует около 2 ГБ, на маленьких VPS без swap её убивает система.
+SWAPFILE=""
+ensure_build_memory() {
+  local mem_mb swap_mb
+  mem_mb=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
+  swap_mb=$(awk '/^SwapFree:/ {print int($2/1024)}' /proc/meminfo)
+  BUILD_PROCS=$(nproc 2>/dev/null || echo 1)
+  if ((mem_mb < 3000)); then
+    BUILD_PROCS=1 # меньше параллельных компиляций — меньше пиковая память
+  fi
+  if ((mem_mb + swap_mb >= 2500)); then
+    return 0
+  fi
+  local free_mb
+  free_mb=$(df -Pm /var/tmp | awk 'NR==2 {print $4}')
+  if ((free_mb < 3000)); then
+    warn "Мало памяти (${mem_mb} МБ) и места на диске для временного swap — сборка может не пройти."
+    return 0
+  fi
+  SWAPFILE=/var/tmp/cloudrix-build.swap
+  info "Памяти ${mem_mb} МБ — временно добавляю 2 ГБ swap на время сборки"
+  if { fallocate -l 2G "$SWAPFILE" 2>/dev/null || dd if=/dev/zero of="$SWAPFILE" bs=1M count=2048 status=none; } &&
+    chmod 600 "$SWAPFILE" && mkswap "$SWAPFILE" >/dev/null && swapon "$SWAPFILE"; then
+    return 0
+  fi
+  warn "Не удалось включить временный swap — продолжаю без него."
+  rm -f "$SWAPFILE"
+  SWAPFILE=""
+}
+
+cleanup_work() {
+  if [[ -n $SWAPFILE ]]; then
+    swapoff "$SWAPFILE" 2>/dev/null || true
+    rm -f "$SWAPFILE"
+  fi
+  [[ -n ${WORK-} ]] && rm -rf "$WORK"
+  return 0
+}
+
 build_from_source() {
   warn "Собираю из исходников ($REPO, ветка $BRANCH, коммит $(short_ref "$TARGET_REF")). Это займёт несколько минут."
   local src="$WORK/src" tools="$WORK/tools"
@@ -349,25 +444,30 @@ build_from_source() {
   local version
   version="git-$(short_ref "$TARGET_REF")"
 
-  # env, а не "PATH=... cmd": так новый PATH используется и для поиска самой команды.
-  info "Собираю веб-интерфейс"
-  (cd "$src/web" &&
-    env PATH="$path" npm ci --no-audit --no-fund --no-update-notifier --loglevel=error >/dev/null &&
-    env PATH="$path" npm run build --silent >/dev/null)
+  ensure_build_memory
 
-  info "Собираю панель"
-  (cd "$src" &&
-    { env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" go mod download >/dev/null 2>&1 || true; } &&
-    env PATH="$path" GOPATH="$WORK/gopath" GOCACHE="$WORK/gocache" CGO_ENABLED=0 \
-      go build -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$version" \
-      -o "$WORK/cloudrix" ./cmd/cloudrix)
+  # env, а не "PATH=... cmd": так новый PATH используется и для поиска самой команды.
+  # shellcheck disable=SC2016 # переменные раскрывает вложенный bash
+  run_with_progress "Собираю веб-интерфейс" bash -c '
+    cd "$1/web" &&
+      env PATH="$2" npm ci --no-audit --no-fund --no-update-notifier --loglevel=error >/dev/null &&
+      env PATH="$2" npm run build --silent >/dev/null' _ "$src" "$path"
+
+  info "Собираю панель — на слабом сервере это может занять 5–15 минут"
+  # shellcheck disable=SC2016
+  run_with_progress "Компиляция" bash -c '
+    cd "$1" || exit 1
+    export PATH="$2" GOPATH="$3/gopath" GOCACHE="$3/gocache" CGO_ENABLED=0
+    go mod download >/dev/null 2>&1 || true
+    go build -p "$4" -trimpath -ldflags "-s -w -X github.com/k9032431-cmd/cloudrix/internal/api.Version=$5" \
+      -o "$3/cloudrix" ./cmd/cloudrix' _ "$src" "$path" "$WORK" "$BUILD_PROCS" "$version" ||
+    die "Сборка не удалась. Если на сервере мало памяти, убедитесь, что есть хотя бы 2 ГБ RAM+swap."
   cp "$src/install.sh" "$WORK/install.sh"
 }
 
 fetch_binary() {
   WORK=$(mktemp -d)
-  # shellcheck disable=SC2064
-  trap "rm -rf '$WORK'" EXIT
+  trap cleanup_work EXIT
   [[ -n ${TARGET_CHANNEL-} ]] || resolve_target
   case $TARGET_CHANNEL in
     local) cp "$CLOUDRIX_LOCAL_BINARY" "$WORK/cloudrix" ;;
@@ -380,7 +480,7 @@ fetch_binary() {
         build_from_source
       fi
       ;;
-    source) build_from_source ;;
+    source) download_edge || build_from_source ;;
   esac
   "$WORK/cloudrix" version >/dev/null || die "Собранный бинарник не запускается."
 }
