@@ -427,6 +427,17 @@ html.dark .select option { background: var(--popover); color: var(--foreground);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23889' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 15 5 5 5-5M7 9l5-5 5 5'/%3E%3C/svg%3E");
   background-repeat: no-repeat; background-position: right 9px center; background-size: 14px;
 }
+.select-btn { display: flex; align-items: center; gap: 8px; padding-right: 9px; text-align: left; background-image: none; cursor: default; }
+.select-btn > span { flex: 1; min-width: 0; }
+.select-btn > svg { width: 14px; height: 14px; flex: none; color: var(--faint-foreground); }
+.select-btn:disabled { opacity: .55; }
+.select-btn[aria-expanded='true'] { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent); }
+.select-list { z-index: 200; min-width: 0; max-height: 280px; overflow-y: auto; overscroll-behavior: contain; animation: select-in 120ms var(--ease-out); }
+.select-list .menu-item { cursor: default; }
+.select-list .menu-item:hover { background: transparent; }
+.select-list .menu-item.is-active { background: var(--accent); }
+.select-list .menu-item[aria-selected='true'] { font-weight: 500; }
+@keyframes select-in { from { opacity: 0; transform: translateY(-2px); } }
 .input-wrap { position: relative; display: flex; align-items: center; }
 .input-wrap > svg { position: absolute; left: 10px; width: 16px; height: 16px; color: var(--faint-foreground); pointer-events: none; }
 .input-wrap .input { padding-left: 32px; }

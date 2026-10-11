@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CloudUpload, ExternalLink, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from '../../components/icons'
+import { CloudUpload, ExternalLink, KeyRound, ShieldCheck, Pencil, RotateCcw, Smartphone, Trash2 } from '../../components/icons'
 import { del, get, post } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { useAuth } from '../../lib/auth'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
 import type { DailyTraffic, Device, User, UserDrive } from '../../lib/types'
-import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented, Skeleton, Toggle } from '../../components/ui'
+import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented, Skeleton } from '../../components/ui'
 import { UserPresenceBadge } from '../../components/StatusBadge'
 import { TrafficChart } from '../Dashboard'
 
@@ -200,25 +200,25 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
 function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: SubInfo; onDriveChanged: () => void }) {
   const { t, lang } = useI18n()
   const { admin } = useAuth()
-  const [kind, setKind] = useState<'direct' | 'gdrive'>('direct')
+  const [kind, setKind] = useState<'direct' | 'gdrive' | 'happ'>('direct')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const drive = sub.gdrive
-  const plain = kind === 'direct' ? sub.url : drive.url
+  const encrypt = kind === 'happ'
+  const plain = kind === 'gdrive' ? drive.url : sub.url
   // Encrypted Happ link: the app hides the address and every key inside.
-  const [encrypt, setEncrypt] = useState(false)
-  const [happ, setHapp] = useState<Record<string, string>>({})
+  const [happ, setHapp] = useState<string | null>(null)
   useEffect(() => {
-    if (!encrypt || !plain || happ[kind]) return
+    if (!encrypt || happ) return
     let stale = false
-    get<{ link: string }>(`/api/users/${user.id}/happ-link?kind=${kind}`)
-      .then((r) => !stale && setHapp((h) => ({ ...h, [kind]: r.link })))
+    get<{ link: string }>(`/api/users/${user.id}/happ-link?kind=direct`)
+      .then((r) => !stale && setHapp(r.link))
       .catch((e) => !stale && setError((e as Error).message))
     return () => {
       stale = true
     }
-  }, [encrypt, kind, plain, user.id, happ])
-  const url = encrypt && plain ? happ[kind] ?? '' : plain
+  }, [encrypt, user.id, happ])
+  const url = encrypt ? happ ?? '' : plain
 
   const createDrive = async () => {
     setBusy(true)
@@ -251,17 +251,23 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
               </>
             ),
           },
+          {
+            value: 'happ',
+            label: (
+              <>
+                <ShieldCheck className="h-3.5 w-3.5" />
+                {t('sub.kind.happ')}
+              </>
+            ),
+          },
         ]}
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Toggle checked={encrypt} onChange={setEncrypt} label={t('sub.encrypted')} />
-        <span className="hint">{t('sub.encryptedHint')}</span>
-      </div>
+      {encrypt && <p className="mb-3 text-xs text-muted-foreground">{t('sub.encryptedHint')}</p>}
       {kind === 'gdrive' && <p className="mb-3 text-xs text-muted-foreground">{t('sub.gdriveHint')}</p>}
       <ErrorNote error={error ?? (kind === 'gdrive' ? drive.error ?? null : null)} />
 
-      {encrypt && plain && !url ? (
+      {encrypt && !url ? (
         <Skeleton className="h-[180px] w-full" />
       ) : url ? (
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">

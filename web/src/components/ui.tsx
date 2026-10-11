@@ -1,5 +1,8 @@
 import {
+  Children,
+  Fragment,
   forwardRef,
+  isValidElement,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -7,13 +10,14 @@ import {
   type ButtonHTMLAttributes,
   type CSSProperties,
   type InputHTMLAttributes,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactElement,
   type ReactNode,
-  type SelectHTMLAttributes,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, animate, motion, useInView, useReducedMotion } from 'framer-motion'
 import QRCode from 'qrcode'
-import { Check, CircleAlert, Copy, Inbox, Loader2, X } from './icons'
+import { Check, ChevronsUpDown, CircleAlert, Copy, Inbox, Loader2, X } from './icons'
 import { copyText } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 
@@ -53,14 +57,198 @@ export function IconButton({ className, type = 'button', ...rest }: ButtonHTMLAt
 }
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...rest} className={cx('input', className)} />
+  // Number fields keep what is typed while focused, so a lone "0" can be
+  // cleared and retyped; the parent's value shows again on blur.
+  const [draft, setDraft] = useState<string | null>(null)
+  if (rest.type !== 'number') return <input {...rest} className={cx('input', className)} />
+  return (
+    <input
+      {...rest}
+      value={draft ?? rest.value}
+      onChange={(e) => {
+        setDraft(e.target.value)
+        rest.onChange?.(e)
+      }}
+      onBlur={(e) => {
+        setDraft(null)
+        rest.onBlur?.(e)
+      }}
+      className={cx('input', className)}
+    />
+  )
 }
 
-export function Select({ className, children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+interface SelectOption {
+  value: string
+  label: ReactNode
+  disabled?: boolean
+}
+
+// optionsOf reads <option> children (also inside fragments and arrays).
+function optionsOf(children: ReactNode): SelectOption[] {
+  const out: SelectOption[] = []
+  Children.forEach(children, (c) => {
+    if (!isValidElement(c)) return
+    const el = c as ReactElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>
+    if (el.type === Fragment) out.push(...optionsOf(el.props.children))
+    else if (el.type === 'option') out.push({ value: String(el.props.value ?? ''), label: el.props.children, disabled: el.props.disabled })
+  })
+  return out
+}
+
+// Select is a styled listbox with the <select> API: <option> children and
+// onChange({ target: { value } }). The list opens in a portal, so dialogs
+// and scrolling cards never clip it.
+export function Select({
+  value,
+  onChange,
+  children,
+  className,
+  disabled,
+  id,
+  ...aria
+}: {
+  value?: string | number
+  onChange?: (e: { target: { value: string } }) => void
+  children: ReactNode
+  className?: string
+  disabled?: boolean
+  id?: string
+  'aria-label'?: string
+  required?: boolean
+}) {
+  const options = optionsOf(children)
+  const current = String(value ?? '')
+  const selected = options.find((o) => o.value === current)
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(0)
+  const [pos, setPos] = useState<{ left: number; top: number; width: number; up: boolean } | null>(null)
+  const btn = useRef<HTMLButtonElement>(null)
+  const list = useRef<HTMLDivElement>(null)
+
+  const place = () => {
+    const r = btn.current?.getBoundingClientRect()
+    if (!r) return
+    const want = Math.min(options.length * 34 + 10, 280)
+    const up = r.bottom + want + 8 > window.innerHeight && r.top > want + 8
+    setPos({ left: r.left, top: up ? r.top - 4 : r.bottom + 4, width: r.width, up })
+  }
+  const show = () => {
+    if (disabled) return
+    place()
+    setActive(Math.max(0, options.findIndex((o) => o.value === current)))
+    setOpen(true)
+  }
+  const pick = (o: SelectOption) => {
+    if (o.disabled) return
+    setOpen(false)
+    btn.current?.focus()
+    if (o.value !== current) onChange?.({ target: { value: o.value } })
+  }
+
+  useEffect(() => {
+    if (!open) return
+    const close = (e: Event) => {
+      const t = e.target as Node
+      if (!btn.current?.contains(t) && !list.current?.contains(t)) setOpen(false)
+    }
+    const reflow = (e: Event) => {
+      if (!list.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    window.addEventListener('resize', reflow)
+    window.addEventListener('scroll', reflow, true)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      window.removeEventListener('resize', reflow)
+      window.removeEventListener('scroll', reflow, true)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (open) list.current?.querySelector<HTMLElement>(`[data-i="${active}"]`)?.scrollIntoView({ block: 'nearest' })
+  }, [open, active])
+
+  const step = (dir: number) => {
+    let i = active
+    for (let n = 0; n < options.length; n++) {
+      i = (i + dir + options.length) % options.length
+      if (!options[i].disabled) break
+    }
+    setActive(i)
+  }
+  const onKey = (e: ReactKeyboardEvent) => {
+    if (!open) {
+      if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+        e.preventDefault()
+        show()
+      }
+      return
+    }
+    if (e.key === 'Escape' || e.key === 'Tab') {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation() // keep the surrounding dialog open
+      }
+      setOpen(false)
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      step(e.key === 'ArrowDown' ? 1 : -1)
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      if (options[active]) pick(options[active])
+    }
+  }
+
+  const listId = `${id ?? 'sel'}-list`
   return (
-    <select {...rest} className={cx('select', className)}>
-      {children}
-    </select>
+    <>
+      <button
+        ref={btn}
+        type="button"
+        id={id}
+        disabled={disabled}
+        aria-label={aria['aria-label']}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listId : undefined}
+        onClick={() => (open ? setOpen(false) : show())}
+        onKeyDown={onKey}
+        className={cx('select select-btn', className)}
+      >
+        <span className="truncate">{selected?.label ?? '—'}</span>
+        <ChevronsUpDown />
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <div
+            ref={list}
+            id={listId}
+            role="listbox"
+            className="pop select-list"
+            style={{ position: 'fixed', left: pos.left, width: pos.width, ...(pos.up ? { bottom: window.innerHeight - pos.top } : { top: pos.top }) }}
+          >
+            {options.map((o, i) => (
+              <div
+                key={o.value}
+                data-i={i}
+                role="option"
+                aria-selected={o.value === current}
+                aria-disabled={o.disabled || undefined}
+                className={cx('menu-item', i === active && 'is-active', o.disabled && 'opacity-50')}
+                onMouseEnter={() => setActive(i)}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pick(o)}
+              >
+                <span className="truncate">{o.label}</span>
+                {o.value === current && <Check className="check h-4 w-4" />}
+              </div>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   )
 }
 
