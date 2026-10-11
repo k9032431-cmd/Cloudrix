@@ -14,8 +14,9 @@ import (
 // another (exit) node. The entry node's Xray dials the exit node over
 // VLESS + Reality (the "bridge"), so the exit node's IP is what sites see.
 
-// bridgePorts are tried in order when an exit node needs a bridge port.
-var bridgePorts = []int{4443, 4444, 4445, 8444, 9443, 10443, 20443}
+// bridgePorts are tried in order when an exit node needs a bridge port; 443
+// first: it is open on most hosting firewalls and is what Reality imitates.
+var bridgePorts = []int{443, 4443, 8443, 4444, 9443, 10443, 20443}
 
 // ensureBridge gives the exit node its bridge keys and a free port once.
 func (s *Server) ensureBridge(ctx context.Context, n *model.Node, inbounds []*model.Inbound) error {
