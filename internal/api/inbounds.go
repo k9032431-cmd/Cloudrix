@@ -29,6 +29,11 @@ func validateInbound(in *model.Inbound) error {
 	if in.Port < 1 || in.Port > 65535 {
 		return errors.New("port must be 1..65535")
 	}
+	// the public address goes into client links as is
+	in.Address = strings.TrimSpace(in.Address)
+	if in.Address != "" && !hostRe.MatchString(in.Address) {
+		return errors.New("public address must be an IP or a domain name, without scheme, port or spaces")
+	}
 	if in.Listen == "" {
 		in.Listen = "0.0.0.0"
 	}

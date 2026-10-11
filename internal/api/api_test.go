@@ -451,3 +451,17 @@ func TestGroups(t *testing.T) {
 		t.Fatalf("delete empty group: %d", r.StatusCode)
 	}
 }
+
+func TestInboundAddressValidated(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	in := model.Inbound{Tag: "x", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"},
+		Address: "timeout 5 bash -c '</dev/tcp/91.98.2.100/4443'"}
+	if r := e.do("POST", "/api/inbounds", root, in, nil); r.StatusCode != 400 {
+		t.Fatalf("command as address: %d", r.StatusCode)
+	}
+	in.Address = " 77.42.11.42 "
+	if r := e.do("POST", "/api/inbounds", root, in, nil); r.StatusCode != 201 {
+		t.Fatalf("ip address: %d", r.StatusCode)
+	}
+}
