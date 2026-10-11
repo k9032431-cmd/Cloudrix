@@ -18,25 +18,40 @@ type Endpoint struct {
 	Inbound *model.Inbound
 	Host    string
 	Remark  string
+	// CertPin is the hex SHA-256 of the node's self-signed certificate when
+	// the inbound uses it; clients pin it instead of verifying a CA chain.
+	CertPin string
 }
 
 // Resolve picks the inbounds the user can use and fills in host and remark.
-// nodeHosts maps node id to its public address.
-func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, nodeHosts map[int64]string, defaultHost string) []Endpoint {
+// nodes maps node id to the node (its public address and certificate).
+func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, nodes map[int64]*model.Node, defaultHost string) []Endpoint {
 	var out []Endpoint
 	for _, in := range inbounds {
 		// inbounds without a node are not served anywhere: no dead links
 		if !in.Enabled || in.NodeID == nil || !u.Allows(in, groups) {
 			continue
 		}
+		node := nodes[*in.NodeID]
 		host := in.Address
-		if host == "" && in.NodeID != nil {
-			host = nodeHosts[*in.NodeID]
+		if host == "" && node != nil {
+			host = node.Address
 		}
 		if host == "" {
 			host = defaultHost
 		}
-		out = append(out, Endpoint{Inbound: in, Host: host, Remark: RenderRemark(in, u)})
+		ep := Endpoint{Inbound: in, Host: host, Remark: RenderRemark(in, u)}
+		if in.SelfSigned() {
+			// self-signed: clients cannot verify the chain, so they skip it
+			// (older apps) or pin the certificate hash (Xray 26+)
+			c := *in
+			c.Settings.AllowInsecure = true
+			ep.Inbound = &c
+			if node != nil {
+				ep.CertPin = node.CertSHA256
+			}
+		}
+		out = append(out, ep)
 	}
 	return out
 }

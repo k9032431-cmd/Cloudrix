@@ -20,6 +20,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/k9032431-cmd/cloudrix/internal/core"
 	"github.com/k9032431-cmd/cloudrix/internal/nodeproto"
 )
 
@@ -77,6 +78,7 @@ type Agent struct {
 	pending map[string]*nodeproto.Stat
 	lastTS  int64
 	cores   string
+	certPin string
 }
 
 func New(cfg Config) *Agent {
@@ -116,6 +118,11 @@ func (a *Agent) Run(ctx context.Context) error {
 		return fmt.Errorf("self-signed certificate: %w", err)
 	}
 	a.cores = coreVersions(a.cfg)
+	if pin, err := certSHA256(core.SelfSignedCert); err == nil {
+		a.certPin = pin
+	} else {
+		a.log.Warn("self-signed certificate hash", "err", err)
+	}
 	a.log.Info("cloudrix node agent", "panel", a.cfg.PanelURL, "node", a.cfg.NodeID, "cores", a.cores)
 	a.resume()
 	defer a.stopAll()
@@ -123,7 +130,7 @@ func (a *Agent) Run(ctx context.Context) error {
 	backoff := 2 * time.Second
 	for ctx.Err() == nil {
 		a.collectStats(ctx)
-		req := nodeproto.SyncRequest{Version: a.version, Cores: a.cores, Agent: a.cfg.Version, Error: a.takeErr(), Wait: true}
+		req := nodeproto.SyncRequest{Version: a.version, Cores: a.cores, Agent: a.cfg.Version, Error: a.takeErr(), Wait: true, CertSHA256: a.certPin}
 		for _, st := range a.pending {
 			req.Stats = append(req.Stats, *st)
 		}
@@ -310,7 +317,7 @@ func (a *Agent) check(p *proc, cfg []byte, args []string) error {
 	cmd.Env = p.env
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("config check failed: %s", lastLines(out, 3))
+		return fmt.Errorf("config check failed: %s", coreError(out))
 	}
 	return nil
 }
@@ -342,6 +349,24 @@ func firstLine(bin string, args ...string) string {
 		return ""
 	}
 	return strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+}
+
+// coreError picks the line that explains a failed config check: cores print
+// a banner and info lines first, the reason last.
+func coreError(out []byte) string {
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		l := strings.TrimSpace(lines[i])
+		low := strings.ToLower(l)
+		if strings.Contains(low, "fail") || strings.Contains(low, "error") || strings.HasPrefix(low, "fatal") {
+			// Xray: "Failed to start: main: failed to load config files: [path] > infra/conf: ..."
+			if j := strings.Index(l, "] > "); j >= 0 {
+				l = l[j+4:]
+			}
+			return l
+		}
+	}
+	return lastLines(out, 3)
 }
 
 func lastLines(b []byte, n int) string {

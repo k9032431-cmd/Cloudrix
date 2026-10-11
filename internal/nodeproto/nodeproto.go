@@ -46,6 +46,8 @@ type SyncRequest struct {
 	Agent   string `json:"agent,omitempty"` // agent build
 	Error   string `json:"error,omitempty"` // last core error, shown in the panel
 	Wait    bool   `json:"wait,omitempty"`  // long-poll until the config changes
+	// CertSHA256 is the hex SHA-256 of the agent's self-signed certificate.
+	CertSHA256 string `json:"cert_sha256,omitempty"`
 }
 
 // SyncResponse carries the core configs when they changed.

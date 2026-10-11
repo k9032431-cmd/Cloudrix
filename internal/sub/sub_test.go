@@ -153,3 +153,30 @@ func TestWGAddress(t *testing.T) {
 		}
 	}
 }
+
+func TestSelfSignedPin(t *testing.T) {
+	pin := strings.Repeat("ab", 32)
+	nodes := map[int64]*model.Node{1: {ID: 1, Address: "fi.example.com", CertSHA256: pin}}
+	eps := Resolve(testUser(), allInbounds(), nil, nodes, "h")
+	links := map[string]string{}
+	for _, ep := range eps {
+		links[ep.Inbound.Tag] = Link(testUser(), ep)
+	}
+	tr := links["trojan-grpc"] // tls without a certificate: the node's own, pinned
+	if !strings.Contains(tr, "pcs="+pin) || strings.Contains(tr, "allowInsecure") || !strings.Contains(tr, "@fi.example.com:") {
+		t.Fatalf("trojan link: %s", tr)
+	}
+	if hy := links["hy2"]; !strings.Contains(hy, "pinSHA256="+pin) || !strings.Contains(hy, "insecure=1") {
+		t.Fatalf("hysteria2 link: %s", hy)
+	}
+	if r := links["vless-reality"]; strings.Contains(r, "pcs=") {
+		t.Fatalf("reality must not pin: %s", r)
+	}
+	// without a known fingerprint (old agent) links fall back to allowInsecure
+	eps = Resolve(testUser(), allInbounds(), nil, nil, "h")
+	for _, ep := range eps {
+		if ep.Inbound.Tag == "trojan-grpc" && !strings.Contains(Link(testUser(), ep), "allowInsecure=1") {
+			t.Fatalf("fallback: %s", Link(testUser(), ep))
+		}
+	}
+}

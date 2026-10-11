@@ -157,6 +157,8 @@ var migrations = []string{
 	INSERT INTO groups (name, created_at) VALUES ('Default', CAST(strftime('%s', 'now') AS INTEGER));
 	INSERT INTO group_inbounds (group_id, inbound_id) SELECT (SELECT id FROM groups WHERE name = 'Default'), id FROM inbounds;
 	UPDATE users SET group_ids = '[' || (SELECT id FROM groups WHERE name = 'Default') || ']' WHERE inbounds IN ('', '[]', 'null');`,
+	// 5: fingerprint of the node's self-signed certificate, pinned by clients
+	`ALTER TABLE nodes ADD COLUMN cert_sha256 TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

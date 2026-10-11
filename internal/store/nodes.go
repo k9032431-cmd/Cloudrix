@@ -10,14 +10,14 @@ import (
 )
 
 const nodeCols = `id, name, address, api_port, usage_coefficient, status, message, core_version, last_seen,
-	upload_bytes, download_bytes, created_at`
+	upload_bytes, download_bytes, created_at, cert_sha256`
 
 func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	var n model.Node
 	var lastSeen sql.NullInt64
 	var created int64
 	err := row.Scan(&n.ID, &n.Name, &n.Address, &n.APIPort, &n.UsageCoefficient, &n.Status, &n.Message, &n.CoreVersion,
-		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created)
+		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created, &n.CertSHA256)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -98,12 +98,13 @@ func (s *Store) SetNodeSecret(ctx context.Context, id int64, secret string) erro
 // RecordNodeSync stores what an agent reported: it is online now, runs these
 // cores, and moved up/down bytes since its last report. A disabled node keeps
 // its status.
-func (s *Store) RecordNodeSync(ctx context.Context, id int64, cores, message string, up, down int64) error {
+func (s *Store) RecordNodeSync(ctx context.Context, id int64, cores, message, certSHA256 string, up, down int64) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET
 		status = CASE WHEN status = 'disabled' THEN status ELSE ? END,
 		message = ?, core_version = ?, last_seen = ?,
+		cert_sha256 = CASE WHEN ? = '' THEN cert_sha256 ELSE ? END,
 		upload_bytes = upload_bytes + ?, download_bytes = download_bytes + ? WHERE id = ?`,
-		model.NodeConnected, message, cores, unix(time.Now()), up, down, id)
+		model.NodeConnected, message, cores, unix(time.Now()), certSHA256, certSHA256, up, down, id)
 	return affected(res, err)
 }
 

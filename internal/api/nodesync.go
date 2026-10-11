@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -60,6 +61,8 @@ func (h *nodeHub) accept(id, ts int64) bool {
 	h.lastTS[id] = ts
 	return true
 }
+
+var certHashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // nodeConfigs builds the core configs a node should run and their version.
 func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byte, version string, err error) {
@@ -146,7 +149,14 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	if len(cores) > 120 {
 		cores = cores[:120]
 	}
-	if err := s.store.RecordNodeSync(ctx, id, cores, msg, up, down); err != nil {
+	cert := req.CertSHA256
+	if !certHashRe.MatchString(cert) {
+		cert = ""
+	}
+	if cert != "" && cert != node.CertSHA256 {
+		defer s.usersChanged() // links pin the new certificate
+	}
+	if err := s.store.RecordNodeSync(ctx, id, cores, msg, cert, up, down); err != nil {
 		s.writeStoreError(w, err)
 		return
 	}

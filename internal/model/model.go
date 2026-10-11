@@ -114,6 +114,22 @@ func (u *User) Allows(in *Inbound, groups Groups) bool {
 	return len(u.Inbounds) == 0 || slices.Contains(u.Inbounds, in.Tag)
 }
 
+// SelfSigned reports whether the inbound serves TLS with the node's
+// self-signed certificate (no certificate of its own).
+func (in *Inbound) SelfSigned() bool {
+	s := in.Settings
+	if s.CertFile != "" && s.KeyFile != "" {
+		return false
+	}
+	switch in.Protocol {
+	case ProtoHysteria2, ProtoTUIC:
+		return true
+	case ProtoVLESS, ProtoVMess, ProtoTrojan:
+		return s.Security == "tls"
+	}
+	return false
+}
+
 // Active reports whether the user should currently be allowed to connect.
 func (u *User) Active() bool {
 	return u.Status == StatusActive || u.Status == StatusOnHold
@@ -231,6 +247,9 @@ type Node struct {
 	UploadBytes      int64      `json:"upload_bytes"`
 	DownloadBytes    int64      `json:"download_bytes"`
 	CreatedAt        time.Time  `json:"created_at"`
+	// CertSHA256 is the hex SHA-256 of the node's self-signed certificate,
+	// pinned by clients of TLS inbounds that have no certificate of their own.
+	CertSHA256 string `json:"cert_sha256"`
 	// Secret signs and encrypts agent traffic; never sent to the browser.
 	Secret string `json:"-"`
 }

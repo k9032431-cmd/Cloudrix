@@ -27,6 +27,16 @@ func Base64Links(u *model.User, eps []Endpoint) string {
 	return base64.StdEncoding.EncodeToString([]byte(strings.Join(Links(u, eps), "\n")))
 }
 
+// pinCert makes TLS links pin the node's self-signed certificate: Xray 26
+// dropped allowInsecure, so such links would not import otherwise.
+func pinCert(q url.Values, ep Endpoint) {
+	if ep.CertPin == "" || q.Get("security") != "tls" {
+		return
+	}
+	q.Del("allowInsecure")
+	q.Set("pcs", ep.CertPin)
+}
+
 func Link(u *model.User, ep Endpoint) string {
 	in, s := ep.Inbound, ep.Inbound.Settings
 	hostPort := net.JoinHostPort(ep.Host, strconv.Itoa(in.Port))
@@ -36,6 +46,7 @@ func Link(u *model.User, ep Endpoint) string {
 	switch in.Protocol {
 	case model.ProtoVLESS:
 		q := transportQuery(s)
+		pinCert(q, ep)
 		q.Set("encryption", "none")
 		if s.Flow != "" && network(s) == "tcp" && s.Security != "none" && s.Security != "" {
 			q.Set("flow", s.Flow)
@@ -44,6 +55,7 @@ func Link(u *model.User, ep Endpoint) string {
 
 	case model.ProtoTrojan:
 		q := transportQuery(s)
+		pinCert(q, ep)
 		return "trojan://" + url.PathEscape(c.Password) + "@" + hostPort + "?" + q.Encode() + frag
 
 	case model.ProtoVMess:
@@ -69,6 +81,7 @@ func Link(u *model.User, ep Endpoint) string {
 		if s.AllowInsecure {
 			q.Set("insecure", "1")
 		}
+		setNonEmpty(q, "pinSHA256", ep.CertPin)
 		return "hysteria2://" + url.PathEscape(c.Password) + "@" + hostPort + "/?" + q.Encode() + frag
 
 	case model.ProtoTUIC:

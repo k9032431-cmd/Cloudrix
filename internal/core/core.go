@@ -171,7 +171,12 @@ func xrayStream(s model.InboundSettings) map[string]any {
 	switch s.Security {
 	case "tls":
 		st["security"] = "tls"
-		tls := map[string]any{"certificates": []map[string]any{{"certificateFile": s.CertFile, "keyFile": s.KeyFile}}}
+		certFile, keyFile := s.CertFile, s.KeyFile
+		if certFile == "" || keyFile == "" {
+			// the node agent creates this self-signed pair; clients pin its hash
+			certFile, keyFile = SelfSignedCert, SelfSignedKey
+		}
+		tls := map[string]any{"certificates": []map[string]any{{"certificateFile": certFile, "keyFile": keyFile}}}
 		if s.SNI != "" {
 			tls["serverName"] = s.SNI
 		}

@@ -4,9 +4,12 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -50,4 +53,19 @@ func ensureSelfSigned() error {
 		return err
 	}
 	return os.WriteFile(core.SelfSignedCert, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o644)
+}
+
+// certSHA256 returns the hex SHA-256 of the PEM certificate's DER bytes,
+// the form Xray's pinnedPeerCertSha256 expects.
+func certSHA256(path string) (string, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	blk, _ := pem.Decode(b)
+	if blk == nil {
+		return "", errors.New("no PEM block")
+	}
+	sum := sha256.Sum256(blk.Bytes)
+	return hex.EncodeToString(sum[:]), nil
 }
