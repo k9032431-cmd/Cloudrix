@@ -22,15 +22,11 @@ type Endpoint struct {
 
 // Resolve picks the inbounds the user can use and fills in host and remark.
 // nodeHosts maps node id to its public address.
-func Resolve(u *model.User, inbounds []*model.Inbound, nodeHosts map[int64]string, defaultHost string) []Endpoint {
-	allowed := map[string]bool{}
-	for _, t := range u.Inbounds {
-		allowed[t] = true
-	}
+func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, nodeHosts map[int64]string, defaultHost string) []Endpoint {
 	var out []Endpoint
 	for _, in := range inbounds {
 		// inbounds without a node are not served anywhere: no dead links
-		if !in.Enabled || in.NodeID == nil || (len(allowed) > 0 && !allowed[in.Tag]) {
+		if !in.Enabled || in.NodeID == nil || !u.Allows(in, groups) {
 			continue
 		}
 		host := in.Address

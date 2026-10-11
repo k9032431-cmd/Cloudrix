@@ -25,27 +25,14 @@ func Email(u *model.User) string {
 }
 
 // usersFor returns active users allowed on the inbound.
-func usersFor(in *model.Inbound, users []*model.User) []*model.User {
+func usersFor(in *model.Inbound, users []*model.User, groups model.Groups) []*model.User {
 	var out []*model.User
 	for _, u := range users {
-		if !u.Active() {
-			continue
+		if u.Active() && u.Allows(in, groups) {
+			out = append(out, u)
 		}
-		if len(u.Inbounds) > 0 && !contains(u.Inbounds, in.Tag) {
-			continue
-		}
-		out = append(out, u)
 	}
 	return out
-}
-
-func contains(list []string, v string) bool {
-	for _, x := range list {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
 
 // ForNode filters inbounds served by the given node (nil = local core).
@@ -63,7 +50,7 @@ func ForNode(inbounds []*model.Inbound, nodeID *int64) []*model.Inbound {
 }
 
 // Xray renders an Xray-core config for the vless/vmess/trojan/shadowsocks inbounds.
-func Xray(inbounds []*model.Inbound, users []*model.User) ([]byte, error) {
+func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups) ([]byte, error) {
 	xin := []map[string]any{{
 		"tag": "api", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
 		"settings": map[string]any{"address": "127.0.0.1"},
@@ -72,7 +59,7 @@ func Xray(inbounds []*model.Inbound, users []*model.User) ([]byte, error) {
 		if in.Protocol.Core() != "xray" {
 			continue
 		}
-		x, err := xrayInbound(in, usersFor(in, users))
+		x, err := xrayInbound(in, usersFor(in, users, groups))
 		if err != nil {
 			return nil, fmt.Errorf("inbound %s: %w", in.Tag, err)
 		}
@@ -209,14 +196,14 @@ func xrayStream(s model.InboundSettings) map[string]any {
 }
 
 // SingBox renders a sing-box server config for hysteria2/tuic/wireguard inbounds.
-func SingBox(inbounds []*model.Inbound, users []*model.User) ([]byte, error) {
+func SingBox(inbounds []*model.Inbound, users []*model.User, groups model.Groups) ([]byte, error) {
 	var sin, endpoints []map[string]any
 	for _, in := range inbounds {
 		if in.Protocol.Core() != "sing-box" {
 			continue
 		}
 		s := in.Settings
-		us := usersFor(in, users)
+		us := usersFor(in, users, groups)
 		base := map[string]any{"tag": in.Tag, "listen": orDefault(in.Listen, "::"), "listen_port": in.Port}
 		certFile, keyFile := s.CertFile, s.KeyFile
 		if certFile == "" || keyFile == "" {

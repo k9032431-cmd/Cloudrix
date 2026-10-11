@@ -107,6 +107,7 @@ func (s *Server) Handler() http.Handler {
 			r.Delete("/users/{id}/gdrive", s.handleDeleteUserDrive)
 
 			r.Get("/inbounds", s.handleListInbounds)
+			r.Get("/groups", s.handleListGroups)
 
 			r.Group(func(r chi.Router) {
 				r.Use(requireSudo)
@@ -118,6 +119,10 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/inbounds", s.handleCreateInbound)
 				r.Put("/inbounds/{id}", s.handleUpdateInbound)
 				r.Delete("/inbounds/{id}", s.handleDeleteInbound)
+
+				r.Post("/groups", s.handleCreateGroup)
+				r.Put("/groups/{id}", s.handleUpdateGroup)
+				r.Delete("/groups/{id}", s.handleDeleteGroup)
 
 				r.Get("/nodes", s.handleListNodes)
 				r.Post("/nodes", s.handleCreateNode)

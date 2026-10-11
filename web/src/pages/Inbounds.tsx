@@ -4,7 +4,7 @@ import { Code2, Pencil, Plus, Trash2, Wand2 } from '../components/icons'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import { PROTOCOLS, type Inbound, type InboundSettings, type Node, type Protocol } from '../lib/types'
+import { PROTOCOLS, type Group, type Inbound, type InboundSettings, type Node, type Protocol } from '../lib/types'
 import { Badge, Button, Card, Confirm, CopyButton, Empty, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Table, Td, Th, Toggle } from '../components/ui'
 
 const XRAY: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
@@ -38,6 +38,7 @@ export default function Inbounds() {
   const { t } = useI18n()
   const { data, error, reload } = useFetch<Inbound[]>('/api/inbounds')
   const { data: nodes } = useFetch<Node[]>('/api/nodes')
+  const { data: groups, reload: reloadGroups } = useFetch<Group[]>('/api/groups')
   const [editing, setEditing] = useState<Inbound | null>(null)
   const [deleting, setDeleting] = useState<Inbound | null>(null)
   const [preview, setPreview] = useState(false)
@@ -134,10 +135,12 @@ export default function Inbounds() {
         <InboundForm
           initial={editing}
           nodes={nodes ?? []}
+          groups={groups ?? []}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
             reload()
+            reloadGroups()
           }}
         />
       )}
@@ -163,7 +166,7 @@ const parseList = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean)
 
-function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; nodes: Node[]; onClose: () => void; onSaved: () => void }) {
+function InboundForm({ initial, nodes, groups, onClose, onSaved }: { initial: Inbound; nodes: Node[]; groups: Group[]; onClose: () => void; onSaved: () => void }) {
   const { t } = useI18n()
   const [ib, setIb] = useState<Inbound>(initial)
   const [error, setError] = useState<string | null>(null)
@@ -172,7 +175,10 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
   const set = <K extends keyof Inbound>(k: K, v: Inbound[K]) => setIb((x) => ({ ...x, [k]: v }))
   const setS = (patch: InboundSettings) => setIb((x) => ({ ...x, settings: { ...x.settings, ...patch } }))
   const isNew = ib.id === 0
-  const [addToUsers, setAddToUsers] = useState(true)
+  // New inbounds go into the first group (Default) so its users get them at once.
+  const [groupIDs, setGroupIDs] = useState<number[]>(() =>
+    isNew ? groups.slice(0, 1).map((g) => g.id) : groups.filter((g) => g.inbound_ids.includes(initial.id)).map((g) => g.id),
+  )
   const streamProto = ['vless', 'vmess', 'trojan'].includes(ib.protocol)
   const needsCert = ib.protocol === 'hysteria2' || ib.protocol === 'tuic' || s.security === 'tls'
 
@@ -181,8 +187,9 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
     setBusy(true)
     setError(null)
     try {
-      if (isNew) await post(`/api/inbounds${addToUsers ? '?add_to_users=1' : ''}`, ib)
-      else await put(`/api/inbounds/${ib.id}`, ib)
+      const q = `?groups=${groupIDs.join(',')}`
+      if (isNew) await post(`/api/inbounds${q}`, ib)
+      else await put(`/api/inbounds/${ib.id}${q}`, ib)
       onSaved()
     } catch (err) {
       setError((err as Error).message)
@@ -486,11 +493,27 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
         )}
 
         <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
-        {isNew && (
-          <div>
-            <Toggle checked={addToUsers} onChange={setAddToUsers} label={t('inbounds.addToUsers')} />
-            <p className="hint mt-1 pl-12">{t('inbounds.addToUsersHint')}</p>
-          </div>
+        {groups.length > 0 && (
+          <Field label={t('nav.groups')} hint={t('inbounds.groupsHint')}>
+            <div className="flex flex-wrap gap-2">
+              {groups.map((g) => {
+                const on = groupIDs.includes(g.id)
+                return (
+                  <button
+                    type="button"
+                    key={g.id}
+                    onClick={() => setGroupIDs((x) => (on ? x.filter((v) => v !== g.id) : [...x, g.id]))}
+                    className={
+                      'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
+                      (on ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60')
+                    }
+                  >
+                    {g.name}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
         )}
       </form>
     </Modal>

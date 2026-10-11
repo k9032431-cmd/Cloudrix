@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
@@ -126,16 +127,7 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "inbound.create", in.Tag, string(in.Protocol))
-	// Users with a hand-picked inbound list would not see the new inbound
-	// otherwise ("all inbounds" users get it anyway).
-	if r.URL.Query().Get("add_to_users") == "1" {
-		s.editUserInbounds(r, func(tags []string) ([]string, bool) {
-			if slices.Contains(tags, in.Tag) {
-				return nil, false
-			}
-			return append(tags, in.Tag), true
-		})
-	}
+	s.applyInboundGroups(r, in.ID)
 	s.usersChanged()
 	writeJSON(w, http.StatusCreated, in)
 }
@@ -166,6 +158,7 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	s.applyInboundGroups(r, in.ID)
 	if old.Tag != in.Tag { // keep users that picked this inbound on it
 		s.editUserInbounds(r, func(tags []string) ([]string, bool) {
 			i := slices.Index(tags, old.Tag)
@@ -179,6 +172,24 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "inbound.update", in.Tag, "")
 	s.usersChanged()
 	writeJSON(w, http.StatusOK, in)
+}
+
+// applyInboundGroups puts the inbound into the groups named by ?groups=1,2
+// (an empty value takes it out of all groups; no parameter leaves them as is).
+func (s *Server) applyInboundGroups(r *http.Request, id int64) {
+	q := r.URL.Query()
+	if !q.Has("groups") {
+		return
+	}
+	var ids []int64
+	for _, v := range strings.Split(q.Get("groups"), ",") {
+		if n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64); err == nil && n > 0 {
+			ids = append(ids, n)
+		}
+	}
+	if err := s.store.SetInboundGroups(r.Context(), id, ids); err != nil {
+		s.log.Warn("set inbound groups", "err", err)
+	}
 }
 
 func (s *Server) editUserInbounds(r *http.Request, edit func([]string) ([]string, bool)) {
@@ -227,6 +238,11 @@ func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	groups, err := s.store.GroupMap(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
 	var nodeID *int64
 	if n := queryInt(r, "node", 0); n > 0 {
 		id := int64(n)
@@ -236,9 +252,9 @@ func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {
 	var body []byte
 	switch r.URL.Query().Get("core") {
 	case "", "xray":
-		body, err = core.Xray(selected, users)
+		body, err = core.Xray(selected, users, groups)
 	case "sing-box":
-		body, err = core.SingBox(selected, users)
+		body, err = core.SingBox(selected, users, groups)
 	default:
 		writeError(w, http.StatusBadRequest, "core must be xray or sing-box")
 		return

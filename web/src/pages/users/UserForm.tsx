@@ -1,17 +1,10 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { post, put } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { GB, fromLocalInput, toLocalInput } from '../../lib/format'
-import type { Admin, ResetStrategy, User, UserInput } from '../../lib/types'
+import type { Admin, Group, ResetStrategy, User, UserInput } from '../../lib/types'
 import { Badge, Button, ErrorNote, Field, Input, Modal, Select, Textarea, cx, Segmented } from '../../components/ui'
-
-interface BriefInbound {
-  tag: string
-  protocol: string
-  remark: string
-  enabled: boolean
-}
 
 const QUICK_DAYS = [7, 30, 90, 365]
 
@@ -27,7 +20,7 @@ export default function UserForm({
   onSaved: (u: User) => void
 }) {
   const { t } = useI18n()
-  const { data: inbounds } = useFetch<BriefInbound[]>('/api/inbounds')
+  const { data: groups } = useFetch<Group[]>('/api/groups')
   const { data: admins } = useFetch<Admin[]>(isSudo ? '/api/admins' : null)
   const [form, setForm] = useState<UserInput>(() => ({
     username: user?.username ?? '',
@@ -38,6 +31,7 @@ export default function UserForm({
     reset_strategy: user?.reset_strategy ?? 'no_reset',
     device_limit: user?.device_limit ?? 0,
     inbounds: user?.inbounds ?? [],
+    group_ids: user?.group_ids ?? [],
     note: user?.note ?? '',
     admin_id: user?.admin_id,
   }))
@@ -47,6 +41,10 @@ export default function UserForm({
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
+    if (groups?.length && form.group_ids.length === 0) {
+      setError(t('users.pickGroup'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -60,8 +58,14 @@ export default function UserForm({
     }
   }
 
-  const toggleInbound = (tag: string) =>
-    set('inbounds', form.inbounds.includes(tag) ? form.inbounds.filter((x) => x !== tag) : [...form.inbounds, tag])
+  const toggleGroup = (id: number) =>
+    set('group_ids', form.group_ids.includes(id) ? form.group_ids.filter((x) => x !== id) : [...form.group_ids, id])
+
+  // New users start in the first group (Default), like PasarGuard.
+  useEffect(() => {
+    const first = groups?.find((g) => !g.disabled)
+    if (!user && first) setForm((f) => (f.group_ids.length ? f : { ...f, group_ids: [first.id] }))
+  }, [groups, user])
 
   return (
     <Modal
@@ -166,39 +170,31 @@ export default function UserForm({
           )}
         </div>
 
-        <Field label={t('users.inbounds')} hint={t('users.inboundsHint')}>
+        <Field label={t('users.groups')} hint={t('users.groupsHint')}>
           <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => set('inbounds', [])}
-              className={cx(
-                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors',
-                form.inbounds.length === 0 ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60',
-              )}
-            >
-              {t('users.allInbounds')}
-            </button>
-            {(inbounds ?? []).map((ib) => {
-              const on = form.inbounds.includes(ib.tag)
+            {(groups ?? []).map((g) => {
+              const on = form.group_ids.includes(g.id)
               return (
                 <button
                   type="button"
-                  key={ib.tag}
-                  onClick={() => toggleInbound(ib.tag)}
+                  key={g.id}
+                  onClick={() => toggleGroup(g.id)}
                   className={cx(
                     'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors',
-                    on
-                      ? 'bg-primary text-primary-foreground ring-primary'
-                      : 'text-muted-foreground ring-border hover:bg-muted/60',
-                    !ib.enabled && 'opacity-50',
+                    on ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60',
+                    g.disabled && 'opacity-50',
                   )}
                 >
-                  {ib.tag}
-                  <Badge tone="gray">{ib.protocol}</Badge>
+                  {g.name}
+                  <Badge tone="gray">{g.inbound_ids.length}</Badge>
                 </button>
               )
             })}
+            {groups?.length === 0 && <span className="text-sm text-muted-foreground">{t('users.noGroups')}</span>}
           </div>
+          {form.group_ids.length === 0 && form.inbounds.length > 0 && (
+            <p className="hint mt-2">{t('users.legacyInbounds', { tags: form.inbounds.join(', ') })}</p>
+          )}
         </Field>
 
         <Field label={t('users.note')}>

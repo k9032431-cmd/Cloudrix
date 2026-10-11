@@ -141,6 +141,22 @@ var migrations = []string{
 	);`,
 	// 3: node agents authenticate with a per-node secret
 	`ALTER TABLE nodes ADD COLUMN secret TEXT NOT NULL DEFAULT '';`,
+	// 4: inbound groups; existing inbounds and "all inbounds" users join Default
+	`CREATE TABLE groups (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		disabled INTEGER NOT NULL DEFAULT 0,
+		created_at INTEGER NOT NULL
+	);
+	CREATE TABLE group_inbounds (
+		group_id INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+		inbound_id INTEGER NOT NULL REFERENCES inbounds(id) ON DELETE CASCADE,
+		PRIMARY KEY (group_id, inbound_id)
+	);
+	ALTER TABLE users ADD COLUMN group_ids TEXT NOT NULL DEFAULT '[]';
+	INSERT INTO groups (name, created_at) VALUES ('Default', CAST(strftime('%s', 'now') AS INTEGER));
+	INSERT INTO group_inbounds (group_id, inbound_id) SELECT (SELECT id FROM groups WHERE name = 'Default'), id FROM inbounds;
+	UPDATE users SET group_ids = '[' || (SELECT id FROM groups WHERE name = 'Default') || ']' WHERE inbounds IN ('', '[]', 'null');`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

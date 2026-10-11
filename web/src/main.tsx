@@ -16,6 +16,7 @@ import UsersPage from './pages/Users'
 
 const Inbounds = lazy(() => import('./pages/Inbounds'))
 const Nodes = lazy(() => import('./pages/Nodes'))
+const Groups = lazy(() => import('./pages/Groups'))
 const Admins = lazy(() => import('./pages/Admins'))
 const Audit = lazy(() => import('./pages/Audit'))
 const SettingsPage = lazy(() => import('./pages/Settings'))
@@ -54,6 +55,7 @@ function App() {
           <Route path="users" element={<UsersPage />} />
           <Route path="inbounds" element={<Protected sudo><Inbounds /></Protected>} />
           <Route path="nodes" element={<Protected sudo><Nodes /></Protected>} />
+          <Route path="groups" element={<Protected sudo><Groups /></Protected>} />
           <Route path="admins" element={<Protected sudo><Admins /></Protected>} />
           <Route path="audit" element={<Protected sudo><Audit /></Protected>} />
           <Route path="settings" element={<Protected sudo><SettingsPage /></Protected>} />

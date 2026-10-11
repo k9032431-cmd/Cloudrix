@@ -8,7 +8,7 @@ import { useAuth } from '../../lib/auth'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
 import type { DailyTraffic, Device, User, UserDrive } from '../../lib/types'
 import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented, Skeleton, Toggle } from '../../components/ui'
-import { UserStatusBadge } from '../../components/StatusBadge'
+import { UserPresenceBadge } from '../../components/StatusBadge'
 import { TrafficChart } from '../Dashboard'
 
 type Tab = 'sub' | 'links' | 'devices'
@@ -55,7 +55,7 @@ export default function UserDetails({
       title={
         <span className="flex items-center gap-3">
           {user.username}
-          <UserStatusBadge status={user.status} />
+          <UserPresenceBadge user={user} detail />
         </span>
       }
       footer={

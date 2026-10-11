@@ -71,6 +71,10 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 	if err != nil {
 		return nil, nil, "", err
 	}
+	groups, err := s.store.GroupMap(ctx)
+	if err != nil {
+		return nil, nil, "", err
+	}
 	mine := core.ForNode(inbounds, &id)
 	var xin, sin []*model.Inbound
 	for _, in := range mine {
@@ -81,12 +85,12 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 		}
 	}
 	if len(xin) > 0 {
-		if xray, err = core.Xray(xin, users); err != nil {
+		if xray, err = core.Xray(xin, users, groups); err != nil {
 			return nil, nil, "", err
 		}
 	}
 	if len(sin) > 0 {
-		if singbox, err = core.SingBox(sin, users); err != nil {
+		if singbox, err = core.SingBox(sin, users, groups); err != nil {
 			return nil, nil, "", err
 		}
 	}

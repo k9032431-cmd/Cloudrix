@@ -13,16 +13,16 @@ import (
 
 const userCols = `id, username, sub_token, status, data_limit, used_traffic, lifetime_used, expire_at,
 	on_hold_duration, reset_strategy, last_reset_at, device_limit, inbounds, note, admin_id, credentials,
-	created_at, online_at, sub_updated_at, sub_user_agent`
+	created_at, online_at, sub_updated_at, sub_user_agent, group_ids`
 
 func scanUser(row interface{ Scan(...any) error }) (*model.User, error) {
 	var u model.User
 	var expire, online, subUpdated sql.NullInt64
 	var lastReset, created int64
-	var inbounds, creds string
+	var inbounds, creds, groups string
 	err := row.Scan(&u.ID, &u.Username, &u.SubToken, &u.Status, &u.DataLimit, &u.UsedTraffic, &u.LifetimeUsed, &expire,
 		&u.OnHoldDuration, &u.ResetStrategy, &lastReset, &u.DeviceLimit, &inbounds, &u.Note, &u.AdminID, &creds,
-		&created, &online, &subUpdated, &u.SubUserAgent)
+		&created, &online, &subUpdated, &u.SubUserAgent, &groups)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -43,6 +43,12 @@ func scanUser(row interface{ Scan(...any) error }) (*model.User, error) {
 	if err := json.Unmarshal([]byte(creds), &u.Credentials); err != nil {
 		return nil, err
 	}
+	if err := json.Unmarshal([]byte(groups), &u.GroupIDs); err != nil {
+		return nil, err
+	}
+	if u.GroupIDs == nil {
+		u.GroupIDs = []int64{}
+	}
 	return &u, nil
 }
 
@@ -53,13 +59,17 @@ func (s *Store) CreateUser(ctx context.Context, u *model.User) error {
 	if u.Inbounds == nil {
 		u.Inbounds = []string{}
 	}
+	if u.GroupIDs == nil {
+		u.GroupIDs = []int64{}
+	}
 	inbounds, _ := json.Marshal(u.Inbounds)
+	groups, _ := json.Marshal(u.GroupIDs)
 	creds, _ := json.Marshal(u.Credentials)
 	res, err := s.db.ExecContext(ctx, `INSERT INTO users (username, sub_token, status, data_limit, used_traffic, lifetime_used,
-		expire_at, on_hold_duration, reset_strategy, last_reset_at, device_limit, inbounds, note, admin_id, credentials, created_at)
-		VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		expire_at, on_hold_duration, reset_strategy, last_reset_at, device_limit, inbounds, note, admin_id, credentials, created_at, group_ids)
+		VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		u.Username, u.SubToken, u.Status, u.DataLimit, nullUnix(u.ExpireAt), u.OnHoldDuration, u.ResetStrategy,
-		unix(now), u.DeviceLimit, string(inbounds), u.Note, u.AdminID, string(creds), unix(now))
+		unix(now), u.DeviceLimit, string(inbounds), u.Note, u.AdminID, string(creds), unix(now), string(groups))
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -75,13 +85,17 @@ func (s *Store) UpdateUser(ctx context.Context, u *model.User) error {
 	if u.Inbounds == nil {
 		u.Inbounds = []string{}
 	}
+	if u.GroupIDs == nil {
+		u.GroupIDs = []int64{}
+	}
 	inbounds, _ := json.Marshal(u.Inbounds)
+	groups, _ := json.Marshal(u.GroupIDs)
 	creds, _ := json.Marshal(u.Credentials)
 	res, err := s.db.ExecContext(ctx, `UPDATE users SET username = ?, sub_token = ?, status = ?, data_limit = ?, used_traffic = ?,
 		expire_at = ?, on_hold_duration = ?, reset_strategy = ?, last_reset_at = ?, device_limit = ?, inbounds = ?, note = ?,
-		admin_id = ?, credentials = ? WHERE id = ?`,
+		admin_id = ?, credentials = ?, group_ids = ? WHERE id = ?`,
 		u.Username, u.SubToken, u.Status, u.DataLimit, u.UsedTraffic, nullUnix(u.ExpireAt), u.OnHoldDuration, u.ResetStrategy,
-		unix(u.LastResetAt), u.DeviceLimit, string(inbounds), u.Note, u.AdminID, string(creds), u.ID)
+		unix(u.LastResetAt), u.DeviceLimit, string(inbounds), u.Note, u.AdminID, string(creds), string(groups), u.ID)
 	return affected(res, err)
 }
 

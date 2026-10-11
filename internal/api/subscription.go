@@ -39,11 +39,15 @@ func (s *Server) endpoints(ctx context.Context, u *model.User) ([]sub.Endpoint, 
 	if err != nil {
 		return nil, err
 	}
+	groups, err := s.store.GroupMap(ctx)
+	if err != nil {
+		return nil, err
+	}
 	hosts := map[int64]string{}
 	for _, n := range nodes {
 		hosts[n.ID] = n.Address
 	}
-	return sub.Resolve(u, inbounds, hosts, s.cfg.DefaultHost), nil
+	return sub.Resolve(u, inbounds, groups, hosts, s.cfg.DefaultHost), nil
 }
 
 // isHapp reports whether the request comes from the Happ client.

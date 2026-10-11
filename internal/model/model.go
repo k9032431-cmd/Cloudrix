@@ -1,7 +1,10 @@
 // Package model holds the domain types shared by the store, API and core layers.
 package model
 
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 type Role string
 
@@ -73,7 +76,8 @@ type User struct {
 	ResetStrategy  ResetStrategy `json:"reset_strategy"`
 	LastResetAt    time.Time     `json:"last_reset_at"`
 	DeviceLimit    int           `json:"device_limit"` // 0 = unlimited
-	Inbounds       []string      `json:"inbounds"`     // inbound tags, empty = all enabled
+	GroupIDs       []int64       `json:"group_ids"`    // groups whose inbounds the user gets
+	Inbounds       []string      `json:"inbounds"`     // legacy, without groups: inbound tags, empty = all enabled
 	Note           string        `json:"note"`
 	AdminID        int64         `json:"admin_id"`
 	Credentials    Credentials   `json:"credentials"`
@@ -81,6 +85,33 @@ type User struct {
 	OnlineAt       *time.Time    `json:"online_at"`
 	SubUpdatedAt   *time.Time    `json:"sub_updated_at"`
 	SubUserAgent   string        `json:"sub_user_agent"`
+}
+
+// Group bundles inbounds; users get every inbound of their groups, so an
+// inbound added to a group reaches all its users on the next refresh.
+type Group struct {
+	ID         int64     `json:"id"`
+	Name       string    `json:"name"`
+	InboundIDs []int64   `json:"inbound_ids"`
+	Disabled   bool      `json:"disabled"`
+	Users      int       `json:"users"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+type Groups map[int64]*Group
+
+// Allows reports whether the user may use the inbound: through an enabled
+// group, or for users without groups through the legacy tag list.
+func (u *User) Allows(in *Inbound, groups Groups) bool {
+	if len(u.GroupIDs) > 0 {
+		for _, id := range u.GroupIDs {
+			if g := groups[id]; g != nil && !g.Disabled && slices.Contains(g.InboundIDs, in.ID) {
+				return true
+			}
+		}
+		return false
+	}
+	return len(u.Inbounds) == 0 || slices.Contains(u.Inbounds, in.Tag)
 }
 
 // Active reports whether the user should currently be allowed to connect.

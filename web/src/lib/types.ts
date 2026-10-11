@@ -26,6 +26,7 @@ export interface User {
   last_reset_at: string
   device_limit: number
   inbounds: string[]
+  group_ids: number[]
   note: string
   admin_id: number
   created_at: string
@@ -43,8 +44,18 @@ export interface UserInput {
   reset_strategy: ResetStrategy
   device_limit: number
   inbounds: string[]
+  group_ids: number[]
   note: string
   admin_id?: number
+}
+
+export interface Group {
+  id: number
+  name: string
+  inbound_ids: number[]
+  disabled: boolean
+  users: number
+  created_at: string
 }
 
 export type Protocol = 'vless' | 'vmess' | 'trojan' | 'shadowsocks' | 'hysteria2' | 'tuic' | 'wireguard'

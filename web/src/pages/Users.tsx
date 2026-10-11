@@ -10,7 +10,7 @@ import { useAuth } from '../lib/auth'
 import { daysLeft, formatBytes, relativeTime } from '../lib/format'
 import type { User, UserStatus } from '../lib/types'
 import { Button, Card, Confirm, Empty, ErrorNote, IconButton, Input, PageHeader, ProgressBar, Select, Table, Td, Th, cx } from '../components/ui'
-import { UserStatusBadge } from '../components/StatusBadge'
+import { UserPresenceBadge, isOnline } from '../components/StatusBadge'
 import UserForm from './users/UserForm'
 import UserDetails from './users/UserDetails'
 
@@ -199,7 +199,7 @@ export default function UsersPage() {
                       </div>
                     </Td>
                     <Td>
-                      <UserStatusBadge status={u.status} />
+                      <UserPresenceBadge user={u} />
                     </Td>
                     <Td>
                       <div className="mb-1.5 flex justify-between gap-2 text-xs tabular-nums text-muted-foreground">
@@ -221,7 +221,7 @@ export default function UsersPage() {
                     </Td>
                     <Td className="whitespace-nowrap text-muted-foreground">
                       <OnlineDot iso={u.online_at} />
-                      {relativeTime(u.online_at, lang)}
+                      {isOnline(u.online_at) ? t('presence.now') : relativeTime(u.online_at, lang)}
                     </Td>
                     <Td>
                       <IconButton
@@ -299,6 +299,6 @@ export default function UsersPage() {
 }
 
 function OnlineDot({ iso }: { iso: string | null }) {
-  const online = iso && Date.now() - new Date(iso).getTime() < 2 * 60_000
+  const online = isOnline(iso)
   return <span className={cx('mr-2 inline-block h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-border-strong')} />
 }

@@ -379,22 +379,13 @@ func TestInboundSyncsUserLists(t *testing.T) {
 	}
 	var a model.Inbound
 	e.do("POST", "/api/inbounds", root, ib("a"), &a)
-	var picked, all model.User
-	e.do("POST", "/api/users", root, userInput{Username: "picked", Inbounds: []string{"a"}}, &picked)
-	e.do("POST", "/api/users", root, userInput{Username: "all"}, &all)
+	e.do("POST", "/api/inbounds", root, ib("b"), nil)
+	var picked model.User
+	e.do("POST", "/api/users", root, userInput{Username: "picked", Inbounds: []string{"a", "b"}}, &picked)
 	tags := func(id int64) []string {
 		var u model.User
 		e.do("GET", fmt.Sprintf("/api/users/%d", id), root, nil, &u)
 		return u.Inbounds
-	}
-
-	e.do("POST", "/api/inbounds?add_to_users=1", root, ib("b"), nil)
-	e.do("POST", "/api/inbounds", root, ib("c"), nil)
-	if got := tags(picked.ID); !slices.Equal(got, []string{"a", "b"}) {
-		t.Fatalf("after create: %v", got)
-	}
-	if got := tags(all.ID); len(got) != 0 {
-		t.Fatalf("all-inbounds user changed: %v", got)
 	}
 
 	a.Tag = "a2"
@@ -405,5 +396,58 @@ func TestInboundSyncsUserLists(t *testing.T) {
 	e.do("DELETE", fmt.Sprintf("/api/inbounds/%d", a.ID), root, nil, nil)
 	if got := tags(picked.ID); !slices.Equal(got, []string{"b"}) {
 		t.Fatalf("after delete: %v", got)
+	}
+}
+
+func TestGroups(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	var groups []model.Group
+	e.do("GET", "/api/groups", root, nil, &groups)
+	if len(groups) != 1 || groups[0].Name != "Default" {
+		t.Fatalf("default group: %+v", groups)
+	}
+	def := groups[0].ID
+	ib := func(tag string) model.Inbound {
+		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
+	}
+	e.do("POST", fmt.Sprintf("/api/inbounds?groups=%d", def), root, ib("one"), nil)
+	var vip model.Group
+	if r := e.do("POST", "/api/groups", root, groupInput{Name: "VIP"}, &vip); r.StatusCode != 201 {
+		t.Fatalf("create group: %d", r.StatusCode)
+	}
+	var u model.User
+	e.do("POST", "/api/users", root, userInput{Username: "grp", GroupIDs: []int64{def}}, &u)
+	links := func() string {
+		res, err := http.Get(e.srv.URL + "/sub/" + u.SubToken + "?format=links")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		b, _ := io.ReadAll(res.Body)
+		return string(b)
+	}
+	if got := links(); !strings.Contains(got, "#one") {
+		t.Fatalf("group inbound missing: %q", got)
+	}
+
+	// A new inbound added to the group reaches its users; one outside does not.
+	e.do("POST", fmt.Sprintf("/api/inbounds?groups=%d", def), root, ib("two"), nil)
+	e.do("POST", fmt.Sprintf("/api/inbounds?groups=%d", vip.ID), root, ib("vip"), nil)
+	got := links()
+	if !strings.Contains(got, "#two") || strings.Contains(got, "#vip") {
+		t.Fatalf("after adding inbounds: %q", got)
+	}
+
+	// Disabled group: no keys. Groups with users cannot be deleted.
+	e.do("PUT", fmt.Sprintf("/api/groups/%d", def), root, groupInput{Name: "Default", Disabled: true}, nil)
+	if got := links(); strings.Contains(got, "#one") {
+		t.Fatalf("disabled group still served: %q", got)
+	}
+	if r := e.do("DELETE", fmt.Sprintf("/api/groups/%d", def), root, nil, nil); r.StatusCode != 409 {
+		t.Fatalf("delete group with users: %d", r.StatusCode)
+	}
+	if r := e.do("DELETE", fmt.Sprintf("/api/groups/%d", vip.ID), root, nil, nil); r.StatusCode != 204 {
+		t.Fatalf("delete empty group: %d", r.StatusCode)
 	}
 }

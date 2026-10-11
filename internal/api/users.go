@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
@@ -26,6 +27,7 @@ type userInput struct {
 	ResetStrategy  model.ResetStrategy `json:"reset_strategy"`
 	DeviceLimit    int                 `json:"device_limit"`
 	Inbounds       []string            `json:"inbounds"`
+	GroupIDs       []int64             `json:"group_ids"`
 	Note           string              `json:"note"`
 	AdminID        *int64              `json:"admin_id"`
 }
@@ -59,6 +61,20 @@ func (s *Server) validateUserInput(ctx context.Context, in *userInput) error {
 	if len(in.Note) > 500 {
 		return errors.New("note is too long")
 	}
+	if len(in.GroupIDs) > 0 {
+		groups, err := s.store.GroupMap(ctx)
+		if err != nil {
+			return err
+		}
+		for _, id := range in.GroupIDs {
+			if groups[id] == nil {
+				return fmt.Errorf("unknown group %d", id)
+			}
+		}
+		slices.Sort(in.GroupIDs)
+		in.GroupIDs = slices.Compact(in.GroupIDs)
+		in.Inbounds = nil // groups replace the legacy inbound list
+	}
 	if len(in.Inbounds) > 0 {
 		all, err := s.store.ListInbounds(ctx)
 		if err != nil {
@@ -86,6 +102,7 @@ func applyInput(u *model.User, in *userInput) {
 	u.ResetStrategy = in.ResetStrategy
 	u.DeviceLimit = in.DeviceLimit
 	u.Inbounds = in.Inbounds
+	u.GroupIDs = in.GroupIDs
 	u.Note = in.Note
 }
 

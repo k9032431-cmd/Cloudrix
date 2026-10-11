@@ -42,7 +42,7 @@ func allInbounds() []*model.Inbound {
 
 func TestLinksCoverEveryProtocol(t *testing.T) {
 	u := testUser()
-	eps := Resolve(u, allInbounds(), nil, "vpn.example.com")
+	eps := Resolve(u, allInbounds(), nil, nil, "vpn.example.com")
 	if len(eps) != 7 {
 		t.Fatalf("expected 7 endpoints (disabled skipped), got %d", len(eps))
 	}
@@ -93,7 +93,7 @@ func TestLinksCoverEveryProtocol(t *testing.T) {
 func TestUserInboundFilter(t *testing.T) {
 	u := testUser()
 	u.Inbounds = []string{"hy2"}
-	eps := Resolve(u, allInbounds(), nil, "h")
+	eps := Resolve(u, allInbounds(), nil, nil, "h")
 	if len(eps) != 1 || eps[0].Inbound.Tag != "hy2" {
 		t.Fatalf("expected only hy2, got %v", eps)
 	}
@@ -101,7 +101,7 @@ func TestUserInboundFilter(t *testing.T) {
 
 func TestClashAndSingBoxRender(t *testing.T) {
 	u := testUser()
-	eps := Resolve(u, allInbounds(), nil, "vpn.example.com")
+	eps := Resolve(u, allInbounds(), nil, nil, "vpn.example.com")
 
 	body, err := Clash(u, eps)
 	if err != nil {
