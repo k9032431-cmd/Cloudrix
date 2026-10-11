@@ -197,13 +197,35 @@ detect_arch() {
   esac
 }
 
+# wait_apt_lock: на свежем сервере Ubuntu часто сама ставит обновления
+# (unattended-upgrades) и держит блокировку apt. Ждём и показываем, кого ждём.
+wait_apt_lock() {
+  command -v fuser >/dev/null || return 0
+  local waited=0
+  while fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock >/dev/null 2>&1; do
+    if ((waited == 0)); then
+      info "Ubuntu сейчас сама устанавливает обновления (apt занят) — жду, обычно 1–10 минут"
+    fi
+    if ((waited >= 900)); then
+      die "apt занят уже 15 минут. Проверьте: ps aux | grep -E 'apt|dpkg'"
+    fi
+    printf '  ⏳ %s' "$(elapsed "$waited")"
+    sleep 15
+    waited=$((waited + 15))
+  done
+  ((waited)) && echo
+  return 0
+}
+
 install_packages() {
   local pkgs=("$@")
   case $PKG in
     apt)
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get update -qq
-      apt-get install -y -qq "${pkgs[@]}" >/dev/null
+      # needrestart на Ubuntu 22.04+ иначе молча ждёт ответа на невидимый вопрос
+      export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1
+      wait_apt_lock
+      apt-get -o DPkg::Lock::Timeout=600 update -qq
+      apt-get -o DPkg::Lock::Timeout=600 install -y -qq "${pkgs[@]}" >/dev/null
       ;;
     dnf) dnf install -y -q "${pkgs[@]}" >/dev/null ;;
     yum) yum install -y -q "${pkgs[@]}" >/dev/null ;;
