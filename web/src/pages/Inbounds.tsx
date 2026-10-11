@@ -21,6 +21,22 @@ const PRESETS: Record<Protocol, Partial<Inbound>> = {
   wireguard: { port: 51820, settings: { wg_network: '10.8.0.0/16', wg_dns: '1.1.1.1', mtu: 1420 } },
 }
 
+// Inbounds sharing a port on one node (same TCP or UDP socket) make the core
+// refuse the node's whole config; the panel now rejects them, older ones are flagged.
+const TCP: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
+const sharesTransport = (a: Protocol, b: Protocol) => {
+  const udp = (p: Protocol) => !TCP.includes(p) || p === 'shadowsocks'
+  return (TCP.includes(a) && TCP.includes(b)) || (udp(a) && udp(b))
+}
+function portClashes(list: Inbound[]): Map<number, string> {
+  const out = new Map<number, string>()
+  for (const a of list)
+    for (const b of list)
+      if (a.id !== b.id && a.enabled && b.enabled && a.node_id != null && a.node_id === b.node_id && a.port === b.port && sharesTransport(a.protocol, b.protocol))
+        out.set(a.id, b.tag)
+  return out
+}
+
 const blank = (p: Protocol): Inbound => ({
   id: 0,
   tag: `${p}-${Math.random().toString(36).slice(2, 6)}`,
@@ -37,6 +53,7 @@ const blank = (p: Protocol): Inbound => ({
 export default function Inbounds() {
   const { t } = useI18n()
   const { data, error, reload } = useFetch<Inbound[]>('/api/inbounds')
+  const clash = portClashes(data ?? [])
   const { data: nodes } = useFetch<Node[]>('/api/nodes')
   const { data: groups, reload: reloadGroups } = useFetch<Group[]>('/api/groups')
   const [editing, setEditing] = useState<Inbound | null>(null)
@@ -96,7 +113,14 @@ export default function Inbounds() {
                   <Td>
                     <Badge tone="blue">{ib.protocol}</Badge>
                   </Td>
-                  <Td className="tabular-nums">{ib.port}</Td>
+                  <Td className="tabular-nums">
+                    {ib.port}
+                    {clash.get(ib.id) && (
+                      <span className="ml-1.5" title={t('inbounds.portClashHint', { tag: clash.get(ib.id)! })}>
+                        <Badge tone="red">{t('inbounds.portClash')}</Badge>
+                      </span>
+                    )}
+                  </Td>
                   <Td className="text-muted-foreground">
                     {XRAY.includes(ib.protocol) && ib.protocol !== 'shadowsocks'
                       ? `${ib.settings.network || 'tcp'} / ${ib.settings.security || 'none'}`

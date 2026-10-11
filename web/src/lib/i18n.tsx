@@ -390,6 +390,8 @@ const ru = {
   'inbounds.exitHint': 'Клиенты подключаются к ноде инбаунда, а в интернет трафик выходит через выбранную ноду. Ноды связываются по VLESS + Reality. Если нода выхода отключена, трафик блокируется, а не уходит напрямую.',
   'nodes.bridgePort': 'Порт каскада',
   'nodes.bridgePortHint': 'На этот порт подключаются другие ноды, если выходят через эту. 0 — выбрать автоматически.',
+  'inbounds.portClash': 'порт занят',
+  'inbounds.portClashHint': 'Этот порт на ноде уже у инбаунда {tag}. Из-за этого ядро не запускает конфиг ноды целиком — смените порт у одного из них.',
 }
 
 type Key = keyof typeof ru
@@ -782,6 +784,8 @@ const en: Record<Key, string> = {
   'inbounds.exitHint': 'Clients connect to the inbound\'s node; traffic reaches the internet through the chosen node. Nodes talk over VLESS + Reality. If the exit node is disabled, traffic is blocked rather than sent out directly.',
   'nodes.bridgePort': 'Cascade port',
   'nodes.bridgePortHint': 'Other nodes connect here when they exit through this one. 0 picks one automatically.',
+  'inbounds.portClash': 'port in use',
+  'inbounds.portClashHint': 'Inbound {tag} already uses this port on the node, so the core refuses the node\'s whole config — change the port of one of them.',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

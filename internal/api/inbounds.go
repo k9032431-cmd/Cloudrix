@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"slices"
@@ -89,6 +90,18 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		writeError(w, http.StatusBadRequest, "node not found")
 		return false
 	}
+	others, err := s.store.ListInbounds(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return false
+	}
+	for _, o := range others {
+		if o.ID != in.ID && o.NodeID != nil && *o.NodeID == *in.NodeID && o.Port == in.Port && sharesTransport(o.Protocol, in.Protocol) {
+			// one busy port makes the core refuse the node's whole config
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by inbound %s", in.Port, o.Tag))
+			return false
+		}
+	}
 	if node.Bridge.UUID != "" && node.Bridge.Port == in.Port {
 		writeError(w, http.StatusBadRequest, "this port carries the node's cascade link: pick another port or change it in the node settings")
 		return false
@@ -108,6 +121,16 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		}
 	}
 	return true
+}
+
+// sharesTransport reports whether two protocols would listen on the same
+// TCP or UDP socket of a port (hysteria2 on UDP 443 can sit next to VLESS on TCP 443).
+func sharesTransport(a, b model.Protocol) bool {
+	tcp := func(p model.Protocol) bool {
+		return p == model.ProtoVLESS || p == model.ProtoVMess || p == model.ProtoTrojan || p == model.ProtoShadowsocks
+	}
+	udp := func(p model.Protocol) bool { return !tcp(p) || p == model.ProtoShadowsocks }
+	return (tcp(a) && tcp(b)) || (udp(a) && udp(b))
 }
 
 func (s *Server) handleListInbounds(w http.ResponseWriter, r *http.Request) {

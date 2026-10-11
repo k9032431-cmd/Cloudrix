@@ -374,8 +374,10 @@ func TestSubscriptionProtection(t *testing.T) {
 func TestInboundSyncsUserLists(t *testing.T) {
 	e := newEnv(t)
 	root := e.login("root", "supersecret")
+	port := 440
 	ib := func(tag string) model.Inbound {
-		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
+		port++
+		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: port, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
 	}
 	var a model.Inbound
 	e.do("POST", "/api/inbounds", root, ib("a"), &a)
@@ -408,8 +410,10 @@ func TestGroups(t *testing.T) {
 		t.Fatalf("default group: %+v", groups)
 	}
 	def := groups[0].ID
+	port := 440
 	ib := func(tag string) model.Inbound {
-		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
+		port++
+		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: port, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
 	}
 	e.do("POST", fmt.Sprintf("/api/inbounds?groups=%d", def), root, ib("one"), nil)
 	var vip model.Group
@@ -463,5 +467,26 @@ func TestInboundAddressValidated(t *testing.T) {
 	in.Address = " 77.42.11.42 "
 	if r := e.do("POST", "/api/inbounds", root, in, nil); r.StatusCode != 201 {
 		t.Fatalf("ip address: %d", r.StatusCode)
+	}
+}
+
+func TestInboundPortConflict(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	mk := func(tag string, p model.Protocol, port int) model.Inbound {
+		return model.Inbound{Tag: tag, Protocol: p, Port: port, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls", SSMethod: "chacha20-ietf-poly1305"}}
+	}
+	var a model.Inbound
+	if r := e.do("POST", "/api/inbounds", root, mk("a", model.ProtoTrojan, 443), &a); r.StatusCode != 201 {
+		t.Fatalf("first: %d", r.StatusCode)
+	}
+	if r := e.do("POST", "/api/inbounds", root, mk("b", model.ProtoShadowsocks, 443), nil); r.StatusCode != 400 {
+		t.Fatalf("same TCP port: %d", r.StatusCode)
+	}
+	if r := e.do("POST", "/api/inbounds", root, mk("hy", model.ProtoHysteria2, 443), nil); r.StatusCode != 201 {
+		t.Fatalf("hysteria2 on UDP next to TCP: %d", r.StatusCode)
+	}
+	if r := e.do("PUT", fmt.Sprintf("/api/inbounds/%d", a.ID), root, mk("a", model.ProtoTrojan, 443), nil); r.StatusCode != 200 {
+		t.Fatalf("saving itself: %d", r.StatusCode)
 	}
 }
