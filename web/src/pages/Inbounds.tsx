@@ -172,6 +172,7 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
   const set = <K extends keyof Inbound>(k: K, v: Inbound[K]) => setIb((x) => ({ ...x, [k]: v }))
   const setS = (patch: InboundSettings) => setIb((x) => ({ ...x, settings: { ...x.settings, ...patch } }))
   const isNew = ib.id === 0
+  const [addToUsers, setAddToUsers] = useState(true)
   const streamProto = ['vless', 'vmess', 'trojan'].includes(ib.protocol)
   const needsCert = ib.protocol === 'hysteria2' || ib.protocol === 'tuic' || s.security === 'tls'
 
@@ -180,7 +181,7 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
     setBusy(true)
     setError(null)
     try {
-      if (isNew) await post('/api/inbounds', ib)
+      if (isNew) await post(`/api/inbounds${addToUsers ? '?add_to_users=1' : ''}`, ib)
       else await put(`/api/inbounds/${ib.id}`, ib)
       onSaved()
     } catch (err) {
@@ -485,6 +486,12 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
         )}
 
         <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
+        {isNew && (
+          <div>
+            <Toggle checked={addToUsers} onChange={setAddToUsers} label={t('inbounds.addToUsers')} />
+            <p className="hint mt-1 pl-12">{t('inbounds.addToUsersHint')}</p>
+          </div>
+        )}
       </form>
     </Modal>
   )

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
@@ -125,6 +126,16 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "inbound.create", in.Tag, string(in.Protocol))
+	// Users with a hand-picked inbound list would not see the new inbound
+	// otherwise ("all inbounds" users get it anyway).
+	if r.URL.Query().Get("add_to_users") == "1" {
+		s.editUserInbounds(r, func(tags []string) ([]string, bool) {
+			if slices.Contains(tags, in.Tag) {
+				return nil, false
+			}
+			return append(tags, in.Tag), true
+		})
+	}
 	s.usersChanged()
 	writeJSON(w, http.StatusCreated, in)
 }
@@ -146,13 +157,34 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	if !s.checkInboundNode(w, r, &in) {
 		return
 	}
+	old, err := s.store.GetInbound(r.Context(), id)
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
 	if err := s.store.UpdateInbound(r.Context(), &in); err != nil {
 		s.writeStoreError(w, err)
 		return
 	}
+	if old.Tag != in.Tag { // keep users that picked this inbound on it
+		s.editUserInbounds(r, func(tags []string) ([]string, bool) {
+			i := slices.Index(tags, old.Tag)
+			if i < 0 {
+				return nil, false
+			}
+			tags[i] = in.Tag
+			return slices.Compact(tags), true
+		})
+	}
 	s.audit(r, "inbound.update", in.Tag, "")
 	s.usersChanged()
 	writeJSON(w, http.StatusOK, in)
+}
+
+func (s *Server) editUserInbounds(r *http.Request, edit func([]string) ([]string, bool)) {
+	if _, err := s.store.EditUserInbounds(r.Context(), edit); err != nil {
+		s.log.Warn("update user inbounds", "err", err)
+	}
 }
 
 func (s *Server) handleDeleteInbound(w http.ResponseWriter, r *http.Request) {
@@ -170,6 +202,15 @@ func (s *Server) handleDeleteInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.audit(r, "inbound.delete", in.Tag, "")
+	// Drop the tag from hand-picked lists, unless it was the only one:
+	// an empty list would mean "all inbounds".
+	s.editUserInbounds(r, func(tags []string) ([]string, bool) {
+		i := slices.Index(tags, in.Tag)
+		if i < 0 || len(tags) == 1 {
+			return nil, false
+		}
+		return slices.Delete(tags, i, i+1), true
+	})
 	s.usersChanged()
 	w.WriteHeader(http.StatusNoContent)
 }

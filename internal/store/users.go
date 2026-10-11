@@ -341,3 +341,49 @@ func escapeLike(s string) string {
 	r := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 	return r.Replace(s)
 }
+
+// EditUserInbounds rewrites the inbound list of every user that picked
+// inbounds by hand (an empty list means "all" and is left alone).
+// edit returns the new list and whether it changed.
+func (s *Store) EditUserInbounds(ctx context.Context, edit func([]string) ([]string, bool)) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id, inbounds FROM users WHERE inbounds NOT IN ('', '[]', 'null')`)
+	if err != nil {
+		return 0, err
+	}
+	type change struct {
+		id   int64
+		tags []string
+	}
+	var changes []change
+	for rows.Next() {
+		var id int64
+		var raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		var tags []string
+		if json.Unmarshal([]byte(raw), &tags) != nil || len(tags) == 0 {
+			continue
+		}
+		if next, ok := edit(tags); ok {
+			changes = append(changes, change{id, next})
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
+	for _, c := range changes {
+		raw, _ := json.Marshal(c.tags)
+		if _, err := tx.ExecContext(ctx, `UPDATE users SET inbounds = ? WHERE id = ?`, string(raw), c.id); err != nil {
+			return 0, err
+		}
+	}
+	return len(changes), tx.Commit()
+}

@@ -168,6 +168,16 @@ export default function UserForm({
 
         <Field label={t('users.inbounds')} hint={t('users.inboundsHint')}>
           <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => set('inbounds', [])}
+              className={cx(
+                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors',
+                form.inbounds.length === 0 ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60',
+              )}
+            >
+              {t('users.allInbounds')}
+            </button>
             {(inbounds ?? []).map((ib) => {
               const on = form.inbounds.includes(ib.tag)
               return (

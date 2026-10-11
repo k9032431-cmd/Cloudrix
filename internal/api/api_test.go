@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -366,5 +368,42 @@ func TestSubscriptionProtection(t *testing.T) {
 	var link map[string]string
 	if r := e.do("GET", "/api/users/"+itoa(u.ID)+"/happ-link", root, nil, &link); r.StatusCode != 200 || !strings.HasPrefix(link["link"], "happ://crypt") {
 		t.Fatalf("happ link: %d %v", r.StatusCode, link)
+	}
+}
+
+func TestInboundSyncsUserLists(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	ib := func(tag string) model.Inbound {
+		return model.Inbound{Tag: tag, Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}
+	}
+	var a model.Inbound
+	e.do("POST", "/api/inbounds", root, ib("a"), &a)
+	var picked, all model.User
+	e.do("POST", "/api/users", root, userInput{Username: "picked", Inbounds: []string{"a"}}, &picked)
+	e.do("POST", "/api/users", root, userInput{Username: "all"}, &all)
+	tags := func(id int64) []string {
+		var u model.User
+		e.do("GET", fmt.Sprintf("/api/users/%d", id), root, nil, &u)
+		return u.Inbounds
+	}
+
+	e.do("POST", "/api/inbounds?add_to_users=1", root, ib("b"), nil)
+	e.do("POST", "/api/inbounds", root, ib("c"), nil)
+	if got := tags(picked.ID); !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("after create: %v", got)
+	}
+	if got := tags(all.ID); len(got) != 0 {
+		t.Fatalf("all-inbounds user changed: %v", got)
+	}
+
+	a.Tag = "a2"
+	e.do("PUT", fmt.Sprintf("/api/inbounds/%d", a.ID), root, a, nil)
+	if got := tags(picked.ID); !slices.Equal(got, []string{"a2", "b"}) {
+		t.Fatalf("after rename: %v", got)
+	}
+	e.do("DELETE", fmt.Sprintf("/api/inbounds/%d", a.ID), root, nil, nil)
+	if got := tags(picked.ID); !slices.Equal(got, []string{"b"}) {
+		t.Fatalf("after delete: %v", got)
 	}
 }
