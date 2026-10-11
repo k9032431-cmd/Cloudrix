@@ -51,8 +51,12 @@ func validateInbound(in *model.Inbound) error {
 	}
 	switch in.Protocol {
 	case model.ProtoHysteria2, model.ProtoTUIC:
-		if s.CertFile == "" || s.KeyFile == "" {
-			return errors.New(string(in.Protocol) + " requires cert_file and key_file")
+		if (s.CertFile == "") != (s.KeyFile == "") {
+			return errors.New(string(in.Protocol) + " needs both cert_file and key_file, or neither")
+		}
+		if s.CertFile == "" {
+			// the node uses a self-signed certificate, so clients must not verify it
+			s.AllowInsecure = true
 		}
 	case model.ProtoWireGuard:
 		if s.WGPrivateKey == "" || s.WGPublicKey == "" {
@@ -64,6 +68,20 @@ func validateInbound(in *model.Inbound) error {
 		}
 	}
 	return nil
+}
+
+// checkInboundNode requires an existing node: the panel itself never serves
+// proxy traffic, so an inbound without a node would hand out dead links.
+func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *model.Inbound) bool {
+	if in.NodeID == nil {
+		writeError(w, http.StatusBadRequest, "choose the node that serves this inbound")
+		return false
+	}
+	if _, err := s.store.GetNode(r.Context(), *in.NodeID); err != nil {
+		writeError(w, http.StatusBadRequest, "node not found")
+		return false
+	}
+	return true
 }
 
 func (s *Server) handleListInbounds(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +117,9 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	if !s.checkInboundNode(w, r, &in) {
+		return
+	}
 	if err := s.store.CreateInbound(r.Context(), &in); err != nil {
 		s.writeStoreError(w, err)
 		return
@@ -120,6 +141,9 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	in.ID = id
 	if err := validateInbound(&in); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !s.checkInboundNode(w, r, &in) {
 		return
 	}
 	if err := s.store.UpdateInbound(r.Context(), &in); err != nil {

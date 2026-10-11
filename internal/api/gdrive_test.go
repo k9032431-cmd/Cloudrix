@@ -161,7 +161,7 @@ func TestGoogleDriveSubscriptions(t *testing.T) {
 	e.api.drive.client = gdrive.New(gdrive.Endpoints{OAuth: gs.URL + "/oauth", Drive: gs.URL + "/drive/v3", Upload: gs.URL + "/upload/drive/v3"})
 
 	root := e.login("root", "supersecret")
-	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Remark: "{USERNAME}", Settings: model.InboundSettings{Security: "tls"}}, nil)
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Remark: "{USERNAME}", Settings: model.InboundSettings{Security: "tls"}}, nil)
 	var u model.User
 	e.do("POST", "/api/users", root, userInput{Username: "alice"}, &u)
 
@@ -297,7 +297,7 @@ func TestDriveSyncSpeed(t *testing.T) {
 	go e.api.drive.run(ctx)
 
 	root := e.login("root", "supersecret")
-	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
 	e.do("PUT", "/api/settings/gdrive", root, map[string]any{"enabled": true, "api_key": g.apiKey, "client_id": "cid", "client_secret": "secret", "format": "plain", "interval_minutes": 60}, nil)
 	if err := e.api.drive.update(ctx, func(s *driveSettings) { s.RefreshToken = "refresh-1" }); err != nil {
 		t.Fatal(err)

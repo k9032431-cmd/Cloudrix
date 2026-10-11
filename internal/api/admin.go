@@ -2,12 +2,14 @@ package api
 
 import (
 	"net/http"
+	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/model"
+	"github.com/k9032431-cmd/cloudrix/internal/nodeproto"
 )
 
 type adminInput struct {
@@ -117,13 +119,19 @@ type nodeInput struct {
 	Disabled         bool    `json:"disabled"`
 }
 
+// valid normalises the input. Address is the node's public IP or domain that
+// goes into client links; the agent dials the panel, so no API port is needed.
 func (in *nodeInput) valid() bool {
 	in.Name, in.Address = strings.TrimSpace(in.Name), strings.TrimSpace(in.Address)
 	if in.UsageCoefficient == 0 {
 		in.UsageCoefficient = 1
 	}
-	return in.Name != "" && len(in.Name) <= 64 && in.Address != "" && in.APIPort > 0 && in.APIPort < 65536 && in.UsageCoefficient > 0
+	return in.Name != "" && len(in.Name) <= 64 && hostRe.MatchString(in.Address) &&
+		in.APIPort >= 0 && in.APIPort < 65536 && in.UsageCoefficient > 0 && in.UsageCoefficient <= 100
 }
+
+// hostRe accepts an IPv4/IPv6 address or a domain name, without scheme or port.
+var hostRe = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)*[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$|^[0-9a-fA-F:]+$`)
 
 func (s *Server) handleListNodes(w http.ResponseWriter, r *http.Request) {
 	nodes, err := s.store.ListNodes(r.Context())
@@ -140,10 +148,10 @@ func (s *Server) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !in.valid() {
-		writeError(w, http.StatusBadRequest, "name, address and api_port are required")
+		writeError(w, http.StatusBadRequest, "name and a public IP or domain are required")
 		return
 	}
-	n := &model.Node{Name: in.Name, Address: in.Address, APIPort: in.APIPort, UsageCoefficient: in.UsageCoefficient, Status: model.NodeConnecting}
+	n := &model.Node{Name: in.Name, Address: in.Address, APIPort: in.APIPort, UsageCoefficient: in.UsageCoefficient, Status: model.NodeConnecting, Secret: nodeproto.NewSecret()}
 	if in.Disabled {
 		n.Status = model.NodeDisabled
 	}
@@ -165,7 +173,7 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !in.valid() {
-		writeError(w, http.StatusBadRequest, "name, address and api_port are required")
+		writeError(w, http.StatusBadRequest, "name and a public IP or domain are required")
 		return
 	}
 	n, err := s.store.GetNode(r.Context(), id)

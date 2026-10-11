@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { Code2, Pencil, Plus, Trash2, Wand2 } from '../components/icons'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
@@ -51,7 +52,7 @@ export default function Inbounds() {
               <Code2 className="h-4 w-4" />
               {t('inbounds.preview')}
             </Button>
-            <Button onClick={() => setEditing(blank('vless'))}>
+            <Button onClick={() => setEditing({ ...blank('vless'), node_id: nodes?.[0]?.id ?? null })}>
               <Plus className="h-4 w-4" />
               {t('inbounds.new')}
             </Button>
@@ -59,6 +60,15 @@ export default function Inbounds() {
         }
       />
       <ErrorNote error={error} />
+      {nodes?.length === 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-warning/10 px-3 py-2.5 text-[13px] text-foreground ring-1 ring-inset ring-warning/20">
+          <span className="flex-1">{t('inbounds.needNodes')}</span>
+          <Link to="/nodes" className="btn btn-outline btn-sm">
+            <Plus />
+            {t('inbounds.addNode')}
+          </Link>
+        </div>
+      )}
       <Card>
         {data?.length === 0 ? (
           <Empty />
@@ -93,7 +103,13 @@ export default function Inbounds() {
                         ? ib.settings.ss_method
                         : 'udp'}
                   </Td>
-                  <Td className="text-muted-foreground">{nodes?.find((n) => n.id === ib.node_id)?.name ?? t('inbounds.local')}</Td>
+                  <Td className="text-muted-foreground">
+                    {nodes?.find((n) => n.id === ib.node_id)?.name ?? (
+                      <span title={t('inbounds.noNodeHint')}>
+                        <Badge tone="red">{t('inbounds.noNode')}</Badge>
+                      </span>
+                    )}
+                  </Td>
                   <Td>
                     <Badge tone={coreOf(ib.protocol) === 'xray' ? 'gray' : 'violet'}>{coreOf(ib.protocol)}</Badge>
                   </Td>
@@ -236,8 +252,10 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
             <Input type="number" min={1} max={65535} value={ib.port} onChange={(e) => set('port', Number(e.target.value))} required />
           </Field>
           <Field label={t('inbounds.node')}>
-            <Select value={ib.node_id ?? ''} onChange={(e) => set('node_id', e.target.value ? Number(e.target.value) : null)}>
-              <option value="">{t('inbounds.local')}</option>
+            <Select value={ib.node_id ?? ''} onChange={(e) => set('node_id', e.target.value ? Number(e.target.value) : null)} required aria-invalid={!ib.node_id}>
+              <option value="" disabled>
+                {t('inbounds.local')}
+              </option>
               {nodes.map((n) => (
                 <option key={n.id} value={n.id}>
                   {n.name}
@@ -430,6 +448,7 @@ function InboundForm({ initial, nodes, onClose, onSaved }: { initial: Inbound; n
 
         {needsCert && (
           <Section title="Certificate">
+            <p className="hint sm:col-span-2">{t('inbounds.certHint')}</p>
             <Field label="Cert file">
               <Input value={s.cert_file ?? ''} onChange={(e) => setS({ cert_file: e.target.value })} placeholder="/etc/cloudrix/certs/fullchain.pem" />
             </Field>
@@ -483,7 +502,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function CorePreview({ nodes, onClose }: { nodes: Node[]; onClose: () => void }) {
   const { t } = useI18n()
   const [core, setCore] = useState<'xray' | 'sing-box'>('xray')
-  const [node, setNode] = useState('')
+  const [node, setNode] = useState(nodes[0] ? String(nodes[0].id) : '')
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const load = async (c = core, n = node) => {
@@ -523,7 +542,6 @@ function CorePreview({ nodes, onClose }: { nodes: Node[]; onClose: () => void })
             load(core, e.target.value)
           }}
         >
-          <option value="">{t('inbounds.local')}</option>
           {nodes.map((n) => (
             <option key={n.id} value={n.id}>
               {n.name}

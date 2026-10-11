@@ -30,6 +30,7 @@ type Server struct {
 	drive   *driveSyncer
 	brandMu sync.RWMutex
 	brand   branding
+	nodes   *nodeHub
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }
@@ -39,6 +40,7 @@ func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logg
 		cfg: cfg, store: st, issuer: issuer, log: log, web: web,
 		limiter: newLoginLimiter(5, 5*time.Minute),
 		started: time.Now(),
+		nodes:   newNodeHub(),
 	}
 	s.drive = newDriveSyncer(s, gdrive.Google)
 	s.brand = s.defaultBranding()
@@ -54,6 +56,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	go s.drive.run(ctx)
+	go s.watchNodes(ctx)
 	s.drive.Trigger()
 	return nil
 }
@@ -74,6 +77,8 @@ func (s *Server) Handler() http.Handler {
 
 	r.Route("/api", func(r chi.Router) {
 		r.Post("/auth/login", s.handleLogin)
+		// node agents authenticate with their own signed requests
+		r.Post("/node/v1/sync", s.handleNodeSync)
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.authenticate)
@@ -114,6 +119,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/nodes", s.handleCreateNode)
 				r.Put("/nodes/{id}", s.handleUpdateNode)
 				r.Delete("/nodes/{id}", s.handleDeleteNode)
+				r.Get("/nodes/{id}/install", s.handleNodeInstall)
+				r.Post("/nodes/{id}/rotate", s.handleNodeRotate)
 
 				r.Get("/settings/subscription", s.handleGetBranding)
 				r.Put("/settings/subscription", s.handleUpdateBranding)
@@ -217,6 +224,7 @@ func (s *Server) usersChanged(ids ...int64) {
 	} else {
 		s.drive.Trigger()
 	}
+	s.nodes.bump()
 	if s.OnUsersChanged != nil {
 		s.OnUsersChanged()
 	}

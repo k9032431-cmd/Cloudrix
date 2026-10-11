@@ -22,7 +22,8 @@ func testUser() *model.User {
 }
 
 func allInbounds() []*model.Inbound {
-	return []*model.Inbound{
+	node := int64(1)
+	list := []*model.Inbound{
 		{Tag: "vless-reality", Protocol: model.ProtoVLESS, Port: 443, Enabled: true, Remark: "{USERNAME} {DATA_LEFT}", Settings: model.InboundSettings{
 			Security: "reality", Flow: "xtls-rprx-vision", RealityPublicKey: "PBK", RealityShortIDs: []string{"abcd"}, RealityServerNames: []string{"www.example.com"}, RealityDest: "www.example.com:443", RealityPrivateKey: "PK"}},
 		{Tag: "vmess-ws", Protocol: model.ProtoVMess, Port: 8080, Enabled: true, Settings: model.InboundSettings{Network: "ws", Path: "/ws", Host: "cdn.example.com", Security: "tls", SNI: "cdn.example.com"}},
@@ -33,6 +34,10 @@ func allInbounds() []*model.Inbound {
 		{Tag: "wg", Protocol: model.ProtoWireGuard, Port: 51820, Enabled: true, Settings: model.InboundSettings{WGPublicKey: "U0VSVkVS", WGNetwork: "10.9.0.0/24"}},
 		{Tag: "disabled", Protocol: model.ProtoVLESS, Port: 1, Enabled: false},
 	}
+	for _, in := range list {
+		in.NodeID = &node
+	}
+	return list
 }
 
 func TestLinksCoverEveryProtocol(t *testing.T) {

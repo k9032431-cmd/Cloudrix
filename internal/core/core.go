@@ -11,6 +11,13 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/sub"
 )
 
+// Self-signed TLS pair the node agent generates for hysteria2/tuic inbounds
+// that have no certificate of their own.
+const (
+	SelfSignedCert = "/var/lib/cloudrix-node/tls/cert.pem"
+	SelfSignedKey  = "/var/lib/cloudrix-node/tls/key.pem"
+)
+
 // Email is the per-user identifier cores use for stats; the id prefix keeps it
 // stable across username changes.
 func Email(u *model.User) string {
@@ -72,7 +79,7 @@ func Xray(inbounds []*model.Inbound, users []*model.User) ([]byte, error) {
 		xin = append(xin, x)
 	}
 	cfg := map[string]any{
-		"log":      map[string]any{"loglevel": "warning"},
+		"log":      map[string]any{"loglevel": "warning", "access": "none"},
 		"api":      map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService"}},
 		"stats":    map[string]any{},
 		"policy":   map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
@@ -211,7 +218,12 @@ func SingBox(inbounds []*model.Inbound, users []*model.User) ([]byte, error) {
 		s := in.Settings
 		us := usersFor(in, users)
 		base := map[string]any{"tag": in.Tag, "listen": orDefault(in.Listen, "::"), "listen_port": in.Port}
-		tls := map[string]any{"enabled": true, "certificate_path": s.CertFile, "key_path": s.KeyFile}
+		certFile, keyFile := s.CertFile, s.KeyFile
+		if certFile == "" || keyFile == "" {
+			// the node agent creates this self-signed pair; clients skip verification
+			certFile, keyFile = SelfSignedCert, SelfSignedKey
+		}
+		tls := map[string]any{"enabled": true, "certificate_path": certFile, "key_path": keyFile}
 		if s.SNI != "" {
 			tls["server_name"] = s.SNI
 		}

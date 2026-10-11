@@ -29,7 +29,8 @@ func Resolve(u *model.User, inbounds []*model.Inbound, nodeHosts map[int64]strin
 	}
 	var out []Endpoint
 	for _, in := range inbounds {
-		if !in.Enabled || (len(allowed) > 0 && !allowed[in.Tag]) {
+		// inbounds without a node are not served anywhere: no dead links
+		if !in.Enabled || in.NodeID == nil || (len(allowed) > 0 && !allowed[in.Tag]) {
 			continue
 		}
 		host := in.Address

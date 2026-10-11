@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +22,11 @@ import (
 )
 
 type env struct {
-	t   *testing.T
-	srv *httptest.Server
-	st  *store.Store
-	api *Server
+	t    *testing.T
+	srv  *httptest.Server
+	st   *store.Store
+	api  *Server
+	node *int64 // every inbound in the tests is served by this node
 }
 
 func newEnv(t *testing.T) *env {
@@ -42,7 +44,11 @@ func newEnv(t *testing.T) *env {
 	s := New(cfg, st, auth.NewIssuer("test-secret", time.Hour), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
-	return &env{t: t, srv: srv, st: st, api: s}
+	n := &model.Node{Name: "test", Address: "vpn.example.com", UsageCoefficient: 1, Status: model.NodeConnecting}
+	if err := st.CreateNode(context.Background(), n); err != nil {
+		t.Fatal(err)
+	}
+	return &env{t: t, srv: srv, st: st, api: s, node: &n.ID}
 }
 
 func (e *env) do(method, path, token string, body any, out any) *http.Response {
@@ -89,7 +95,7 @@ func TestEndToEnd(t *testing.T) {
 	// Inbound with REALITY keys from the tools endpoint.
 	var keys map[string]any
 	e.do("POST", "/api/tools/reality-keys", root, nil, &keys)
-	in := model.Inbound{Tag: "vless-reality", Protocol: model.ProtoVLESS, Port: 443, Enabled: true, Settings: model.InboundSettings{
+	in := model.Inbound{Tag: "vless-reality", Protocol: model.ProtoVLESS, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{
 		Security: "reality", Flow: "xtls-rprx-vision", RealityDest: "www.example.com:443", RealityServerNames: []string{"www.example.com"},
 		RealityPrivateKey: keys["private_key"].(string), RealityPublicKey: keys["public_key"].(string), RealityShortIDs: []string{"ab12"},
 	}}
@@ -186,7 +192,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	// Core config preview contains the user's credentials.
-	req, _ := http.NewRequest("GET", e.srv.URL+"/api/core/config?core=xray", nil)
+	req, _ := http.NewRequest("GET", e.srv.URL+"/api/core/config?core=xray&node="+strconv.FormatInt(*e.node, 10), nil)
 	req.Header.Set("Authorization", "Bearer "+root)
 	cr, _ := http.DefaultClient.Do(req)
 	cb, _ := io.ReadAll(cr.Body)
@@ -206,7 +212,7 @@ func TestEndToEnd(t *testing.T) {
 func TestDeviceLimit(t *testing.T) {
 	e := newEnv(t)
 	root := e.login("root", "supersecret")
-	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
 	var u model.User
 	e.do("POST", "/api/users", root, userInput{Username: "dev", DeviceLimit: 1}, &u)
 
@@ -245,7 +251,7 @@ func itoa(n int64) string {
 func TestSubscriptionBranding(t *testing.T) {
 	e := newEnv(t)
 	root := e.login("root", "supersecret")
-	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
 	exp := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
 	var u model.User
 	e.do("POST", "/api/users", root, userInput{Username: "vip", Note: "VIP User", DataLimit: 250 << 30, ExpireAt: &exp}, &u)

@@ -36,6 +36,15 @@ MANAGER="/usr/local/bin/cloudrix-manager"
 SERVICE="cloudrix"
 SERVICE_USER="cloudrix"
 
+# Нода: агент Cloudrix + ядра Xray и sing-box. VPN раздают только ноды.
+NODE_CONF_DIR="/etc/cloudrix-node"
+NODE_ENV="$NODE_CONF_DIR/node.env"
+NODE_DATA_DIR="/var/lib/cloudrix-node"
+NODE_LIB="/usr/local/lib/cloudrix-node"
+NODE_SERVICE="cloudrix-node"
+# если узнать последнюю версию sing-box не получилось
+SINGBOX_FALLBACK_VERSION="1.12.12"
+
 GO_VERSION="1.24.7"
 NODE_VERSION="22.22.0"
 
@@ -563,6 +572,9 @@ CLOUDRIX_SUB_TITLE="$SUB_TITLE"
 CLOUDRIX_SUB_UPDATE_HOURS=12
 CLOUDRIX_TOKEN_TTL_HOURS=24
 CLOUDRIX_JOBS_INTERVAL_SECONDS=30
+# откуда ставить ноды (команда установки ноды в панели)
+CLOUDRIX_REPO=$REPO
+CLOUDRIX_BRANCH=${BRANCH:-main}
 EOF
   if [[ $TLS == 1 ]]; then
     cat >>"$ENV_FILE" <<EOF
@@ -915,6 +927,9 @@ cmd_update() {
 
   cp -p "$BIN" "$BIN.prev"
   install_binary
+  # Старые установки не знали, откуда ставить ноды: дописываем.
+  grep -q '^CLOUDRIX_REPO=' "$ENV_FILE" || printf 'CLOUDRIX_REPO=%s\n' "$REPO" >>"$ENV_FILE"
+  grep -q '^CLOUDRIX_BRANCH=' "$ENV_FILE" || printf 'CLOUDRIX_BRANCH=%s\n' "${BRANCH:-main}" >>"$ENV_FILE"
   systemctl restart "$SERVICE"
   PANEL_PORT=$(panel_port) TLS=$(panel_tls)
   if ! wait_healthy; then
@@ -988,10 +1003,268 @@ cmd_logs() {
   fi
 }
 
+# ---------- нода ----------
+# На сервере-ноде работает агент Cloudrix (тот же бинарник, `cloudrix node run`)
+# и ядра Xray и sing-box. Агент сам обращается к панели, поэтому на ноде не
+# нужно открывать порт управления — только порты инбаундов.
+
+# latest_tag owner/repo печатает последний тег релиза без "v" (через редирект
+# GitHub, без API и его лимитов).
+latest_tag() {
+  curl -fsSI --max-time 15 "https://github.com/$1/releases/latest" 2>/dev/null |
+    sed -n 's#^[Ll]ocation: .*/tag/v\{0,1\}\([^[:space:]]*\).*#\1#p' | tr -d '\r' | tail -n1 || true
+}
+
+ensure_node_deps() {
+  local need=()
+  for c in curl tar unzip openssl; do command -v "$c" >/dev/null || need+=("$c"); done
+  [[ -f /etc/ssl/certs/ca-certificates.crt || -f /etc/pki/tls/certs/ca-bundle.crt ]] || need+=(ca-certificates)
+  if ((${#need[@]})); then
+    info "Устанавливаю пакеты: ${need[*]}"
+    install_packages "${need[@]}"
+  fi
+}
+
+install_cores() {
+  local tmp xarch sarch v url
+  tmp=$(mktemp -d)
+  case $ARCH in
+    amd64) xarch=64 sarch=amd64 ;;
+    arm64) xarch=arm64-v8a sarch=arm64 ;;
+  esac
+  mkdir -p "$NODE_LIB/xray"
+
+  info "Скачиваю Xray"
+  url=${CLOUDRIX_XRAY_URL:-https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-$xarch.zip}
+  curl -fsSL --retry 3 -o "$tmp/xray.zip" "$url" || die "Не удалось скачать Xray ($url)."
+  unzip -oq "$tmp/xray.zip" -d "$tmp/xray" || die "Архив Xray повреждён."
+  install -m 0755 "$tmp/xray/xray" "$NODE_LIB/xray/xray"
+  cp -f "$tmp/xray/"*.dat "$NODE_LIB/xray/" 2>/dev/null || true
+
+  info "Скачиваю sing-box"
+  v=${CLOUDRIX_SINGBOX_VERSION:-$(latest_tag SagerNet/sing-box)}
+  [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v=$SINGBOX_FALLBACK_VERSION
+  url=${CLOUDRIX_SINGBOX_URL:-https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz}
+  curl -fsSL --retry 3 "$url" | tar -xz -C "$tmp" || die "Не удалось скачать sing-box ($url)."
+  install -m 0755 "$tmp"/sing-box-*/sing-box "$NODE_LIB/sing-box"
+  rm -rf "$tmp"
+  ok "Ядра: $("$NODE_LIB/xray/xray" version | head -n1 | awk '{print $1, $2}'), $("$NODE_LIB/sing-box" version | head -n1)"
+}
+
+write_node_env() {
+  mkdir -p "$NODE_CONF_DIR" "$NODE_DATA_DIR"
+  chmod 0700 "$NODE_CONF_DIR" "$NODE_DATA_DIR"
+  umask 077
+  cat >"$NODE_ENV" <<EOF
+# Нода Cloudrix. После изменения: systemctl restart $NODE_SERVICE
+CLOUDRIX_PANEL_URL=$NODE_PANEL
+CLOUDRIX_NODE_ID=$NODE_ID
+CLOUDRIX_NODE_SECRET=$NODE_SECRET
+CLOUDRIX_NODE_DIR=$NODE_DATA_DIR
+CLOUDRIX_XRAY_BIN=$NODE_LIB/xray/xray
+CLOUDRIX_SINGBOX_BIN=$NODE_LIB/sing-box
+XRAY_LOCATION_ASSET=$NODE_LIB/xray
+EOF
+  umask 022
+}
+
+write_node_service() {
+  cat >"/etc/systemd/system/$NODE_SERVICE.service" <<EOF
+[Unit]
+Description=Cloudrix node (Xray + sing-box)
+Documentation=https://github.com/$REPO
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=$NODE_ENV
+ExecStart=$BIN node run
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+}
+
+# tune_network включает BBR: заметно быстрее на дальних и нестабильных каналах.
+tune_network() {
+  cat >/etc/sysctl.d/99-cloudrix-node.conf <<EOF
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.core.rmem_max=16777216
+net.core.wmem_max=16777216
+EOF
+  sysctl --system >/dev/null 2>&1 || true
+}
+
+wait_node_synced() {
+  for _ in $(seq 1 40); do
+    if "$BIN" node status 2>/dev/null | grep -q '"ok": true'; then return 0; fi
+    sleep 1
+  done
+  return 1
+}
+
+cmd_node_install() {
+  require_root
+  banner
+  detect_os
+  detect_arch
+  info "Система: $OS_NAME ($ARCH)"
+  NODE_PANEL=${CLOUDRIX_PANEL_URL-} NODE_ID=${CLOUDRIX_NODE_ID-} NODE_SECRET=${CLOUDRIX_NODE_SECRET-}
+  while (($#)); do
+    case $1 in
+      --panel) NODE_PANEL=${2-} && shift ;;
+      --node-id) NODE_ID=${2-} && shift ;;
+      --secret) NODE_SECRET=${2-} && shift ;;
+      *) die "Неизвестный параметр: $1" ;;
+    esac
+    shift
+  done
+  if [[ -f $ENV_FILE ]]; then
+    warn "На этом сервере установлена панель. Ноду лучше ставить на отдельный сервер: так трафик клиентов не идёт через сервер панели."
+    ((ASSUME_YES)) || ask_yes_no "Всё равно поставить ноду сюда?" n || exit 0
+  fi
+  ask NODE_PANEL "Адрес панели (например https://panel.example.com:2053)"
+  ask NODE_ID "Номер ноды (из панели)"
+  ask NODE_SECRET "Ключ ноды (из панели)"
+  NODE_PANEL=${NODE_PANEL%/}
+  [[ $NODE_PANEL =~ ^https?://[^[:space:]/]+$ ]] || die "Адрес панели должен быть вида https://host:port"
+  [[ $NODE_ID =~ ^[0-9]+$ ]] || die "Номер ноды — число"
+  [[ $NODE_SECRET =~ ^[A-Za-z0-9_-]{20,}$ ]] || die "Неверный ключ ноды. Скопируйте команду установки из панели целиком."
+
+  step "1/4  Подготовка"
+  ensure_node_deps
+  info "Проверяю связь с панелью $NODE_PANEL"
+  curl -fsS --max-time 10 "$NODE_PANEL/health" >/dev/null 2>&1 ||
+    die "Сервер не достучался до панели $NODE_PANEL. Проверьте адрес, что панель работает и её порт открыт для этого сервера."
+  ok "Панель отвечает"
+
+  step "2/4  Агент Cloudrix"
+  INSTALL_CONF=$NODE_CONF_DIR/install.conf
+  mkdir -p "$NODE_CONF_DIR"
+  load_install_conf
+  resolve_target
+  fetch_binary
+  install_binary
+
+  step "3/4  Ядра Xray и sing-box"
+  install_cores
+
+  step "4/4  Запуск"
+  write_node_env
+  write_node_service
+  tune_network
+  systemctl enable "$NODE_SERVICE" >/dev/null 2>&1
+  systemctl restart "$NODE_SERVICE"
+  save_install_conf
+  if wait_node_synced; then
+    ok "Нода подключилась к панели"
+  else
+    warn "Нода пока не подключилась. Причина — в логах: cloudrix-manager node-logs"
+  fi
+  printf '\n%s%s  Нода установлена%s\n\n' "$C_BOLD" "$C_GREEN" "$C_RESET"
+  printf '  В панели статус ноды сменится на «connected».\n'
+  printf '  Добавьте инбаунды на эту ноду в разделе «Инбаунды» — ядра получат их сами,\n'
+  printf '  порты откроются автоматически, если на сервере включён ufw или firewalld.\n'
+  printf '  Если фаервол есть у хостера (в личном кабинете), откройте там порты инбаундов.\n\n'
+  printf '  Управление нодой: %scloudrix-manager%s\n\n' "$C_BOLD" "$C_RESET"
+}
+
+cmd_node_update() {
+  require_root
+  detect_os
+  detect_arch
+  [[ -f $NODE_ENV ]] || die "Нода не установлена."
+  INSTALL_CONF=$NODE_CONF_DIR/install.conf
+  load_install_conf
+  info "Проверяю обновления ($REPO${BRANCH:+, ветка $BRANCH})"
+  resolve_target
+  ensure_node_deps
+  fetch_binary
+  install_binary
+  install_cores
+  systemctl restart "$NODE_SERVICE"
+  save_install_conf
+  if wait_node_synced; then ok "Нода обновлена и подключена к панели"; else warn "Нода обновлена, но пока не подключилась: cloudrix-manager node-logs"; fi
+}
+
+cmd_node_logs() {
+  if ((FOLLOW)); then
+    journalctl -u "$NODE_SERVICE" -f -n 100
+  else
+    journalctl -u "$NODE_SERVICE" -n 60 --no-pager
+  fi
+}
+
+cmd_node_info() {
+  local state panel id
+  state=$(systemctl is-active "$NODE_SERVICE" 2>/dev/null || true)
+  panel=$(sed -n 's/^CLOUDRIX_PANEL_URL=//p' "$NODE_ENV" 2>/dev/null || true)
+  id=$(sed -n 's/^CLOUDRIX_NODE_ID=//p' "$NODE_ENV" 2>/dev/null || true)
+  printf '\n  %sНода:%s       №%s, панель %s\n' "$C_BOLD" "$C_RESET" "${id:-?}" "${panel:-?}"
+  printf '  %sСостояние:%s  %s\n' "$C_BOLD" "$C_RESET" "$([[ $state == active ]] && printf '%sработает%s' "$C_GREEN" "$C_RESET" || printf '%s%s%s' "$C_RED" "${state:-остановлена}" "$C_RESET")"
+  printf '  %sАгент:%s      %s\n' "$C_BOLD" "$C_RESET" "$("$BIN" version 2>/dev/null || echo '?')"
+  if "$BIN" node status >/dev/null 2>&1; then
+    printf '  %sСвязь:%s      %s\n' "$C_BOLD" "$C_RESET" "$("$BIN" node status | tr -d '\n' | sed 's/  */ /g')"
+  fi
+  echo
+}
+
+cmd_node_uninstall() {
+  require_root
+  warn "Будут удалены агент ноды, ядра Xray и sing-box и их настройки."
+  ((ASSUME_YES)) || ask_yes_no "Продолжить?" n || exit 0
+  systemctl disable --now "$NODE_SERVICE" >/dev/null 2>&1 || true
+  rm -f "/etc/systemd/system/$NODE_SERVICE.service" /etc/sysctl.d/99-cloudrix-node.conf
+  systemctl daemon-reload
+  rm -rf "$NODE_CONF_DIR" "$NODE_DATA_DIR" "$NODE_LIB"
+  if [[ ! -f $ENV_FILE ]]; then
+    rm -f "$BIN" "$MANAGER"
+  fi
+  ok "Нода удалена. Удалите её и в панели (раздел «Ноды»)."
+}
+
+node_menu() {
+  have_tty || die "Меню работает только в терминале. Команды: $(basename "$0") --help"
+  local choice
+  while true; do
+    clear 2>/dev/null || true
+    banner
+    (cmd_node_info) || true
+    printf '  %s1)%s Обновить ноду (агент и ядра)\n' "$C_BOLD" "$C_RESET"
+    printf '  %s2)%s Перезапустить\n' "$C_BOLD" "$C_RESET"
+    printf '  %s3)%s Логи (последние строки)\n' "$C_BOLD" "$C_RESET"
+    printf '  %s4)%s Логи в реальном времени %s(выход — Ctrl+C)%s\n' "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
+    printf '  %s5)%s Удалить ноду\n' "$C_BOLD" "$C_RESET"
+    printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
+    read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
+    case $choice in
+      1) run_menu_action cmd_node_update ;;
+      2) run_menu_action bash -c "systemctl restart $NODE_SERVICE && echo '✔ Перезапущено'" ;;
+      3) run_menu_action cmd_node_logs ;;
+      4) FOLLOW=1 run_menu_action cmd_node_logs ;;
+      5)
+        run_menu_action cmd_node_uninstall
+        [[ -f $NODE_ENV ]] || return 0
+        ;;
+      0 | q | exit | "") return 0 ;;
+      *) warn "Нет такого пункта" ;;
+    esac
+  done
+}
+
 # ---------- меню ----------
 
 menu() {
   require_root
+  if [[ ! -f $ENV_FILE && -f $NODE_ENV ]]; then
+    node_menu
+    return
+  fi
   [[ -f $ENV_FILE ]] || {
     warn "Панель ещё не установлена."
     ask_yes_no "Установить сейчас?" y && cmd_install
@@ -1126,6 +1399,13 @@ usage() {
   restore        восстановить базу из резервной копии
   uninstall      удалить панель
 
+  node --panel URL --node-id N --secret KEY
+                 установить ноду (команду целиком даёт панель: «Ноды» → «Установить»)
+  node-update    обновить агент ноды и ядра Xray / sing-box
+  node-info      состояние ноды
+  node-logs [-f] логи ноды
+  node-uninstall удалить ноду
+
   --yes          не задавать вопросов (значения из CLOUDRIX_* переменных)
   --force        для update: переустановить, даже если версия последняя
 EOF
@@ -1149,7 +1429,7 @@ main() {
   ((${#args[@]})) && cmd=${args[0]} && args=("${args[@]:1}")
   if [[ -z $cmd ]]; then
     # Установленная панель + терминал → меню; иначе (curl | bash на чистом сервере) → установка.
-    if [[ -f $ENV_FILE ]] && ! ((ASSUME_YES)) && have_tty; then
+    if [[ -f $ENV_FILE || -f $NODE_ENV ]] && ! ((ASSUME_YES)) && have_tty; then
       cmd=menu
     else
       cmd=install
@@ -1171,6 +1451,11 @@ main() {
     backup) cmd_backup ;;
     restore) cmd_restore "${args[@]}" ;;
     uninstall | remove) cmd_uninstall ;;
+    node) cmd_node_install "${args[@]}" ;;
+    node-update) cmd_node_update ;;
+    node-info) cmd_node_info ;;
+    node-logs) cmd_node_logs ;;
+    node-uninstall) cmd_node_uninstall ;;
     *)
       usage
       exit 1

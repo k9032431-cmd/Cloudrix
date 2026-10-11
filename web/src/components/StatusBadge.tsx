@@ -19,12 +19,13 @@ export function UserStatusBadge({ status }: { status: UserStatus }) {
   )
 }
 
-const nodeTones: Record<NodeStatus, Tone> = { connected: 'green', connecting: 'blue', error: 'red', disabled: 'gray' }
+const nodeTones: Record<NodeStatus, Tone> = { connected: 'green', connecting: 'amber', error: 'red', disabled: 'gray' }
 
 export function NodeStatusBadge({ status }: { status: NodeStatus }) {
+  const { t } = useI18n()
   return (
     <Badge tone={nodeTones[status]} dot>
-      {status}
+      {t(`nodes.status.${status}`)}
     </Badge>
   )
 }

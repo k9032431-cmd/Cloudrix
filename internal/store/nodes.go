@@ -32,8 +32,8 @@ func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 func (s *Store) CreateNode(ctx context.Context, n *model.Node) error {
 	n.CreatedAt = time.Now().UTC()
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, unix(n.CreatedAt))
+		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, n.Secret, unix(n.CreatedAt))
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -77,4 +77,43 @@ func (s *Store) ListNodes(ctx context.Context) ([]*model.Node, error) {
 		out = append(out, n)
 	}
 	return out, rows.Err()
+}
+
+// NodeSecret returns the secret the node agent signs its requests with.
+func (s *Store) NodeSecret(ctx context.Context, id int64) (string, error) {
+	var secret string
+	err := s.db.QueryRowContext(ctx, `SELECT secret FROM nodes WHERE id = ?`, id).Scan(&secret)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return secret, err
+}
+
+// SetNodeSecret stores a new agent secret; the old one stops working at once.
+func (s *Store) SetNodeSecret(ctx context.Context, id int64, secret string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET secret = ? WHERE id = ?`, secret, id)
+	return affected(res, err)
+}
+
+// RecordNodeSync stores what an agent reported: it is online now, runs these
+// cores, and moved up/down bytes since its last report. A disabled node keeps
+// its status.
+func (s *Store) RecordNodeSync(ctx context.Context, id int64, cores, message string, up, down int64) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET
+		status = CASE WHEN status = 'disabled' THEN status ELSE ? END,
+		message = ?, core_version = ?, last_seen = ?,
+		upload_bytes = upload_bytes + ?, download_bytes = download_bytes + ? WHERE id = ?`,
+		model.NodeConnected, message, cores, unix(time.Now()), up, down, id)
+	return affected(res, err)
+}
+
+// MarkStaleNodes flags connected nodes that have not called in since `before`.
+func (s *Store) MarkStaleNodes(ctx context.Context, before time.Time, message string) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET status = ?, message = ?
+		WHERE status = ? AND (last_seen IS NULL OR last_seen < ?)`,
+		model.NodeError, message, model.NodeConnected, unix(before))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }

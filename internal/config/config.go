@@ -24,6 +24,8 @@ type Config struct {
 	AdminPassword  string
 	CORSOrigins    []string
 	JobsInterval   time.Duration
+	InstallRepo    string // GitHub repo and branch the panel was installed from;
+	InstallBranch  string // node install commands use the same source
 }
 
 func Load() Config {
@@ -43,6 +45,8 @@ func Load() Config {
 		AdminPassword:  env("CLOUDRIX_ADMIN_PASSWORD", ""),
 		CORSOrigins:    splitList(env("CLOUDRIX_CORS_ORIGINS", "")),
 		JobsInterval:   time.Duration(envInt("CLOUDRIX_JOBS_INTERVAL_SECONDS", 30)) * time.Second,
+		InstallRepo:    env("CLOUDRIX_REPO", "k9032431-cmd/Cloudrix"),
+		InstallBranch:  env("CLOUDRIX_BRANCH", "main"),
 	}
 }
 

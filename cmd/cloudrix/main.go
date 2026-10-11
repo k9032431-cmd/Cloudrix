@@ -4,6 +4,8 @@
 //	cloudrix admin create -u NAME  create a sudo admin (password from CLOUDRIX_ADMIN_PASSWORD or prompt)
 //	cloudrix admin passwd -u NAME  set a new password for an existing admin
 //	cloudrix backup FILE           write a consistent copy of the database
+//	cloudrix node run              run the node agent (Xray + sing-box, synced with the panel)
+//	cloudrix node status           print the agent's last sync state
 package main
 
 import (
@@ -16,6 +18,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -25,6 +28,7 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/config"
 	"github.com/k9032431-cmd/cloudrix/internal/jobs"
 	"github.com/k9032431-cmd/cloudrix/internal/model"
+	"github.com/k9032431-cmd/cloudrix/internal/nodeagent"
 	"github.com/k9032431-cmd/cloudrix/internal/store"
 	"github.com/k9032431-cmd/cloudrix/web"
 )
@@ -151,6 +155,9 @@ func runCommand(cfg config.Config, args []string) error {
 		fmt.Println(api.Version)
 		return nil
 	}
+	if args[0] == "node" {
+		return runNode(args[1:])
+	}
 	if args[0] == "backup" {
 		if len(args) != 2 {
 			return errors.New("usage: cloudrix backup FILE")
@@ -167,7 +174,7 @@ func runCommand(cfg config.Config, args []string) error {
 		return nil
 	}
 	if len(args) < 2 || args[0] != "admin" || (args[1] != "create" && args[1] != "passwd") {
-		return fmt.Errorf("unknown command %q (use: admin create -u NAME, admin passwd -u NAME, backup FILE, version)", strings.Join(args, " "))
+		return fmt.Errorf("unknown command %q (use: admin create -u NAME, admin passwd -u NAME, backup FILE, node run, version)", strings.Join(args, " "))
 	}
 	fs := flag.NewFlagSet("admin "+args[1], flag.ExitOnError)
 	username := fs.String("u", "", "username")
@@ -215,4 +222,31 @@ func runCommand(cfg config.Config, args []string) error {
 	}
 	fmt.Println("password updated:", *username)
 	return nil
+}
+
+// runNode runs the agent on a node server (configured by the installer
+// through CLOUDRIX_PANEL_URL, CLOUDRIX_NODE_ID and CLOUDRIX_NODE_SECRET).
+func runNode(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: cloudrix node run | status")
+	}
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	cfg, err := nodeagent.ConfigFromEnv(api.Version, log)
+	switch args[0] {
+	case "run":
+		if err != nil {
+			return err
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return nodeagent.New(cfg).Run(ctx)
+	case "status":
+		b, err := os.ReadFile(filepath.Join(cfg.Dir, "state.json"))
+		if err != nil {
+			return errors.New("the agent has not synced yet")
+		}
+		fmt.Println(string(b))
+		return nil
+	}
+	return errors.New("usage: cloudrix node run | status")
 }

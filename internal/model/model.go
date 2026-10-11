@@ -200,6 +200,8 @@ type Node struct {
 	UploadBytes      int64      `json:"upload_bytes"`
 	DownloadBytes    int64      `json:"download_bytes"`
 	CreatedAt        time.Time  `json:"created_at"`
+	// Secret signs and encrypts agent traffic; never sent to the browser.
+	Secret string `json:"-"`
 }
 
 type AuditEntry struct {

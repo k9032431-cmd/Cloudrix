@@ -139,6 +139,8 @@ var migrations = []string{
 		synced_at INTEGER,
 		error TEXT NOT NULL DEFAULT ''
 	);`,
+	// 3: node agents authenticate with a per-node secret
+	`ALTER TABLE nodes ADD COLUMN secret TEXT NOT NULL DEFAULT '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {
