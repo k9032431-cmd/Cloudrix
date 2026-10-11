@@ -147,11 +147,14 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Subscribe before building the config: a change that lands while the
+	// config is being built still wakes this request.
+	changed := s.nodes.changed()
 	resp := s.nodeResponse(ctx, node, req.Version)
 	if req.Wait && !resp.Changed && !resp.Disabled && resp.Problem == "" {
 		// Hold the request until something changes so edits reach nodes at once.
 		select {
-		case <-s.nodes.changed():
+		case <-changed:
 			if n, err := s.store.GetNode(ctx, id); err == nil {
 				node = n
 			}

@@ -1018,6 +1018,8 @@ latest_tag() {
 ensure_node_deps() {
   local need=()
   for c in curl tar unzip openssl; do command -v "$c" >/dev/null || need+=("$c"); done
+  # xz нужен, если готовой сборки нет и агент собирается из исходников
+  command -v xz >/dev/null || { [[ $PKG == apt ]] && need+=(xz-utils) || need+=(xz); }
   [[ -f /etc/ssl/certs/ca-certificates.crt || -f /etc/pki/tls/certs/ca-bundle.crt ]] || need+=(ca-certificates)
   if ((${#need[@]})); then
     info "Устанавливаю пакеты: ${need[*]}"

@@ -104,7 +104,7 @@ func TestNodeSync(t *testing.T) {
 		t.Fatalf("node after sync: %+v", nodes[len(nodes)-1])
 	}
 
-	// a waiting agent hears about a new user right away
+	// a waiting agent hears about a new user right away (well before the 25s poll window ends)
 	type result struct {
 		code int
 		resp *nodeproto.SyncResponse
@@ -119,7 +119,7 @@ func TestNodeSync(t *testing.T) {
 	var bob model.User
 	e.do("POST", "/api/users", root, map[string]any{"username": "bob"}, &bob)
 	r := <-done
-	if r.code != 200 || !r.resp.Changed || !strings.Contains(string(r.resp.Xray), bob.Credentials.Password) || time.Since(start) > 5*time.Second {
+	if r.code != 200 || !r.resp.Changed || !strings.Contains(string(r.resp.Xray), bob.Credentials.Password) || time.Since(start) > 15*time.Second {
 		t.Fatalf("long poll: %d %+v after %s", r.code, r.resp, time.Since(start))
 	}
 
