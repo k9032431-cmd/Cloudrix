@@ -179,7 +179,8 @@ func TestGoogleDriveSubscriptions(t *testing.T) {
 	var view driveView
 	for i := 0; i < 50; i++ {
 		e.do("GET", "/api/settings/gdrive", root, nil, &view)
-		if view.Connected {
+		// the account email arrives a moment after the token
+		if view.Connected && view.Account != "" {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
