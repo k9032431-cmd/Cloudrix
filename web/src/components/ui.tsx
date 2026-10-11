@@ -91,7 +91,11 @@ function optionsOf(children: ReactNode): SelectOption[] {
     if (!isValidElement(c)) return
     const el = c as ReactElement<{ value?: string | number; children?: ReactNode; disabled?: boolean }>
     if (el.type === Fragment) out.push(...optionsOf(el.props.children))
-    else if (el.type === 'option') out.push({ value: String(el.props.value ?? ''), label: el.props.children, disabled: el.props.disabled })
+    else if (el.type === 'option') {
+      // like <option>, no value attribute means the text is the value
+      const text = Children.toArray(el.props.children).join('')
+      out.push({ value: String(el.props.value ?? text), label: el.props.children, disabled: el.props.disabled })
+    }
   })
   return out
 }
@@ -115,6 +119,7 @@ export function Select({
   disabled?: boolean
   id?: string
   'aria-label'?: string
+  'aria-invalid'?: boolean
   required?: boolean
 }) {
   const options = optionsOf(children)
@@ -209,6 +214,7 @@ export function Select({
         id={id}
         disabled={disabled}
         aria-label={aria['aria-label']}
+        aria-invalid={aria['aria-invalid'] || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listId : undefined}

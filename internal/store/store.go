@@ -159,6 +159,8 @@ var migrations = []string{
 	UPDATE users SET group_ids = '[' || (SELECT id FROM groups WHERE name = 'Default') || ']' WHERE inbounds IN ('', '[]', 'null');`,
 	// 5: fingerprint of the node's self-signed certificate, pinned by clients
 	`ALTER TABLE nodes ADD COLUMN cert_sha256 TEXT NOT NULL DEFAULT '';`,
+	// 6: cascade bridge (node-to-node VLESS + Reality) of exit nodes
+	`ALTER TABLE nodes ADD COLUMN bridge TEXT NOT NULL DEFAULT '{}';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

@@ -87,8 +87,12 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 			sin = append(sin, in)
 		}
 	}
-	if len(xin) > 0 {
-		if xray, err = core.Xray(xin, users, groups); err != nil {
+	cascade, err := s.cascadeFor(ctx, id, inbounds)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	if len(xin) > 0 || cascade.Bridge != nil {
+		if xray, err = core.Xray(xin, users, groups, cascade); err != nil {
 			return nil, nil, "", err
 		}
 	}

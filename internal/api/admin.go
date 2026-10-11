@@ -117,6 +117,7 @@ type nodeInput struct {
 	APIPort          int     `json:"api_port"`
 	UsageCoefficient float64 `json:"usage_coefficient"`
 	Disabled         bool    `json:"disabled"`
+	BridgePort       int     `json:"bridge_port"` // cascade port when other nodes exit here, 0 = auto
 }
 
 // valid normalises the input. Address is the node's public IP or domain that
@@ -127,7 +128,8 @@ func (in *nodeInput) valid() bool {
 		in.UsageCoefficient = 1
 	}
 	return in.Name != "" && len(in.Name) <= 64 && hostRe.MatchString(in.Address) &&
-		in.APIPort >= 0 && in.APIPort < 65536 && in.UsageCoefficient > 0 && in.UsageCoefficient <= 100
+		in.APIPort >= 0 && in.APIPort < 65536 && in.UsageCoefficient > 0 && in.UsageCoefficient <= 100 &&
+		in.BridgePort >= 0 && in.BridgePort < 65536
 }
 
 // hostRe accepts an IPv4/IPv6 address or a domain name, without scheme or port.
@@ -191,6 +193,14 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	if in.BridgePort != n.Bridge.Port {
+		n.Bridge.Port = in.BridgePort
+		if err := s.store.SetNodeBridge(r.Context(), n.ID, n.Bridge); err != nil {
+			s.writeStoreError(w, err)
+			return
+		}
+		n.BridgePort = in.BridgePort
+	}
 	s.audit(r, "node.update", n.Name, "")
 	s.usersChanged()
 	writeJSON(w, http.StatusOK, n)
@@ -205,6 +215,17 @@ func (s *Server) handleDeleteNode(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.writeStoreError(w, err)
 		return
+	}
+	inbounds, err := s.store.ListInbounds(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	for _, in := range inbounds {
+		if ex := in.Settings.ExitNodeID; ex != nil && *ex == id {
+			writeError(w, http.StatusConflict, "inbound "+in.Tag+" exits through this node: change it first")
+			return
+		}
 	}
 	if err := s.store.DeleteNode(r.Context(), id); err != nil {
 		s.writeStoreError(w, err)

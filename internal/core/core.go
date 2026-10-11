@@ -50,7 +50,7 @@ func ForNode(inbounds []*model.Inbound, nodeID *int64) []*model.Inbound {
 }
 
 // Xray renders an Xray-core config for the vless/vmess/trojan/shadowsocks inbounds.
-func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups) ([]byte, error) {
+func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, cascade Cascade) ([]byte, error) {
 	xin := []map[string]any{{
 		"tag": "api", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
 		"settings": map[string]any{"address": "127.0.0.1"},
@@ -65,23 +65,24 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups) (
 		}
 		xin = append(xin, x)
 	}
+	outbounds := []map[string]any{
+		{"tag": "direct", "protocol": "freedom"},
+		{"tag": "block", "protocol": "blackhole"},
+	}
+	rules := []map[string]any{
+		{"inboundTag": []string{"api"}, "outboundTag": "api"},
+		{"ip": []string{"geoip:private"}, "outboundTag": "block"},
+		{"protocol": []string{"bittorrent"}, "outboundTag": "block"},
+	}
+	cascade.apply(&xin, &outbounds, &rules)
 	cfg := map[string]any{
-		"log":      map[string]any{"loglevel": "warning", "access": "none"},
-		"api":      map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService"}},
-		"stats":    map[string]any{},
-		"policy":   map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
-		"inbounds": xin,
-		"outbounds": []map[string]any{
-			{"tag": "direct", "protocol": "freedom"},
-			{"tag": "block", "protocol": "blackhole"},
-		},
-		"routing": map[string]any{
-			"rules": []map[string]any{
-				{"inboundTag": []string{"api"}, "outboundTag": "api"},
-				{"ip": []string{"geoip:private"}, "outboundTag": "block"},
-				{"protocol": []string{"bittorrent"}, "outboundTag": "block"},
-			},
-		},
+		"log":       map[string]any{"loglevel": "warning", "access": "none"},
+		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService"}},
+		"stats":     map[string]any{},
+		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
+		"inbounds":  xin,
+		"outbounds": outbounds,
+		"routing":   map[string]any{"rules": rules},
 	}
 	return json.MarshalIndent(cfg, "", "  ")
 }

@@ -110,6 +110,11 @@ export default function Inbounds() {
                         <Badge tone="red">{t('inbounds.noNode')}</Badge>
                       </span>
                     )}
+                    {ib.settings.exit_node_id != null && (
+                      <span className="ml-1.5 whitespace-nowrap text-foreground" title={t('inbounds.exitHint')}>
+                        → {nodes?.find((n) => n.id === ib.settings.exit_node_id)?.name ?? '?'}
+                      </span>
+                    )}
                   </Td>
                   <Td>
                     <Badge tone={coreOf(ib.protocol) === 'xray' ? 'gray' : 'violet'}>{coreOf(ib.protocol)}</Badge>
@@ -277,6 +282,23 @@ function InboundForm({ initial, nodes, groups, onClose, onSaved }: { initial: In
           <Field label={t('inbounds.address')} hint={t('inbounds.addressHint')}>
             <Input value={ib.address} onChange={(e) => set('address', e.target.value)} placeholder="vpn.example.com" />
           </Field>
+          {coreOf(ib.protocol) === 'xray' && nodes.length > 1 && (
+            <Field label={t('inbounds.exit')} hint={t('inbounds.exitHint')} className="sm:col-span-2">
+              <Select
+                value={ib.settings.exit_node_id ?? ''}
+                onChange={(e) => setS({ exit_node_id: e.target.value ? Number(e.target.value) : undefined })}
+              >
+                <option value="">{t('inbounds.exitDirect')}</option>
+                {nodes
+                  .filter((n) => n.id !== ib.node_id)
+                  .map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.name} · {n.address}
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          )}
         </div>
 
         {streamProto && (

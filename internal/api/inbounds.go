@@ -79,9 +79,28 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		writeError(w, http.StatusBadRequest, "choose the node that serves this inbound")
 		return false
 	}
-	if _, err := s.store.GetNode(r.Context(), *in.NodeID); err != nil {
+	node, err := s.store.GetNode(r.Context(), *in.NodeID)
+	if err != nil {
 		writeError(w, http.StatusBadRequest, "node not found")
 		return false
+	}
+	if node.Bridge.UUID != "" && node.Bridge.Port == in.Port {
+		writeError(w, http.StatusBadRequest, "this port carries the node's cascade link: pick another port or change it in the node settings")
+		return false
+	}
+	if ex := in.Settings.ExitNodeID; ex != nil {
+		switch {
+		case *ex == *in.NodeID:
+			writeError(w, http.StatusBadRequest, "the exit node must differ from the inbound's node")
+			return false
+		case in.Protocol.Core() != "xray":
+			writeError(w, http.StatusBadRequest, "cascades work for vless, vmess, trojan and shadowsocks inbounds")
+			return false
+		}
+		if _, err := s.store.GetNode(r.Context(), *ex); err != nil {
+			writeError(w, http.StatusBadRequest, "exit node not found")
+			return false
+		}
 	}
 	return true
 }
@@ -249,10 +268,17 @@ func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {
 		nodeID = &id
 	}
 	selected := core.ForNode(inbounds, nodeID)
+	var cascade core.Cascade
+	if nodeID != nil {
+		if cascade, err = s.cascadeFor(r.Context(), *nodeID, inbounds); err != nil {
+			s.writeStoreError(w, err)
+			return
+		}
+	}
 	var body []byte
 	switch r.URL.Query().Get("core") {
 	case "", "xray":
-		body, err = core.Xray(selected, users, groups)
+		body, err = core.Xray(selected, users, groups, cascade)
 	case "sing-box":
 		body, err = core.SingBox(selected, users, groups)
 	default:

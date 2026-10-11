@@ -114,6 +114,16 @@ func (u *User) Allows(in *Inbound, groups Groups) bool {
 	return len(u.Inbounds) == 0 || slices.Contains(u.Inbounds, in.Tag)
 }
 
+// NodeBridge holds the VLESS + Reality inbound an exit node serves for
+// cascades. Keys are made on first use; Port 0 picks a free one.
+type NodeBridge struct {
+	Port       int    `json:"port"`
+	UUID       string `json:"uuid"`
+	PrivateKey string `json:"private_key"`
+	PublicKey  string `json:"public_key"`
+	ShortID    string `json:"short_id"`
+}
+
 // SelfSigned reports whether the inbound serves TLS with the node's
 // self-signed certificate (no certificate of its own).
 func (in *Inbound) SelfSigned() bool {
@@ -185,8 +195,11 @@ type InboundSettings struct {
 	ALPN          []string `json:"alpn,omitempty"`
 	Fingerprint   string   `json:"fingerprint,omitempty"`
 	AllowInsecure bool     `json:"allow_insecure,omitempty"`
-	CertFile      string   `json:"cert_file,omitempty"`
-	KeyFile       string   `json:"key_file,omitempty"`
+
+	// cascade: send this inbound's traffic out through another node
+	ExitNodeID *int64 `json:"exit_node_id,omitempty"`
+	CertFile   string `json:"cert_file,omitempty"`
+	KeyFile    string `json:"key_file,omitempty"`
 
 	// reality
 	RealityDest        string   `json:"reality_dest,omitempty"`
@@ -247,6 +260,10 @@ type Node struct {
 	UploadBytes      int64      `json:"upload_bytes"`
 	DownloadBytes    int64      `json:"download_bytes"`
 	CreatedAt        time.Time  `json:"created_at"`
+	// Bridge is the node-to-node link other nodes use to exit through this
+	// one (cascade); BridgePort mirrors its port for the admin UI.
+	Bridge     NodeBridge `json:"-"`
+	BridgePort int        `json:"bridge_port"`
 	// CertSHA256 is the hex SHA-256 of the node's self-signed certificate,
 	// pinned by clients of TLS inbounds that have no certificate of their own.
 	CertSHA256 string `json:"cert_sha256"`

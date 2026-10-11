@@ -385,6 +385,11 @@ const ru = {
   'presence.now': 'сейчас',
   'presence.lastSeen': 'был в сети {when}',
   'presence.never': 'ещё не подключался',
+  'inbounds.exit': 'Выход через ноду (каскад)',
+  'inbounds.exitDirect': 'Напрямую — выход с этой же ноды',
+  'inbounds.exitHint': 'Клиенты подключаются к ноде инбаунда, а в интернет трафик выходит через выбранную ноду. Ноды связываются по VLESS + Reality. Если нода выхода отключена, трафик блокируется, а не уходит напрямую.',
+  'nodes.bridgePort': 'Порт каскада',
+  'nodes.bridgePortHint': 'На этот порт подключаются другие ноды, если выходят через эту. 0 — выбрать автоматически.',
 }
 
 type Key = keyof typeof ru
@@ -772,6 +777,11 @@ const en: Record<Key, string> = {
   'presence.now': 'now',
   'presence.lastSeen': 'last seen {when}',
   'presence.never': 'never connected',
+  'inbounds.exit': 'Exit through node (cascade)',
+  'inbounds.exitDirect': 'Direct — exit from this same node',
+  'inbounds.exitHint': 'Clients connect to the inbound\'s node; traffic reaches the internet through the chosen node. Nodes talk over VLESS + Reality. If the exit node is disabled, traffic is blocked rather than sent out directly.',
+  'nodes.bridgePort': 'Cascade port',
+  'nodes.bridgePortHint': 'Other nodes connect here when they exit through this one. 0 picks one automatically.',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

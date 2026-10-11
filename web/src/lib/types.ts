@@ -73,6 +73,7 @@ export interface InboundSettings {
   alpn?: string[]
   fingerprint?: string
   allow_insecure?: boolean
+  exit_node_id?: number
   cert_file?: string
   key_file?: string
   reality_dest?: string
@@ -115,6 +116,7 @@ export interface Node {
   id: number
   name: string
   address: string
+  bridge_port: number
   api_port: number
   usage_coefficient: number
   status: NodeStatus

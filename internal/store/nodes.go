@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -10,14 +11,15 @@ import (
 )
 
 const nodeCols = `id, name, address, api_port, usage_coefficient, status, message, core_version, last_seen,
-	upload_bytes, download_bytes, created_at, cert_sha256`
+	upload_bytes, download_bytes, created_at, cert_sha256, bridge`
 
 func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	var n model.Node
 	var lastSeen sql.NullInt64
 	var created int64
+	var bridge string
 	err := row.Scan(&n.ID, &n.Name, &n.Address, &n.APIPort, &n.UsageCoefficient, &n.Status, &n.Message, &n.CoreVersion,
-		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created, &n.CertSHA256)
+		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created, &n.CertSHA256, &bridge)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -26,6 +28,8 @@ func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	}
 	n.LastSeen = ptrUnix(lastSeen)
 	n.CreatedAt = fromUnix(created)
+	_ = json.Unmarshal([]byte(bridge), &n.Bridge)
+	n.BridgePort = n.Bridge.Port
 	return &n, nil
 }
 
@@ -90,6 +94,12 @@ func (s *Store) NodeSecret(ctx context.Context, id int64) (string, error) {
 }
 
 // SetNodeSecret stores a new agent secret; the old one stops working at once.
+func (s *Store) SetNodeBridge(ctx context.Context, id int64, b model.NodeBridge) error {
+	raw, _ := json.Marshal(b)
+	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET bridge = ? WHERE id = ?`, string(raw), id)
+	return affected(res, err)
+}
+
 func (s *Store) SetNodeSecret(ctx context.Context, id int64, secret string) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE nodes SET secret = ? WHERE id = ?`, secret, id)
 	return affected(res, err)

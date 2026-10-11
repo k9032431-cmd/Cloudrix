@@ -206,6 +206,7 @@ function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () =
     name: node?.name ?? '',
     address: node?.address ?? '',
     usage_coefficient: node?.usage_coefficient ?? 1,
+    bridge_port: node?.bridge_port ?? 0,
     disabled: node?.status === 'disabled',
   })
   const [error, setError] = useState<string | null>(null)
@@ -254,6 +255,9 @@ function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () =
         </Field>
         <Field label={t('nodes.coefficient')}>
           <Input type="number" min={0.1} max={100} step={0.1} value={form.usage_coefficient} onChange={(e) => setForm({ ...form, usage_coefficient: Number(e.target.value) })} />
+        </Field>
+        <Field label={t('nodes.bridgePort')} hint={t('nodes.bridgePortHint')}>
+          <Input type="number" min={0} max={65535} value={form.bridge_port} onChange={(e) => setForm({ ...form, bridge_port: Number(e.target.value) })} />
         </Field>
         <div className="flex items-end pb-1.5">
           <Toggle checked={form.disabled} onChange={(v) => setForm({ ...form, disabled: v })} label={t('nodes.disabled')} />
