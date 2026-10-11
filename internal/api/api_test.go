@@ -17,6 +17,7 @@ import (
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/config"
+	"github.com/k9032431-cmd/cloudrix/internal/happ"
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 	"github.com/k9032431-cmd/cloudrix/internal/store"
 )
@@ -40,6 +41,7 @@ func newEnv(t *testing.T) *env {
 	if err := st.CreateAdmin(context.Background(), &model.Admin{Username: "root", PasswordHash: hash, Role: model.RoleSudo}); err != nil {
 		t.Fatal(err)
 	}
+	happ.APIURL = "http://127.0.0.1:1/" // tests never call Happ's service: crypt4 fallback
 	cfg := config.Config{SubPath: "/sub", DefaultHost: "vpn.example.com", SubTitle: "Test", SubUpdateHours: 12}
 	s := New(cfg, st, auth.NewIssuer("test-secret", time.Hour), slog.New(slog.NewTextHandler(io.Discard, nil)), nil)
 	srv := httptest.NewServer(s.Handler())
@@ -313,5 +315,56 @@ func TestSubscriptionBranding(t *testing.T) {
 	helper := e.login("helper", "helperpass")
 	if resp := e.do("PUT", "/api/settings/subscription", helper, want, nil); resp.StatusCode != 403 {
 		t.Fatalf("admin changed branding: %d", resp.StatusCode)
+	}
+}
+
+func TestSubscriptionProtection(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true, Settings: model.InboundSettings{Security: "tls"}}, nil)
+	var u model.User
+	e.do("POST", "/api/users", root, userInput{Username: "alice"}, &u)
+
+	// provider features need a provider ID
+	if r := e.do("PUT", "/api/settings/subscription", root, branding{Title: "X", UpdateHours: 1, HideSettings: true}, nil); r.StatusCode != 400 {
+		t.Fatalf("hide settings without provider id: %d", r.StatusCode)
+	}
+	b := branding{Title: "X", UpdateHours: 1, HappOnly: true, ProviderID: "abc123", HideSettings: true, AlwaysHWID: true}
+	if r := e.do("PUT", "/api/settings/subscription", root, b, nil); r.StatusCode != 200 {
+		t.Fatalf("save: %d", r.StatusCode)
+	}
+
+	fetch := func(ua string) (*http.Response, string) {
+		req, _ := http.NewRequest("GET", e.srv.URL+"/sub/"+u.SubToken, nil)
+		req.Header.Set("User-Agent", ua)
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		body, _ := io.ReadAll(res.Body)
+		dec, _ := base64.StdEncoding.DecodeString(string(body))
+		return res, string(dec)
+	}
+	// another client gets no keys
+	if _, body := fetch("v2rayNG/1.9"); strings.Contains(body, u.Credentials.Password) {
+		t.Fatalf("non-Happ client got keys: %q", body)
+	}
+	// Happ gets the keys and is told to hide them
+	res, body := fetch("Happ/3.8.1")
+	if !strings.Contains(body, u.Credentials.Password) || res.Header.Get("hide-settings") != "1" ||
+		res.Header.Get("providerid") != "abc123" || res.Header.Get("subscription-always-hwid-enable") != "1" {
+		t.Fatalf("happ response: %v %q", res.Header, body)
+	}
+
+	// the public page shows only the encrypted link
+	var info subscriptionInfo
+	e.do("GET", "/sub/"+u.SubToken+"/info", "", nil, &info)
+	if !info.Protected || info.URL != "" || len(info.Links) != 0 || !strings.HasPrefix(info.HappLink, "happ://crypt4/") {
+		t.Fatalf("protected info: %+v", info)
+	}
+	var link map[string]string
+	if r := e.do("GET", "/api/users/"+itoa(u.ID)+"/happ-link", root, nil, &link); r.StatusCode != 200 || !strings.HasPrefix(link["link"], "happ://crypt") {
+		t.Fatalf("happ link: %d %v", r.StatusCode, link)
 	}
 }

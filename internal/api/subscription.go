@@ -46,6 +46,11 @@ func (s *Server) endpoints(ctx context.Context, u *model.User) ([]sub.Endpoint, 
 	return sub.Resolve(u, inbounds, hosts, s.cfg.DefaultHost), nil
 }
 
+// isHapp reports whether the request comes from the Happ client.
+func isHapp(r *http.Request) bool {
+	return strings.Contains(strings.ToLower(r.UserAgent()), "happ")
+}
+
 // detectFormat picks the subscription format from ?format= or the client User-Agent.
 func detectFormat(r *http.Request) string {
 	if f := r.URL.Query().Get("format"); f != "" {
@@ -121,6 +126,12 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Announce", b64Header("This client does not report a device ID"))
 	}
 
+	// Protected mode: only Happ gets configs, and it is told to hide them.
+	if s.branding().HappOnly && !isHapp(r) {
+		eps = nil
+		w.Header().Set("Announce", b64Header("Import this subscription in Happ"))
+	}
+
 	s.writeSubHeaders(w, u)
 	switch format {
 	case "clash":
@@ -170,6 +181,15 @@ func (s *Server) writeSubHeaders(w http.ResponseWriter, u *model.User) {
 	if b.WebPageURL != "" {
 		h.Set("Profile-Web-Page-Url", b.WebPageURL)
 	}
+	if b.ProviderID != "" {
+		h.Set("providerid", b.ProviderID)
+		if b.HideSettings {
+			h.Set("hide-settings", "1")
+		}
+		if b.AlwaysHWID {
+			h.Set("subscription-always-hwid-enable", "1")
+		}
+	}
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, u.Username))
 	h.Set("Cache-Control", "no-store")
 }
@@ -181,7 +201,9 @@ type subscriptionInfo struct {
 	UsedTraffic   int64               `json:"used_traffic"`
 	ExpireAt      *time.Time          `json:"expire_at"`
 	ResetStrategy model.ResetStrategy `json:"reset_strategy"`
-	URL           string              `json:"url"`
+	URL           string              `json:"url,omitempty"`
+	HappLink      string              `json:"happ_link,omitempty"` // encrypted: Happ hides the keys inside
+	Protected     bool                `json:"protected"`
 	DriveURL      string              `json:"gdrive_url,omitempty"` // backup link through googleapis.com
 	Title         string              `json:"title"`
 	Announce      string              `json:"announce,omitempty"`
@@ -207,6 +229,18 @@ func (s *Server) handleSubscriptionInfo(w http.ResponseWriter, r *http.Request) 
 	}
 	b := s.branding()
 	info.Title, info.Announce, info.SupportURL = b.Title, b.userAnnounce(u), b.SupportURL
+	if link, err := s.happ.Link(r.Context(), info.URL); err == nil {
+		info.HappLink = link
+	} else {
+		s.log.Warn("happ link", "err", err)
+	}
+	if b.HappOnly {
+		// Keys stay hidden: no plain address, no Drive copy, no raw links.
+		info.Protected, info.URL = true, ""
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, info)
+		return
+	}
 	if d := s.userDrive(r.Context(), u); d.URL != "" && u.DeviceLimit == 0 {
 		info.DriveURL = d.URL
 	}
@@ -228,7 +262,7 @@ func (s *Server) handleWireGuardConf(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if u.DeviceLimit > 0 {
+	if u.DeviceLimit > 0 || s.branding().HappOnly {
 		http.NotFound(w, r)
 		return
 	}

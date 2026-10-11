@@ -1,13 +1,13 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
-import { CloudUpload, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from '../../components/icons'
-import { del, post } from '../../lib/api'
+import { CloudUpload, ExternalLink, KeyRound, Pencil, RotateCcw, Smartphone, Trash2 } from '../../components/icons'
+import { del, get, post } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import { useAuth } from '../../lib/auth'
 import { formatBytes, formatDate, relativeTime } from '../../lib/format'
 import type { DailyTraffic, Device, User, UserDrive } from '../../lib/types'
-import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented } from '../../components/ui'
+import { Button, Confirm, CopyButton, ErrorNote, IconButton, Modal, ProgressBar, QR, cx, Segmented, Skeleton, Toggle } from '../../components/ui'
 import { UserStatusBadge } from '../../components/StatusBadge'
 import { TrafficChart } from '../Dashboard'
 
@@ -204,7 +204,21 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const drive = sub.gdrive
-  const url = kind === 'direct' ? sub.url : drive.url
+  const plain = kind === 'direct' ? sub.url : drive.url
+  // Encrypted Happ link: the app hides the address and every key inside.
+  const [encrypt, setEncrypt] = useState(false)
+  const [happ, setHapp] = useState<Record<string, string>>({})
+  useEffect(() => {
+    if (!encrypt || !plain || happ[kind]) return
+    let stale = false
+    get<{ link: string }>(`/api/users/${user.id}/happ-link?kind=${kind}`)
+      .then((r) => !stale && setHapp((h) => ({ ...h, [kind]: r.link })))
+      .catch((e) => !stale && setError((e as Error).message))
+    return () => {
+      stale = true
+    }
+  }, [encrypt, kind, plain, user.id, happ])
+  const url = encrypt && plain ? happ[kind] ?? '' : plain
 
   const createDrive = async () => {
     setBusy(true)
@@ -240,21 +254,27 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
         ]}
       />
 
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Toggle checked={encrypt} onChange={setEncrypt} label={t('sub.encrypted')} />
+        <span className="hint">{t('sub.encryptedHint')}</span>
+      </div>
       {kind === 'gdrive' && <p className="mb-3 text-xs text-muted-foreground">{t('sub.gdriveHint')}</p>}
       <ErrorNote error={error ?? (kind === 'gdrive' ? drive.error ?? null : null)} />
 
-      {url ? (
+      {encrypt && plain && !url ? (
+        <Skeleton className="h-[180px] w-full" />
+      ) : url ? (
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-start">
           <QR value={url} size={180} />
           <div className="min-w-0 flex-1 space-y-3">
             <code className="block break-all rounded-lg bg-muted/60 p-3 text-xs text-foreground">{url}</code>
             <div className="flex flex-wrap items-center gap-2">
               <CopyButton text={url} />
-              <a href={url} target="_blank" rel="noreferrer">
-                <Button variant="secondary" size="sm">
-                  ↗
-                </Button>
-              </a>
+              {!encrypt && (
+                <a href={url} target="_blank" rel="noreferrer" className="btn btn-outline btn-sm btn-icon" aria-label="open">
+                  <ExternalLink />
+                </a>
+              )}
               {kind === 'gdrive' && drive.synced_at && (
                 <span className="text-xs text-faint">
                   {t('sub.gdriveSynced')}: {relativeTime(drive.synced_at, lang)}

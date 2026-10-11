@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -25,7 +26,18 @@ type branding struct {
 	UpdateHours int    `json:"update_hours"`
 	SupportURL  string `json:"support_url"`
 	WebPageURL  string `json:"web_page_url"`
+
+	// Key protection. HappOnly serves configs to Happ only and keeps the
+	// public subscription page from showing keys or the plain address.
+	HappOnly bool `json:"happ_only"`
+	// Happ provider features (need a Provider ID from happ-proxy.com):
+	// hide server settings in the app and keep HWID reporting on.
+	ProviderID   string `json:"provider_id"`
+	HideSettings bool   `json:"hide_settings"`
+	AlwaysHWID   bool   `json:"always_hwid"`
 }
+
+var providerIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
 
 func (s *Server) defaultBranding() branding {
 	return branding{Title: s.cfg.SubTitle, UpdateHours: s.cfg.SubUpdateHours}
@@ -90,6 +102,7 @@ func (s *Server) handleUpdateBranding(w http.ResponseWriter, r *http.Request) {
 	in.Title = strings.TrimSpace(in.Title)
 	in.Announce = strings.TrimSpace(strings.ReplaceAll(in.Announce, "\r\n", "\n"))
 	in.SupportURL, in.WebPageURL = strings.TrimSpace(in.SupportURL), strings.TrimSpace(in.WebPageURL)
+	in.ProviderID = strings.TrimSpace(in.ProviderID)
 	switch {
 	case in.Title == "" || utf8.RuneCountInString(in.Title) > 64:
 		writeError(w, http.StatusBadRequest, "title must be 1-64 characters")
@@ -102,6 +115,12 @@ func (s *Server) handleUpdateBranding(w http.ResponseWriter, r *http.Request) {
 		return
 	case !validLink(in.SupportURL) || !validLink(in.WebPageURL):
 		writeError(w, http.StatusBadRequest, "links must start with https://, http:// or tg://")
+		return
+	case !providerIDRe.MatchString(in.ProviderID):
+		writeError(w, http.StatusBadRequest, "provider ID: letters, digits, _ and - only")
+		return
+	case (in.HideSettings || in.AlwaysHWID) && in.ProviderID == "":
+		writeError(w, http.StatusBadRequest, "hiding settings and forced HWID need a Happ provider ID")
 		return
 	}
 	raw, _ := json.Marshal(in)

@@ -289,6 +289,30 @@ func (s *Server) handleUserSubscription(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"url": s.subURL(r, u), "links": links, "gdrive": s.userDrive(r.Context(), u)})
 }
 
+// handleUserHappLink returns the user's subscription as an encrypted Happ
+// link (?kind=direct|gdrive): Happ hides the address and the keys inside.
+func (s *Server) handleUserHappLink(w http.ResponseWriter, r *http.Request) {
+	u, ok := s.ownedUser(w, r)
+	if !ok {
+		return
+	}
+	target := s.subURL(r, u)
+	if r.URL.Query().Get("kind") == "gdrive" {
+		d := s.userDrive(r.Context(), u)
+		if d.URL == "" {
+			writeError(w, http.StatusBadRequest, "this user has no Google Drive link yet")
+			return
+		}
+		target = d.URL
+	}
+	link, err := s.happ.Link(r.Context(), target)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "could not encrypt the link: "+err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"link": link})
+}
+
 func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
 	u, ok := s.ownedUser(w, r)
 	if !ok {

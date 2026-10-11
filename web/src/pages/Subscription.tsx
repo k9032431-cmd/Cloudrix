@@ -27,7 +27,9 @@ export default function Subscription() {
   const { data, error, loading } = useFetch<SubscriptionInfo>(`/sub/${encodeURIComponent(token ?? '')}/info`)
   const left = data ? daysLeft(data.expire_at) : null
   const [kind, setKind] = useState<'direct' | 'gdrive'>('direct')
-  const url = data ? (kind === 'gdrive' && data.gdrive_url ? data.gdrive_url : data.url) : ''
+  const url = data ? (kind === 'gdrive' && data.gdrive_url ? data.gdrive_url : data.url ?? '') : ''
+  // Happ always gets the encrypted link: it then hides the keys inside.
+  const happLink = data?.happ_link
 
   return (
     <div className="relative min-h-screen overflow-hidden px-4 py-8">
@@ -94,6 +96,21 @@ export default function Subscription() {
               </Card>
             )}
 
+            {data.protected && happLink && (
+              <Card delay={0.28} className="flex flex-col items-center gap-4 p-6 text-center">
+                <QR value={happLink} size={200} />
+                <p className="text-sm text-muted-foreground">{t('sub.protectedHint')}</p>
+                <div className="flex flex-wrap justify-center gap-2">
+                  <a href={happLink} className="btn btn-primary">
+                    {t('sub.openHapp')}
+                  </a>
+                  <CopyButton text={happLink} label={t('sub.copyLink')} />
+                </div>
+                <p className="hint">{t('sub.getHapp')}</p>
+              </Card>
+            )}
+
+            {!data.protected && (
             <Card delay={0.28} className="flex flex-col items-center gap-4 p-6">
               {data.gdrive_url && (
                                 <Segmented
@@ -119,12 +136,14 @@ export default function Subscription() {
               <p className="text-center text-sm text-muted-foreground">{kind === 'gdrive' ? t('sub.gdriveHint') : t('sub.scan')}</p>
               <CopyButton text={url} label={t('sub.copyLink')} />
             </Card>
+            )}
 
+            {!data.protected && (
             <Card delay={0.35} className="p-6">
               <h2 className="mb-3 text-sm font-medium text-foreground">{t('sub.addToApp')}</h2>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                 {APPS.map((a) => (
-                  <a key={a.name} href={a.link(url)}>
+                  <a key={a.name} href={a.name === 'Happ' && happLink && kind === 'direct' ? happLink : a.link(url)}>
                     <Button variant="secondary" className="w-full">
                       {a.name}
                     </Button>
@@ -132,6 +151,7 @@ export default function Subscription() {
                 ))}
               </div>
             </Card>
+            )}
 
             {(data.links.length > 0 || data.wireguard.length > 0) && (
               <Card delay={0.42} className="p-6">

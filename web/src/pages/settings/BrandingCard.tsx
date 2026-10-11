@@ -4,7 +4,7 @@ import { put } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import type { Branding } from '../../lib/types'
-import { Button, Card, ErrorNote, Field, Input, Textarea } from '../../components/ui'
+import { Button, Card, ErrorNote, Field, Input, Textarea, Toggle } from '../../components/ui'
 
 const VARIABLES = ['USERNAME', 'NOTE', 'EXPIRE_DATE', 'DAYS_LEFT', 'DATA_LEFT', 'DATA_USED', 'DATA_LIMIT', 'STATUS'] as const
 
@@ -135,6 +135,21 @@ export default function BrandingCard() {
             <Field label={t('br.web')}>
               <Input value={form.web_page_url} onChange={(e) => setForm({ ...form, web_page_url: e.target.value })} placeholder="https://…" />
             </Field>
+          </div>
+          <div className="grid gap-3 rounded-card border border-border p-4">
+            <div>
+              <div className="text-[13.5px] font-semibold text-foreground">{t('br.protectTitle')}</div>
+              <p className="hint mt-0.5">{t('br.protectDesc')}</p>
+            </div>
+            <Toggle checked={form.happ_only} onChange={(v) => setForm({ ...form, happ_only: v })} label={t('br.happOnly')} />
+            <p className="hint -mt-1 pl-12">{t('br.happOnlyHint')}</p>
+            <Field label={t('br.providerId')} hint={t('br.providerIdHint')}>
+              <Input value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value.trim() })} placeholder="happ-proxy.com → Provider ID" />
+            </Field>
+            <div className={form.provider_id ? 'grid gap-3' : 'pointer-events-none grid gap-3 opacity-50'}>
+              <Toggle checked={form.hide_settings} onChange={(v) => setForm({ ...form, hide_settings: v })} label={t('br.hideSettings')} />
+              <Toggle checked={form.always_hwid} onChange={(v) => setForm({ ...form, always_hwid: v })} label={t('br.alwaysHwid')} />
+            </div>
           </div>
           <Button type="submit" loading={busy}>
             {t('common.save')}

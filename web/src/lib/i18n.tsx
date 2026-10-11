@@ -351,6 +351,19 @@ const ru = {
   'inbounds.addNode': 'Добавить ноду',
   'nodes.traffic': 'Трафик',
   'inbounds.certHint': 'Пути к файлам на сервере ноды. Для hysteria2 и tuic можно оставить пустым: нода создаст самоподписанный сертификат, а клиенты подключатся без проверки.',
+  'sub.encrypted': 'Зашифрованная (Happ)',
+  'sub.encryptedHint': 'Happ скрывает адрес и ключи: их нельзя посмотреть, изменить или переслать по отдельности.',
+  'sub.protectedHint': 'Ключи защищены. Откройте подписку в Happ — адрес и параметры серверов скрыты.',
+  'sub.openHapp': 'Открыть в Happ',
+  'sub.getHapp': 'Нет Happ? Установите его из App Store или Google Play.',
+  'br.protectTitle': 'Защита ключей',
+  'br.protectDesc': 'Скрывает адреса и параметры серверов от пользователей.',
+  'br.happOnly': 'Только Happ',
+  'br.happOnlyHint': 'Другие приложения не получат ключи, а страница подписки покажет только зашифрованную ссылку.',
+  'br.providerId': 'Provider ID',
+  'br.providerIdHint': 'С happ-proxy.com. Нужен, чтобы скрыть настройки серверов и включить обязательный HWID.',
+  'br.hideSettings': 'Скрыть настройки серверов в Happ',
+  'br.alwaysHwid': 'Обязательная передача HWID',
 }
 
 type Key = keyof typeof ru
@@ -704,6 +717,19 @@ const en: Record<Key, string> = {
   'inbounds.addNode': 'Add node',
   'nodes.traffic': 'Traffic',
   'inbounds.certHint': 'File paths on the node server. For hysteria2 and tuic leave empty: the node creates a self-signed certificate and clients connect without verifying it.',
+  'sub.encrypted': 'Encrypted (Happ)',
+  'sub.encryptedHint': 'Happ hides the address and keys: they cannot be viewed, edited or shared one by one.',
+  'sub.protectedHint': 'Keys are protected. Open the subscription in Happ — server addresses and settings stay hidden.',
+  'sub.openHapp': 'Open in Happ',
+  'sub.getHapp': 'No Happ yet? Get it from the App Store or Google Play.',
+  'br.protectTitle': 'Key protection',
+  'br.protectDesc': 'Hides server addresses and settings from users.',
+  'br.happOnly': 'Happ only',
+  'br.happOnlyHint': 'Other apps get no keys, and the subscription page shows only the encrypted link.',
+  'br.providerId': 'Provider ID',
+  'br.providerIdHint': 'From happ-proxy.com. Needed to hide server settings and to force HWID.',
+  'br.hideSettings': 'Hide server settings in Happ',
+  'br.alwaysHwid': 'Always send HWID',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

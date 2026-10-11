@@ -186,6 +186,10 @@ export interface Branding {
   update_hours: number
   support_url: string
   web_page_url: string
+  happ_only: boolean
+  provider_id: string
+  hide_settings: boolean
+  always_hwid: boolean
 }
 
 export interface SubscriptionInfo {
@@ -195,7 +199,9 @@ export interface SubscriptionInfo {
   used_traffic: number
   expire_at: string | null
   reset_strategy: ResetStrategy
-  url: string
+  url?: string
+  happ_link?: string
+  protected: boolean
   gdrive_url?: string
   title: string
   announce?: string

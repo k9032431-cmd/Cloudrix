@@ -16,6 +16,7 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/config"
 	"github.com/k9032431-cmd/cloudrix/internal/gdrive"
+	"github.com/k9032431-cmd/cloudrix/internal/happ"
 	"github.com/k9032431-cmd/cloudrix/internal/store"
 )
 
@@ -31,6 +32,7 @@ type Server struct {
 	brandMu sync.RWMutex
 	brand   branding
 	nodes   *nodeHub
+	happ    *happ.Encryptor
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }
@@ -41,6 +43,7 @@ func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logg
 		limiter: newLoginLimiter(5, 5*time.Minute),
 		started: time.Now(),
 		nodes:   newNodeHub(),
+		happ:    happ.NewEncryptor(),
 	}
 	s.drive = newDriveSyncer(s, gdrive.Google)
 	s.brand = s.defaultBranding()
@@ -96,6 +99,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/users/{id}/reset-traffic", s.handleResetTraffic)
 			r.Post("/users/{id}/revoke", s.handleRevokeUser)
 			r.Get("/users/{id}/subscription", s.handleUserSubscription)
+			r.Get("/users/{id}/happ-link", s.handleUserHappLink)
 			r.Get("/users/{id}/devices", s.handleListDevices)
 			r.Delete("/users/{id}/devices", s.handleDeleteDevice)
 			r.Get("/users/{id}/traffic", s.handleUserTraffic)
