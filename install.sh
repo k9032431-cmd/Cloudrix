@@ -892,16 +892,18 @@ make_backup() {
   BACKUP_FILE=$file
 }
 
-# self_update загружает свежую версию этого скрипта и перезапускает команду ею,
-# чтобы новые пункты меню и исправления установщика приходили вместе с панелью.
+# self_update загружает свежую версию этого скрипта и перезапускает команду ею
+# (update или node-update), чтобы новые пункты меню и исправления установщика
+# приходили вместе с обновлением панели или ноды.
 self_update() {
+  local cmd=${1:-update}
   [[ -z ${CLOUDRIX_SELF_UPDATED-} && $TARGET_CHANNEL != local && $TARGET_CHANNEL != mirror ]] || return 0
   local tmp self=${BASH_SOURCE[0]-}
   tmp=$(mktemp)
   if curl -fsSL --max-time 20 "https://raw.githubusercontent.com/$REPO/$TARGET_REF/install.sh" -o "$tmp" 2>/dev/null &&
     bash -n "$tmp" 2>/dev/null && ! { [[ -f $self ]] && cmp -s "$tmp" "$self"; }; then
     info "Обновляю сам менеджер"
-    local args=(update)
+    local args=("$cmd")
     ((ASSUME_YES)) && args+=(--yes)
     ((FORCE)) && args+=(--force)
     exec env CLOUDRIX_SELF_UPDATED=1 CLOUDRIX_REPO="$REPO" CLOUDRIX_BRANCH="$BRANCH" \
@@ -1205,8 +1207,13 @@ cmd_node_update() {
   [[ -f $NODE_ENV ]] || die "Нода не установлена."
   INSTALL_CONF=$NODE_CONF_DIR/install.conf
   load_install_conf
-  info "Проверяю обновления ($REPO${BRANCH:+, ветка $BRANCH})"
-  resolve_target
+  if [[ -n ${CLOUDRIX_TARGET-} ]]; then
+    TARGET_CHANNEL=${CLOUDRIX_TARGET%%:*} TARGET_REF=${CLOUDRIX_TARGET#*:}
+  else
+    info "Проверяю обновления ($REPO${BRANCH:+, ветка $BRANCH})"
+    resolve_target
+  fi
+  self_update node-update
   ensure_node_deps
   fetch_binary
   install_binary
