@@ -1361,7 +1361,7 @@ node_menu() {
     printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
     read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
     case $choice in
-      1) run_menu_action cmd_node_update ;;
+      1) update_then_reload cmd_node_update ;;
       2) run_menu_action bash -c "systemctl restart $NODE_SERVICE && echo '✔ Перезапущено'" ;;
       3) run_menu_action cmd_node_logs ;;
       4) FOLLOW=1 run_menu_action cmd_node_logs ;;
@@ -1589,7 +1589,7 @@ menu() {
     printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
     read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
     case $choice in
-      1) run_menu_action cmd_update ;;
+      1) update_then_reload cmd_update ;;
       2) run_menu_action bash -c "systemctl restart $SERVICE && echo '✔ Перезапущено'" ;;
       3) run_menu_action cmd_logs ;;
       4) FOLLOW=1 run_menu_action cmd_logs ;;
@@ -1609,6 +1609,21 @@ menu() {
 }
 
 # run_menu_action запускает пункт в подоболочке: ошибка не закрывает меню.
+# update_then_reload обновляет и, если обновился сам менеджер, перезапускает
+# меню уже новой версией: открытое меню — это старый скрипт в памяти, и без
+# перезапуска новые пункты не появились бы.
+update_then_reload() {
+  local before after
+  before=$(cksum "$MANAGER" 2>/dev/null || true)
+  run_menu_action "$@"
+  after=$(cksum "$MANAGER" 2>/dev/null || true)
+  if [[ -x $MANAGER && $before != "$after" ]]; then
+    info "Меню обновлено — открываю новую версию"
+    sleep 1
+    exec "$MANAGER"
+  fi
+}
+
 run_menu_action() {
   echo
   local rc=0
