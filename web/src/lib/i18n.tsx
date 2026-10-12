@@ -393,11 +393,8 @@ const ru = {
   'inbounds.portClash': 'порт занят',
   'inbounds.portClashHint': 'Этот порт на ноде уже у инбаунда {tag}. Из-за этого ядро не запускает конфиг ноды целиком — смените порт у одного из них.',
   'users.devicesOnline': 'Устройств онлайн',
-  'presence.blocked': 'Лимит устройств',
-  'presence.blockedUntil': 'ключи отключены до {time}',
-  'presence.blockedHint': 'Подключено больше устройств, чем разрешено: ключи временно сняты со всех нод.',
-  'br.deviceBlock': 'Превышение лимита устройств: отключать ключи на, минут',
-  'br.deviceBlockHint': 'Ноды считают одновременные подключения (по IP) — так лимит работает и для Google-ссылок, и для пересланных ключей. 0 — не отключать, только показывать.',
+  'users.kicked': 'Отключены (старые)',
+  'users.kickedHint': 'Подключилось больше устройств, чем разрешено: самые старые отключены на 30 секунд. Устройство снова заработает, если переподключить VPN, — тогда отключится следующее старое.',
 }
 
 type Key = keyof typeof ru
@@ -793,11 +790,8 @@ const en: Record<Key, string> = {
   'inbounds.portClash': 'port in use',
   'inbounds.portClashHint': 'Inbound {tag} already uses this port on the node, so the core refuses the node\'s whole config — change the port of one of them.',
   'users.devicesOnline': 'Devices online',
-  'presence.blocked': 'Device limit',
-  'presence.blockedUntil': 'keys off until {time}',
-  'presence.blockedHint': 'More devices connected than allowed: keys are withheld on every node for a while.',
-  'br.deviceBlock': 'Over the device limit: withhold keys for, minutes',
-  'br.deviceBlockHint': 'Nodes count simultaneous connections (by IP), so the limit also covers Google links and shared keys. 0 — never withhold, only show.',
+  'users.kicked': 'Cut off (oldest)',
+  'users.kickedHint': 'More devices connected than allowed: the oldest are cut off for 30 seconds. A device works again after reconnecting the VPN, and then the next oldest goes.',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

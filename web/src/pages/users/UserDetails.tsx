@@ -97,6 +97,11 @@ export default function UserDetails({
               {user.device_limit > 0 && <span className="text-faint"> / {user.device_limit}</span>}
             </span>
             {user.online_ips && user.online_ips.length > 0 && <div className="truncate font-mono text-xs text-faint">{user.online_ips.join(', ')}</div>}
+            {user.kicked_ips && user.kicked_ips.length > 0 && (
+              <div className="truncate text-xs text-destructive" title={t('users.kickedHint')}>
+                {t('users.kicked')}: <span className="font-mono">{user.kicked_ips.join(', ')}</span>
+              </div>
+            )}
           </Info>
         )}
         <Info label={t('users.lastSub')}>

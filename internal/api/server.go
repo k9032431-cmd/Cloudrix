@@ -62,6 +62,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	go s.drive.run(ctx)
 	go s.watchNodes(ctx)
+	go s.watchDevices(ctx)
 	s.drive.Trigger()
 	return nil
 }

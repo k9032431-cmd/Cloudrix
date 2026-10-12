@@ -3,9 +3,11 @@ package nodeagent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -193,7 +195,7 @@ func str(v any) string {
 // onlineIPs reads which IPs each user is connected from right now (Xray
 // drops an IP once its connections close). ok is false when Xray cannot
 // tell, so the panel does not mistake that for nobody being online.
-func (a *Agent) onlineIPs(ctx context.Context) (online map[string][]string, ok bool) {
+func (a *Agent) onlineIPs(ctx context.Context) (online map[string]map[string]int64, ok bool) {
 	if !a.xray.running() {
 		return nil, false
 	}
@@ -208,7 +210,7 @@ func (a *Agent) onlineIPs(ctx context.Context) (online map[string][]string, ok b
 	if json.Unmarshal(out, &all) != nil {
 		return nil, false
 	}
-	online = map[string][]string{}
+	online = map[string]map[string]int64{}
 	for i, name := range all.Users {
 		if i >= 1000 { // keep one sync cheap on a busy node
 			break
@@ -228,9 +230,47 @@ func (a *Agent) onlineIPs(ctx context.Context) (online map[string][]string, ok b
 		if json.Unmarshal(out, &res) != nil || len(res.IPs) == 0 {
 			continue
 		}
-		for ip := range res.IPs {
-			online[parts[1]] = append(online[parts[1]], ip)
-		}
+		online[parts[1]] = res.IPs
 	}
 	return online, true
+}
+
+// applyKicks cuts off the devices the panel lists (over a user's device
+// limit): a routing rule per user sends that user's traffic from those IPs
+// to "block". The rules go before the config's own and replace the routing
+// through the API, so nobody else is disconnected.
+func (a *Agent) applyKicks(ctx context.Context, kicks map[string][]string) error {
+	raw, err := os.ReadFile(a.path("xray.json"))
+	if err != nil {
+		return err
+	}
+	var cfg struct {
+		Routing struct {
+			Rules []map[string]any `json:"rules"`
+		} `json:"routing"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return err
+	}
+	emails := make([]string, 0, len(kicks))
+	for email := range kicks {
+		emails = append(emails, email)
+	}
+	sort.Strings(emails)
+	var rules []map[string]any
+	for i, email := range emails {
+		rules = append(rules, map[string]any{ // rule tags must be unique
+			"ruleTag": fmt.Sprintf("cloudrix-device-limit-%d", i), "user": []string{email}, "sourceIP": kicks[email], "outboundTag": "block",
+		})
+	}
+	rules = append(rules, cfg.Routing.Rules...)
+	body, _ := json.Marshal(map[string]any{"routing": map[string]any{"rules": rules}})
+	file := a.path("kicks.json")
+	if err := os.WriteFile(file, body, 0o600); err != nil {
+		return err
+	}
+	if out, err := a.xrayAPI(ctx, "adrules", file); err != nil {
+		return fmt.Errorf("%v: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

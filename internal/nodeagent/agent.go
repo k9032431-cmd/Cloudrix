@@ -79,6 +79,9 @@ type Agent struct {
 	lastTS  int64
 	cores   string
 	certPin string
+
+	kicks    string // version of the device cut-offs in effect
+	kicksGen int    // xray generation they were applied to
 }
 
 func New(cfg Config) *Agent {
@@ -136,6 +139,10 @@ func (a *Agent) Run(ctx context.Context) error {
 		}
 		req := nodeproto.SyncRequest{Version: a.version, Cores: a.cores, Agent: a.cfg.Version, Error: errText, Wait: true, CertSHA256: a.certPin}
 		req.Online, req.OnlineReported = a.onlineIPs(ctx)
+		if a.kicksGen != a.xray.generation() {
+			a.kicks = "" // a restarted xray lost the rules set through its API
+		}
+		req.Kicks = a.kicks
 		for _, st := range a.pending {
 			req.Stats = append(req.Stats, *st)
 		}
@@ -170,6 +177,14 @@ func (a *Agent) Run(ctx context.Context) error {
 		case resp.Changed:
 			a.apply(ctx, resp)
 			a.writeState(true, "")
+		}
+		if !resp.Disabled && resp.KicksVersion != a.kicks && a.xray.running() {
+			if err := a.applyKicks(ctx, resp.Kicks); err != nil {
+				a.log.Warn("device limit rules", "err", err)
+				sleep(ctx, 5*time.Second)
+			} else {
+				a.kicks, a.kicksGen = resp.KicksVersion, a.xray.generation()
+			}
 		}
 	}
 	return nil

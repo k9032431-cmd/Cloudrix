@@ -77,7 +77,7 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 	cascade.apply(&xin, &outbounds, &rules)
 	cfg := map[string]any{
 		"log":       map[string]any{"loglevel": "warning", "access": "none"},
-		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService"}},
+		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService", "RoutingService"}},
 		"stats":     map[string]any{},
 		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
 		"inbounds":  xin,

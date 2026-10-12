@@ -26,6 +26,7 @@ type proc struct {
 	cmd  *exec.Cmd
 	done chan struct{}
 	last string // last output line
+	runs int    // starts so far; routing set through the API is lost on each
 }
 
 func newProc(name, bin string, args, env []string, log *slog.Logger, onErr func(string)) *proc {
@@ -59,6 +60,7 @@ func (p *proc) spawnLocked() error {
 	}
 	done := make(chan struct{})
 	p.cmd, p.done = cmd, done
+	p.runs++
 	go p.pump(pr)
 	go func() {
 		err := cmd.Wait()
@@ -133,4 +135,11 @@ func (p *proc) stop() {
 func (p *proc) restart() error {
 	p.stop()
 	return p.start()
+}
+
+// generation changes every time the process is (re)started.
+func (p *proc) generation() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.runs
 }

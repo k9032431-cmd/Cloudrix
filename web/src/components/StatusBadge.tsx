@@ -26,19 +26,8 @@ export const isOnline = (iso: string | null) => !!iso && Date.now() - new Date(i
 
 // UserPresenceBadge shows whether an active key is in use right now;
 // other states (disabled, limited, expired, on hold) show the status instead.
-export function UserPresenceBadge({ user, detail }: { user: Pick<User, 'status' | 'online_at' | 'device_blocked_until'>; detail?: boolean }) {
+export function UserPresenceBadge({ user, detail }: { user: Pick<User, 'status' | 'online_at'>; detail?: boolean }) {
   const { t, lang } = useI18n()
-  if (user.device_blocked_until && new Date(user.device_blocked_until).getTime() > Date.now()) {
-    const until = new Date(user.device_blocked_until).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })
-    return (
-      <span className="inline-flex items-center gap-2" title={t('presence.blockedHint')}>
-        <Badge tone="red" dot>
-          {t('presence.blocked')}
-        </Badge>
-        {detail && <span className="text-xs font-normal text-muted-foreground">{t('presence.blockedUntil', { time: until })}</span>}
-      </span>
-    )
-  }
   if (user.status !== 'active') return <UserStatusBadge status={user.status} />
   const online = isOnline(user.online_at)
   return (

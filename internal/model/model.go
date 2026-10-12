@@ -87,9 +87,9 @@ type User struct {
 	SubUserAgent   string        `json:"sub_user_agent"`
 
 	// Live data from the nodes, not stored: the IPs the user is connected
-	// from and, when over the device limit, until when the keys are withheld.
-	OnlineIPs          []string   `json:"online_ips,omitempty"`
-	DeviceBlockedUntil *time.Time `json:"device_blocked_until,omitempty"`
+	// from, and the oldest devices cut off for going over the device limit.
+	OnlineIPs []string `json:"online_ips,omitempty"`
+	KickedIPs []string `json:"kicked_ips,omitempty"`
 }
 
 // Group bundles inbounds; users get every inbound of their groups, so an

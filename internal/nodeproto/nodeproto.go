@@ -48,10 +48,13 @@ type SyncRequest struct {
 	Wait    bool   `json:"wait,omitempty"`  // long-poll until the config changes
 	// CertSHA256 is the hex SHA-256 of the agent's self-signed certificate.
 	CertSHA256 string `json:"cert_sha256,omitempty"`
-	// Online maps user email to the IPs it is connected from right now;
-	// OnlineReported tells an empty map apart from an agent that cannot tell.
-	Online         map[string][]string `json:"online,omitempty"`
-	OnlineReported bool                `json:"online_reported,omitempty"`
+	// Online maps user email to the IPs it is connected from right now and
+	// when each last opened a connection (unix seconds); OnlineReported tells
+	// an empty map apart from an agent that cannot tell.
+	Online         map[string]map[string]int64 `json:"online,omitempty"`
+	OnlineReported bool                        `json:"online_reported,omitempty"`
+	// Kicks is the version of the device cut-offs the agent has applied.
+	Kicks string `json:"kicks,omitempty"`
 }
 
 // SyncResponse carries the core configs when they changed.
@@ -62,6 +65,10 @@ type SyncResponse struct {
 	Xray     json.RawMessage `json:"xray,omitempty"`
 	SingBox  json.RawMessage `json:"sing_box,omitempty"`
 	Problem  string          `json:"problem,omitempty"` // config could not be built; keep the old one
+	// Kicks lists devices over a user's device limit to cut off (core email
+	// → IPs), applied as routing rules without restarting the core.
+	Kicks        map[string][]string `json:"kicks,omitempty"`
+	KicksVersion string              `json:"kicks_version,omitempty"`
 }
 
 // NewSecret returns a random node secret (32 bytes, base64url).
