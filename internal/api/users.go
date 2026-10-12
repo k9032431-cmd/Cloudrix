@@ -36,6 +36,9 @@ func (s *Server) validateUserInput(ctx context.Context, in *userInput) error {
 	if !usernameRe.MatchString(in.Username) {
 		return errors.New("username must be 3-64 chars: letters, digits, _ . @ -")
 	}
+	if err := checkUserCaps(adminFrom(ctx), in); err != nil {
+		return err
+	}
 	if in.Status == "" {
 		in.Status = model.StatusActive
 	}
@@ -457,6 +460,9 @@ func (s *Server) handleBulkUsers(w http.ResponseWriter, r *http.Request) {
 			case "add_data":
 				if u.DataLimit > 0 {
 					u.DataLimit = max(u.DataLimit+req.AddData, 0)
+					if a.Role != model.RoleSudo && a.MaxUserData > 0 {
+						u.DataLimit = min(u.DataLimit, a.MaxUserData)
+					}
 				}
 			}
 			jobs.Apply(u, now)

@@ -7,6 +7,11 @@ export interface Admin {
   disabled: boolean
   user_limit: number
   created_at: string
+  expire_at: string | null
+  data_limit: number
+  used_traffic: number
+  max_user_data: number
+  max_user_devices: number
 }
 
 export type UserStatus = 'active' | 'disabled' | 'limited' | 'expired' | 'on_hold'

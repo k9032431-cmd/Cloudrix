@@ -238,6 +238,12 @@ func (s *Store) AddTraffic(ctx context.Context, userID, bytes int64) error {
 		bytes, bytes, unix(now), userID); err != nil {
 		return err
 	}
+	// the owner's total counts towards the admin's own traffic limit
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE admins SET used_traffic = used_traffic + ? WHERE id = (SELECT admin_id FROM users WHERE id = ?)`,
+		bytes, userID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO traffic_daily (day, user_id, bytes) VALUES (?, ?, ?)
 		ON CONFLICT(day, user_id) DO UPDATE SET bytes = bytes + excluded.bytes`,
 		now.Format("2006-01-02"), userID, bytes); err != nil {

@@ -26,6 +26,29 @@ type Admin struct {
 	Disabled     bool      `json:"disabled"`
 	UserLimit    int       `json:"user_limit"` // 0 = unlimited
 	CreatedAt    time.Time `json:"created_at"`
+
+	// Limits for admins and resellers (sudo admins ignore them). Past
+	// ExpireAt or over DataLimit the admin cannot sign in and the admin's
+	// users get no keys until the limit is raised.
+	ExpireAt       *time.Time `json:"expire_at"`
+	DataLimit      int64      `json:"data_limit"`       // bytes all its users may use, 0 = unlimited
+	UsedTraffic    int64      `json:"used_traffic"`     // bytes its users used (kept when users are deleted)
+	MaxUserData    int64      `json:"max_user_data"`    // cap on each user's data limit, 0 = none
+	MaxUserDevices int        `json:"max_user_devices"` // cap on each user's device limit, 0 = none
+}
+
+// Suspended reports why a non-sudo admin's access and users are on hold.
+func (a *Admin) Suspended(now time.Time) string {
+	if a.Role == RoleSudo {
+		return ""
+	}
+	if a.ExpireAt != nil && !now.Before(*a.ExpireAt) {
+		return "expired"
+	}
+	if a.DataLimit > 0 && a.UsedTraffic >= a.DataLimit {
+		return "data limit reached"
+	}
+	return ""
 }
 
 type UserStatus string

@@ -28,7 +28,7 @@ func (s *Server) subURL(r *http.Request, u *model.User) string {
 
 // endpoints resolves the inbounds a user can connect to; inactive users get none.
 func (s *Server) endpoints(ctx context.Context, u *model.User) ([]sub.Endpoint, error) {
-	if !u.Active() {
+	if !u.Active() || s.suspendedAdmins(ctx)[u.AdminID] {
 		return nil, nil
 	}
 	inbounds, err := s.store.ListInbounds(ctx)

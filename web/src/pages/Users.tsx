@@ -162,11 +162,11 @@ export default function UsersPage() {
                   <input type="checkbox" className="rounded" checked={users.length > 0 && selected.size === users.length} onChange={toggleAll} aria-label="select all" />
                 </Th>
                 <Th>{sortHeader('username', t('users.username'))}</Th>
-                <Th>{t('users.status')}</Th>
-                <Th className="min-w-[180px]">{sortHeader('used_traffic', t('users.usage'))}</Th>
-                <Th>{sortHeader('expire_at', t('users.expire'))}</Th>
-                <Th>{sortHeader('online_at', t('users.online'))}</Th>
-                <Th className="w-12" />
+                <Th className="hide-sm">{t('users.status')}</Th>
+                <Th className="min-w-[110px] sm:min-w-[180px]">{sortHeader('used_traffic', t('users.usage'))}</Th>
+                <Th className="hide-sm">{sortHeader('expire_at', t('users.expire'))}</Th>
+                <Th className="hide-sm">{sortHeader('online_at', t('users.online'))}</Th>
+                <Th className="hide-sm w-12" />
               </tr>
             </thead>
             <tbody>
@@ -193,12 +193,15 @@ export default function UsersPage() {
                           {u.username.slice(0, 2)}
                         </span>
                         <div className="min-w-0">
-                          <div className="font-medium text-foreground">{u.username}</div>
+                          <div className="truncate font-medium text-foreground">{u.username}</div>
                           {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
+                          <div className="mt-1 show-sm">
+                            <UserPresenceBadge user={u} />
+                          </div>
                         </div>
                       </div>
                     </Td>
-                    <Td>
+                    <Td className="hide-sm">
                       <UserPresenceBadge user={u} />
                     </Td>
                     <Td>
@@ -207,8 +210,11 @@ export default function UsersPage() {
                         <span>{u.data_limit ? formatBytes(u.data_limit) : '∞'}</span>
                       </div>
                       <ProgressBar value={u.used_traffic} max={u.data_limit} />
+                      <div className="mt-1 text-xs text-muted-foreground show-sm">
+                        {left === null ? '∞' : left < 0 ? <span className="text-destructive">{t('users.expiredAgo')}</span> : t('users.daysLeft', { n: left })}
+                      </div>
                     </Td>
-                    <Td className="whitespace-nowrap text-muted-foreground">
+                    <Td className="hide-sm whitespace-nowrap text-muted-foreground">
                       {u.status === 'on_hold' ? (
                         <span className="text-violet">{t('users.daysLeft', { n: Math.round(u.on_hold_duration / 86400) })}</span>
                       ) : left === null ? (
@@ -219,11 +225,11 @@ export default function UsersPage() {
                         <span className={cx(left <= 3 && 'text-warning')}>{t('users.daysLeft', { n: left })}</span>
                       )}
                     </Td>
-                    <Td className="whitespace-nowrap text-muted-foreground">
+                    <Td className="hide-sm whitespace-nowrap text-muted-foreground">
                       <OnlineDot iso={u.online_at} />
                       {isOnline(u.online_at) ? t('presence.now') : relativeTime(u.online_at, lang)}
                     </Td>
-                    <Td>
+                    <Td className="hide-sm">
                       <IconButton
                         onClick={(e) => {
                           e.stopPropagation()

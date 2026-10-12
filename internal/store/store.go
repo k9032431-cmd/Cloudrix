@@ -161,6 +161,13 @@ var migrations = []string{
 	`ALTER TABLE nodes ADD COLUMN cert_sha256 TEXT NOT NULL DEFAULT '';`,
 	// 6: cascade bridge (node-to-node VLESS + Reality) of exit nodes
 	`ALTER TABLE nodes ADD COLUMN bridge TEXT NOT NULL DEFAULT '{}';`,
+	// 7: admin limits (term, traffic of all their users, caps per user)
+	`ALTER TABLE admins ADD COLUMN expire_at INTEGER;
+	ALTER TABLE admins ADD COLUMN data_limit INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE admins ADD COLUMN used_traffic INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE admins ADD COLUMN max_user_data INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE admins ADD COLUMN max_user_devices INTEGER NOT NULL DEFAULT 0;
+	UPDATE admins SET used_traffic = (SELECT COALESCE(SUM(lifetime_used), 0) FROM users WHERE users.admin_id = admins.id);`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

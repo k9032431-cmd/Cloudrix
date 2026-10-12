@@ -395,6 +395,19 @@ const ru = {
   'users.devicesOnline': 'Устройств онлайн',
   'users.kicked': 'Отключены (старые)',
   'users.kickedHint': 'Подключилось больше устройств, чем разрешено: самые старые отключены на 30 секунд. Устройство снова заработает, если переподключить VPN, — тогда отключится следующее старое.',
+  'admins.traffic': 'Трафик',
+  'admins.until': 'Действует до',
+  'admins.limits': 'Лимиты',
+  'admins.dataLimit': 'Общий трафик всех пользователей, ГБ',
+  'admins.used': 'Использовано: {used}. 0 — без ограничений',
+  'admins.maxUserData': 'Макс. трафик одного пользователя, ГБ',
+  'admins.maxUserDevices': 'Макс. устройств у одного пользователя',
+  'admins.capHint': '0 — без ограничения. Иначе каждому пользователю нужно задать лимит в этих пределах.',
+  'admins.resetTraffic': 'Обнулить использованный трафик',
+  'admins.limitsHint': 'Когда срок истёк или общий трафик израсходован, админ не может войти, а его пользователи не получают ключи — пока вы не продлите срок или не поднимете лимит.',
+  'inbounds.duplicate': 'Копировать инбаунд',
+  'users.capData': 'Максимум для вашего аккаунта: {max}',
+  'users.capDevices': 'Максимум для вашего аккаунта: {max}',
 }
 
 type Key = keyof typeof ru
@@ -792,6 +805,19 @@ const en: Record<Key, string> = {
   'users.devicesOnline': 'Devices online',
   'users.kicked': 'Cut off (oldest)',
   'users.kickedHint': 'More devices connected than allowed: the oldest are cut off for 30 seconds. A device works again after reconnecting the VPN, and then the next oldest goes.',
+  'admins.traffic': 'Traffic',
+  'admins.until': 'Valid until',
+  'admins.limits': 'Limits',
+  'admins.dataLimit': 'Total traffic of all users, GB',
+  'admins.used': 'Used: {used}. 0 — unlimited',
+  'admins.maxUserData': 'Max traffic per user, GB',
+  'admins.maxUserDevices': 'Max devices per user',
+  'admins.capHint': '0 — no cap. Otherwise every user needs a limit within it.',
+  'admins.resetTraffic': 'Reset used traffic',
+  'admins.limitsHint': 'Once the term ends or the total traffic is used up, the admin cannot sign in and their users get no keys until you extend the term or raise the limit.',
+  'inbounds.duplicate': 'Duplicate inbound',
+  'users.capData': 'Maximum for your account: {max}',
+  'users.capDevices': 'Maximum for your account: {max}',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

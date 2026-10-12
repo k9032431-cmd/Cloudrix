@@ -64,7 +64,7 @@ export default function Nodes() {
                 <Th className="hide-sm">{t('nodes.cores')}</Th>
                 <Th className="hide-md r">{t('nodes.traffic')}</Th>
                 <Th className="hide-sm">{t('nodes.lastSeen')}</Th>
-                <Th className="w-36" />
+                <Th className="sm:w-36" />
               </tr>
             </thead>
             <tbody>
@@ -81,10 +81,10 @@ export default function Nodes() {
                     <div className="ent-name">{n.name}</div>
                     <div className="ent-sub font-mono">{n.address}</div>
                   </Td>
-                  <Td>
+                  <Td className="max-sm:[&_.badge]:whitespace-normal max-sm:[&_.badge]:text-left">
                     <NodeStatusBadge status={n.status} />
                     {n.message && (
-                      <div className="mt-1 flex max-w-[260px] items-center gap-1 truncate text-xs text-destructive" title={n.message}>
+                      <div className="mt-1 flex max-w-[130px] items-center gap-1 truncate text-xs text-destructive sm:max-w-[260px]" title={n.message}>
                         <CircleAlert className="h-3.5 w-3.5 shrink-0" />
                         <span className="truncate">{message(n)}</span>
                       </div>
@@ -97,8 +97,8 @@ export default function Nodes() {
                   </Td>
                   <Td className="hide-sm whitespace-nowrap text-muted-foreground">{relativeTime(n.last_seen, lang)}</Td>
                   <Td>
-                    <div className="flex justify-end gap-1">
-                      <Button variant={n.status === 'connecting' ? 'primary' : 'secondary'} size="sm" onClick={() => setInstalling(n)}>
+                    <div className="flex justify-end gap-0.5 sm:gap-1">
+                      <Button variant={n.status === 'connecting' ? 'primary' : 'secondary'} size="sm" className="max-sm:w-7 max-sm:px-0" onClick={() => setInstalling(n)} aria-label={t('nodes.install')}>
                         <Terminal />
                         <span className="hide-sm">{t('nodes.install')}</span>
                       </Button>

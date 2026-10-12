@@ -428,8 +428,8 @@ html.dark .select option { background: var(--popover); color: var(--foreground);
   background-repeat: no-repeat; background-position: right 9px center; background-size: 14px;
 }
 .select-btn { display: flex; align-items: center; gap: 8px; padding-right: 9px; text-align: left; background-image: none; cursor: default; }
-/* width 0 keeps long option text from widening grids and cards */
-.select-btn > span { flex: 1 1 0; width: 0; min-width: 0; }
+/* fields have min-width 0, so long option text truncates instead of widening the form */
+.select-btn > span { flex: 1 1 auto; min-width: 0; }
 .select-btn > svg { width: 14px; height: 14px; flex: none; color: var(--faint-foreground); }
 .select-btn:disabled { opacity: .55; }
 .select-btn[aria-expanded='true'] { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in oklab, var(--ring) 22%, transparent); }
@@ -715,6 +715,8 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
 }
 
 /* ===== Responsive ===== */
+/* show-sm: phone-only lines that stand in for columns hidden with hide-sm */
+.show-sm { display: none; }
 @media (max-width: 1100px) {
   .hide-md { display: none !important; }
   .grid12 > .col-3 { grid-column: span 6; }
@@ -760,6 +762,7 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
   .card-body { padding: 14px; }
   .chart, .card.fill .chart { height: 220px; min-height: 220px; }
   .hide-sm { display: none !important; }
+  .show-sm { display: block !important; }
   .dt th:first-child, .dt td:first-child { padding-left: 14px; }
   .dt th:last-child, .dt td:last-child { padding-right: 14px; }
   .dt td, .dt th { padding-left: 8px; padding-right: 8px; }

@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { post, put } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
-import { GB, fromLocalInput, toLocalInput } from '../../lib/format'
+import { GB, formatBytes, fromLocalInput, toLocalInput } from '../../lib/format'
+import { useAuth } from '../../lib/auth'
 import type { Admin, Group, ResetStrategy, User, UserInput } from '../../lib/types'
 import { Badge, Button, ErrorNote, Field, Input, Modal, Select, Textarea, cx, Segmented } from '../../components/ui'
 
@@ -21,6 +22,10 @@ export default function UserForm({
 }) {
   const { t } = useI18n()
   const { data: groups } = useFetch<Group[]>('/api/groups')
+  // admins and resellers create users within the caps the main admin set
+  const { admin: me } = useAuth()
+  const capData = me && me.role !== 'sudo' ? me.max_user_data ?? 0 : 0
+  const capDevices = me && me.role !== 'sudo' ? me.max_user_devices ?? 0 : 0
   const { data: admins } = useFetch<Admin[]>(isSudo ? '/api/admins' : null)
   const [form, setForm] = useState<UserInput>(() => ({
     username: user?.username ?? '',
@@ -100,7 +105,7 @@ export default function UserForm({
             />
           </Field>
 
-          <Field label={t('users.dataLimit')} hint={t('users.dataLimitHint')}>
+          <Field label={t('users.dataLimit')} hint={capData ? t('users.capData', { max: formatBytes(capData) }) : t('users.dataLimitHint')}>
             <Input
               type="number"
               min={0}
@@ -152,7 +157,7 @@ export default function UserForm({
               <Input type="datetime-local" value={toLocalInput(form.expire_at)} onChange={(e) => set('expire_at', fromLocalInput(e.target.value))} />
             </Field>
           )}
-          <Field label={t('users.deviceLimit')} hint={t('users.deviceLimitHint')}>
+          <Field label={t('users.deviceLimit')} hint={capDevices ? t('users.capDevices', { max: String(capDevices) }) : t('users.deviceLimitHint')}>
             <Input type="number" min={0} value={form.device_limit} onChange={(e) => set('device_limit', Math.max(0, Number(e.target.value)))} />
           </Field>
 

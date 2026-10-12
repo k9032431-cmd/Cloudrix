@@ -13,11 +13,33 @@ import (
 )
 
 type adminInput struct {
-	Username  string     `json:"username"`
-	Password  string     `json:"password"`
-	Role      model.Role `json:"role"`
-	Disabled  bool       `json:"disabled"`
-	UserLimit int        `json:"user_limit"`
+	Username       string     `json:"username"`
+	Password       string     `json:"password"`
+	Role           model.Role `json:"role"`
+	Disabled       bool       `json:"disabled"`
+	UserLimit      int        `json:"user_limit"`
+	ExpireAt       *time.Time `json:"expire_at"`
+	DataLimit      int64      `json:"data_limit"`
+	MaxUserData    int64      `json:"max_user_data"`
+	MaxUserDevices int        `json:"max_user_devices"`
+	ResetTraffic   bool       `json:"reset_traffic"` // start the traffic count over
+}
+
+func (in *adminInput) limitsValid() bool {
+	return in.UserLimit >= 0 && in.DataLimit >= 0 && in.MaxUserData >= 0 && in.MaxUserDevices >= 0
+}
+
+// applyLimits copies the limits; sudo admins have none.
+func (in *adminInput) applyLimits(a *model.Admin) {
+	a.UserLimit = in.UserLimit
+	if in.Role == model.RoleSudo {
+		a.ExpireAt, a.DataLimit, a.MaxUserData, a.MaxUserDevices = nil, 0, 0, 0
+		return
+	}
+	a.ExpireAt, a.DataLimit, a.MaxUserData, a.MaxUserDevices = in.ExpireAt, in.DataLimit, in.MaxUserData, in.MaxUserDevices
+	if in.ResetTraffic {
+		a.UsedTraffic = 0
+	}
 }
 
 func (s *Server) handleListAdmins(w http.ResponseWriter, r *http.Request) {
@@ -34,8 +56,8 @@ func (s *Server) handleCreateAdmin(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &in) {
 		return
 	}
-	if !usernameRe.MatchString(in.Username) || !in.Role.Valid() || in.UserLimit < 0 {
-		writeError(w, http.StatusBadRequest, "invalid username, role or user_limit")
+	if !usernameRe.MatchString(in.Username) || !in.Role.Valid() || !in.limitsValid() {
+		writeError(w, http.StatusBadRequest, "invalid username, role or limits")
 		return
 	}
 	hash, err := auth.HashPassword(in.Password)
@@ -43,7 +65,8 @@ func (s *Server) handleCreateAdmin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	a := &model.Admin{Username: in.Username, PasswordHash: hash, Role: in.Role, Disabled: in.Disabled, UserLimit: in.UserLimit}
+	a := &model.Admin{Username: in.Username, PasswordHash: hash, Role: in.Role, Disabled: in.Disabled}
+	in.applyLimits(a)
 	if err := s.store.CreateAdmin(r.Context(), a); err != nil {
 		s.writeStoreError(w, err)
 		return
@@ -66,8 +89,8 @@ func (s *Server) handleUpdateAdmin(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
-	if !in.Role.Valid() || in.UserLimit < 0 {
-		writeError(w, http.StatusBadRequest, "invalid role or user_limit")
+	if !in.Role.Valid() || !in.limitsValid() {
+		writeError(w, http.StatusBadRequest, "invalid role or limits")
 		return
 	}
 	if me := adminFrom(r.Context()); me.ID == a.ID && (in.Disabled || in.Role != model.RoleSudo) {
@@ -80,12 +103,14 @@ func (s *Server) handleUpdateAdmin(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	a.Role, a.Disabled, a.UserLimit = in.Role, in.Disabled, in.UserLimit
+	a.Role, a.Disabled = in.Role, in.Disabled
+	in.applyLimits(a)
 	if err := s.store.UpdateAdmin(r.Context(), a); err != nil {
 		s.writeStoreError(w, err)
 		return
 	}
 	s.audit(r, "admin.update", a.Username, "")
+	s.usersChanged() // a raised or lowered limit turns the admin's users on or off
 	writeJSON(w, http.StatusOK, a)
 }
 

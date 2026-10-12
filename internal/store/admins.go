@@ -9,12 +9,15 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 )
 
-const adminCols = `id, username, password_hash, role, disabled, user_limit, created_at`
+const adminCols = `id, username, password_hash, role, disabled, user_limit, created_at,
+	expire_at, data_limit, used_traffic, max_user_data, max_user_devices`
 
 func scanAdmin(row interface{ Scan(...any) error }) (*model.Admin, error) {
 	var a model.Admin
 	var created int64
-	err := row.Scan(&a.ID, &a.Username, &a.PasswordHash, &a.Role, &a.Disabled, &a.UserLimit, &created)
+	var expire sql.NullInt64
+	err := row.Scan(&a.ID, &a.Username, &a.PasswordHash, &a.Role, &a.Disabled, &a.UserLimit, &created,
+		&expire, &a.DataLimit, &a.UsedTraffic, &a.MaxUserData, &a.MaxUserDevices)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -22,14 +25,17 @@ func scanAdmin(row interface{ Scan(...any) error }) (*model.Admin, error) {
 		return nil, err
 	}
 	a.CreatedAt = fromUnix(created)
+	a.ExpireAt = ptrUnix(expire)
 	return &a, nil
 }
 
 func (s *Store) CreateAdmin(ctx context.Context, a *model.Admin) error {
 	a.CreatedAt = time.Now().UTC()
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO admins (username, password_hash, role, disabled, user_limit, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
-		a.Username, a.PasswordHash, a.Role, a.Disabled, a.UserLimit, unix(a.CreatedAt))
+		`INSERT INTO admins (username, password_hash, role, disabled, user_limit, created_at,
+		expire_at, data_limit, max_user_data, max_user_devices) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		a.Username, a.PasswordHash, a.Role, a.Disabled, a.UserLimit, unix(a.CreatedAt),
+		nullUnix(a.ExpireAt), a.DataLimit, a.MaxUserData, a.MaxUserDevices)
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -42,8 +48,10 @@ func (s *Store) CreateAdmin(ctx context.Context, a *model.Admin) error {
 
 func (s *Store) UpdateAdmin(ctx context.Context, a *model.Admin) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE admins SET password_hash = ?, role = ?, disabled = ?, user_limit = ? WHERE id = ?`,
-		a.PasswordHash, a.Role, a.Disabled, a.UserLimit, a.ID)
+		`UPDATE admins SET password_hash = ?, role = ?, disabled = ?, user_limit = ?,
+		expire_at = ?, data_limit = ?, used_traffic = ?, max_user_data = ?, max_user_devices = ? WHERE id = ?`,
+		a.PasswordHash, a.Role, a.Disabled, a.UserLimit,
+		nullUnix(a.ExpireAt), a.DataLimit, a.UsedTraffic, a.MaxUserData, a.MaxUserDevices, a.ID)
 	return affected(res, err)
 }
 

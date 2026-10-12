@@ -44,6 +44,10 @@ func (s *Server) authenticate(next http.Handler) http.Handler {
 			writeError(w, http.StatusUnauthorized, "admin not found or disabled")
 			return
 		}
+		if why := a.Suspended(time.Now()); why != "" {
+			writeError(w, http.StatusUnauthorized, "admin account "+why)
+			return
+		}
 		// Tokens issued before a role change must not keep the old privileges.
 		if claims.Role != a.Role {
 			writeError(w, http.StatusUnauthorized, "session outdated, sign in again")
@@ -113,6 +117,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !auth.CheckPassword(a.PasswordHash, req.Password) || a.Disabled {
 		s.limiter.fail(ip)
 		writeError(w, http.StatusUnauthorized, "invalid username or password")
+		return
+	}
+	if why := a.Suspended(time.Now()); why != "" {
+		writeError(w, http.StatusForbidden, "admin account "+why+": ask the main administrator to extend it")
 		return
 	}
 	s.limiter.reset(ip)

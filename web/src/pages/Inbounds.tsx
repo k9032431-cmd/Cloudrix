@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { Code2, Pencil, Plus, Trash2, Wand2 } from '../components/icons'
+import { Code2, Copy, Pencil, Plus, Trash2, Wand2 } from '../components/icons'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -35,6 +35,18 @@ function portClashes(list: Inbound[]): Map<number, string> {
       if (a.id !== b.id && a.enabled && b.enabled && a.node_id != null && a.node_id === b.node_id && a.port === b.port && sharesTransport(a.protocol, b.protocol))
         out.set(a.id, b.tag)
   return out
+}
+
+// duplicate makes a new-inbound draft from an existing one: same settings,
+// a free tag, and the next port not taken on that node.
+function duplicate(ib: Inbound, all: Inbound[]): Inbound {
+  const tags = new Set(all.map((x) => x.tag))
+  let tag = `${ib.tag}-copy`
+  for (let i = 2; tags.has(tag); i++) tag = `${ib.tag}-copy${i}`
+  const ports = new Set(all.filter((x) => x.node_id === ib.node_id).map((x) => x.port))
+  let port = ib.port
+  while (ports.has(port) && port < 65535) port++
+  return { ...ib, id: 0, tag, port, settings: { ...ib.settings } }
 }
 
 const blank = (p: Protocol): Inbound => ({
@@ -95,25 +107,35 @@ export default function Inbounds() {
             <thead>
               <tr>
                 <Th>{t('inbounds.tag')}</Th>
-                <Th>{t('inbounds.protocol')}</Th>
-                <Th>{t('inbounds.port')}</Th>
-                <Th>{t('inbounds.transport')}</Th>
-                <Th>{t('inbounds.node')}</Th>
-                <Th>{t('inbounds.core')}</Th>
+                <Th className="hide-sm">{t('inbounds.protocol')}</Th>
+                <Th className="hide-sm">{t('inbounds.port')}</Th>
+                <Th className="hide-md">{t('inbounds.transport')}</Th>
+                <Th className="hide-sm">{t('inbounds.node')}</Th>
+                <Th className="hide-md">{t('inbounds.core')}</Th>
                 <Th className="w-24" />
               </tr>
             </thead>
             <tbody>
               {data?.map((ib) => (
                 <tr key={ib.id} className={ib.enabled ? '' : 'opacity-50'}>
-                  <Td>
-                    <div className="font-medium text-foreground">{ib.tag}</div>
-                    <div className="text-xs text-faint">{ib.remark}</div>
+                  <Td className="max-w-[200px] sm:max-w-none">
+                    <div className="truncate font-medium text-foreground">{ib.tag}</div>
+                    <div className="hide-sm truncate text-xs text-faint">{ib.remark}</div>
+                    {/* phones: the hidden columns in one line */}
+                    <div className="truncate text-xs text-muted-foreground show-sm">
+                      {ib.protocol} · {ib.port} · {nodes?.find((n) => n.id === ib.node_id)?.name ?? '—'}
+                      {ib.settings.exit_node_id != null && ` → ${nodes?.find((n) => n.id === ib.settings.exit_node_id)?.name ?? '?'}`}
+                    </div>
+                    {clash.get(ib.id) && (
+                      <div className="mt-1 show-sm">
+                        <Badge tone="red">{t('inbounds.portClash')}</Badge>
+                      </div>
+                    )}
                   </Td>
-                  <Td>
+                  <Td className="hide-sm">
                     <Badge tone="blue">{ib.protocol}</Badge>
                   </Td>
-                  <Td className="tabular-nums">
+                  <Td className="hide-sm tabular-nums">
                     {ib.port}
                     {clash.get(ib.id) && (
                       <span className="ml-1.5" title={t('inbounds.portClashHint', { tag: clash.get(ib.id)! })}>
@@ -121,14 +143,14 @@ export default function Inbounds() {
                       </span>
                     )}
                   </Td>
-                  <Td className="text-muted-foreground">
+                  <Td className="hide-md text-muted-foreground">
                     {XRAY.includes(ib.protocol) && ib.protocol !== 'shadowsocks'
                       ? `${ib.settings.network || 'tcp'} / ${ib.settings.security || 'none'}`
                       : ib.protocol === 'shadowsocks'
                         ? ib.settings.ss_method
                         : 'udp'}
                   </Td>
-                  <Td className="text-muted-foreground">
+                  <Td className="hide-sm text-muted-foreground">
                     {nodes?.find((n) => n.id === ib.node_id)?.name ?? (
                       <span title={t('inbounds.noNodeHint')}>
                         <Badge tone="red">{t('inbounds.noNode')}</Badge>
@@ -140,13 +162,16 @@ export default function Inbounds() {
                       </span>
                     )}
                   </Td>
-                  <Td>
+                  <Td className="hide-md">
                     <Badge tone={coreOf(ib.protocol) === 'xray' ? 'gray' : 'violet'}>{coreOf(ib.protocol)}</Badge>
                   </Td>
                   <Td>
-                    <div className="flex justify-end gap-1">
+                    <div className="flex justify-end gap-0.5 sm:gap-1">
                       <IconButton onClick={() => setEditing(ib)} aria-label={t('common.edit')}>
                         <Pencil className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton onClick={() => setEditing(duplicate(ib, data ?? []))} aria-label={t('inbounds.duplicate')} title={t('inbounds.duplicate')}>
+                        <Copy className="h-4 w-4" />
                       </IconButton>
                       <IconButton onClick={() => setDeleting(ib)} aria-label={t('common.delete')}>
                         <Trash2 className="h-4 w-4" />

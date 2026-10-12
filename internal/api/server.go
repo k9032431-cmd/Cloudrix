@@ -21,19 +21,20 @@ import (
 )
 
 type Server struct {
-	cfg     config.Config
-	store   *store.Store
-	issuer  *auth.Issuer
-	log     *slog.Logger
-	web     fs.FS // built frontend; may be empty
-	limiter *loginLimiter
-	started time.Time
-	drive   *driveSyncer
-	brandMu sync.RWMutex
-	brand   branding
-	nodes   *nodeHub
-	happ    *happ.Encryptor
-	devices *deviceGuard
+	cfg       config.Config
+	store     *store.Store
+	issuer    *auth.Issuer
+	log       *slog.Logger
+	web       fs.FS // built frontend; may be empty
+	limiter   *loginLimiter
+	started   time.Time
+	drive     *driveSyncer
+	brandMu   sync.RWMutex
+	brand     branding
+	nodes     *nodeHub
+	happ      *happ.Encryptor
+	devices   *deviceGuard
+	adminHold adminHold
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }

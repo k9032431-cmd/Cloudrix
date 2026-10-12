@@ -77,6 +77,10 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
+	// users of an expired admin, or one over its traffic limit, get no keys
+	if held := s.suspendedAdmins(ctx); len(held) > 0 {
+		users = slices.DeleteFunc(slices.Clone(users), func(u *model.User) bool { return held[u.AdminID] })
+	}
 	groups, err := s.store.GroupMap(ctx)
 	if err != nil {
 		return nil, nil, nil, "", err
@@ -171,6 +175,9 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	up, down := s.applyNodeStats(ctx, node, req.Stats)
+	if len(req.Stats) > 0 {
+		s.checkAdmins(ctx) // traffic may have used up an admin's limit
+	}
 	if req.Hysteria != nil {
 		s.ensureHysteria(ctx, node, *req.Hysteria)
 	}
@@ -284,6 +291,7 @@ func (s *Server) watchNodes(ctx context.Context) {
 			if _, err := s.store.MarkStaleNodes(ctx, time.Now().Add(-nodeStaleAfter), "no contact from the node agent"); err != nil {
 				s.log.Warn("node watch", "err", err)
 			}
+			s.checkAdmins(ctx) // admin terms end on time
 		}
 	}
 }
