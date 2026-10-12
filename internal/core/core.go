@@ -18,6 +18,16 @@ const (
 	SelfSignedKey  = "/var/lib/cloudrix-node/tls/key.pem"
 )
 
+// SharedTLSDir holds certificates issued on the main server (installer menu
+// «Сертификат домена»). Inbounds may point at files under it: the panel sends
+// them to the node, which stores them at the same path.
+var SharedTLSDir = "/etc/cloudrix/tls/" // tests point it at a temp dir
+
+// Shared reports whether path is a main-server certificate file.
+func Shared(path string) bool {
+	return strings.HasPrefix(path, SharedTLSDir) && !strings.Contains(path, "..")
+}
+
 // Email is the per-user identifier cores use for stats; the id prefix keeps it
 // stable across username changes.
 func Email(u *model.User) string {

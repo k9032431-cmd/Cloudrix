@@ -6,10 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,18 +68,18 @@ func (h *nodeHub) accept(id, ts int64) bool {
 var certHashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // nodeConfigs builds the core configs a node should run and their version.
-func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byte, version string, err error) {
+func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byte, files map[string]string, version string, err error) {
 	inbounds, err := s.store.ListInbounds(ctx)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	users, err := s.store.AllUsers(ctx)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	groups, err := s.store.GroupMap(ctx)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	mine := core.ForNode(inbounds, &id)
 	var xin, sin []*model.Inbound
@@ -89,23 +92,46 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 	}
 	cascade, err := s.cascadeFor(ctx, id, inbounds)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, nil, "", err
 	}
 	if len(xin) > 0 || cascade.Bridge != nil {
 		if xray, err = core.Xray(xin, users, groups, cascade); err != nil {
-			return nil, nil, "", err
+			return nil, nil, nil, "", err
 		}
 	}
 	if len(sin) > 0 {
 		if singbox, err = core.SingBox(sin, users, groups); err != nil {
-			return nil, nil, "", err
+			return nil, nil, nil, "", err
 		}
 	}
+	// certificates issued on the main server travel with the config; a
+	// renewed certificate changes the version, so nodes pick it up
+	paths := []string{}
+	for _, in := range mine {
+		for _, p := range []string{in.Settings.CertFile, in.Settings.KeyFile} {
+			if core.Shared(p) && !slices.Contains(paths, p) {
+				paths = append(paths, p)
+			}
+		}
+	}
+	slices.Sort(paths)
 	h := sha256.New()
 	h.Write(xray)
 	h.Write([]byte{0})
 	h.Write(singbox)
-	return xray, singbox, hex.EncodeToString(h.Sum(nil))[:16], nil
+	for _, p := range paths {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return nil, nil, nil, "", fmt.Errorf("certificate file %s is not on the main server: issue it in cloudrix-manager → «Сертификат домена»", p)
+		}
+		if files == nil {
+			files = map[string]string{}
+		}
+		files[p] = string(b)
+		h.Write([]byte(p))
+		h.Write(b)
+	}
+	return xray, singbox, files, hex.EncodeToString(h.Sum(nil))[:16], nil
 }
 
 func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
@@ -206,14 +232,14 @@ func (s *Server) nodeResponse(ctx context.Context, node *model.Node, have string
 	if node.Status == model.NodeDisabled {
 		return nodeproto.SyncResponse{Disabled: true, Changed: have != "", Version: ""}
 	}
-	xray, singbox, version, err := s.nodeConfigs(ctx, node.ID)
+	xray, singbox, files, version, err := s.nodeConfigs(ctx, node.ID)
 	if err != nil {
 		s.log.Warn("node config", "node", node.Name, "err", err)
 		return nodeproto.SyncResponse{Version: have, Problem: err.Error()}
 	}
 	resp := nodeproto.SyncResponse{Version: version, Changed: version != have}
 	if resp.Changed {
-		resp.Xray, resp.SingBox = xray, singbox
+		resp.Xray, resp.SingBox, resp.Files = xray, singbox, files
 	}
 	return resp
 }

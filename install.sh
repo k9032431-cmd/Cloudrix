@@ -1376,6 +1376,85 @@ node_menu() {
   done
 }
 
+# ---------- сертификат домена для нод (главный сервер) ----------
+
+SHARED_TLS_DIR="$CONF_DIR/tls"
+
+# cmd_domain_cert выпускает на главном сервере сертификат Let's Encrypt для
+# домена, который уже направлен на IP ноды, через Cloudflare DNS (порт 80 не
+# нужен) и показывает пути к файлам для инбаунда (Hysteria2, TUIC, VLESS/Trojan
+# с TLS). Панель сама отправляет эти файлы ноде и обновляет их после продления.
+# Повторный запуск удаляет прежний сертификат и выпускает новый.
+cmd_domain_cert() {
+  require_root
+  detect_os
+  [[ -f $ENV_FILE ]] || die "Панель не установлена."
+  local old="" domain=${CLOUDRIX_CERT_DOMAIN-} token=${CLOUDRIX_CF_TOKEN-} points zone acme="$HOME/.acme.sh/acme.sh" dir rc=0 log
+  [[ -f $SHARED_TLS_DIR/current ]] && old=$(<"$SHARED_TLS_DIR/current")
+  if [[ -n $old ]]; then
+    warn "Уже выпущен сертификат для $old. Прежняя установка будет удалена, и будет установлена новая."
+    warn "Инбаунды, где указаны пути $SHARED_TLS_DIR/$old/…, нужно будет переключить на новые пути."
+    ((ASSUME_YES)) || ask_yes_no "Продолжить?" n || return 0
+  fi
+
+  echo
+  info "Домен должен быть в Cloudflare и уже указывать на IP ноды (A-запись, серое облако)."
+  info "Токен: dash.cloudflare.com → My Profile → API Tokens → Create Token → «Edit zone DNS»."
+  ask domain "Домен, например hy.example.com"
+  domain=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]' | sed 's#^https\?://##; s#/.*##; s/\.$//')
+  [[ $domain =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$ ]] || die "Это не похоже на домен: $domain"
+  points=$(getent ahostsv4 "$domain" 2>/dev/null | awk 'NR==1 {print $1}' || true)
+  if [[ -n $points ]]; then info "$domain сейчас указывает на $points"; else warn "$domain пока ни на что не указывает — сертификат выпустится, но клиенты не подключатся, пока нет A-записи."; fi
+  ask_secret token "API-токен Cloudflare (ввод скрыт)"
+  [[ -n $token ]] || die "Токен не введён."
+  zone=$(CLOUDFLARE_API_TOKEN=$token "$BIN" cf-zone "$domain" 2>/dev/null || true)
+  [[ -n $zone ]] || warn "Не удалось найти зону через API — acme.sh попробует сам."
+
+  if ! command -v crontab >/dev/null; then
+    [[ $PKG == apt ]] && install_packages cron || install_packages cronie
+  fi
+  if [[ ! -x $acme ]]; then
+    info "Устанавливаю acme.sh"
+    curl -fsSL https://get.acme.sh | sh -s >/dev/null || die "Не удалось установить acme.sh"
+  fi
+  if [[ -n $old ]]; then
+    info "Удаляю прежний сертификат ($old)"
+    "$acme" --remove -d "$old" --ecc >/dev/null 2>&1 || true
+    rm -rf "${SHARED_TLS_DIR:?}/$old" "$HOME/.acme.sh/${old}_ecc" "$SHARED_TLS_DIR/current"
+  fi
+
+  info "Получаю сертификат Let's Encrypt для $domain через DNS (1–2 минуты)"
+  log=$(mktemp)
+  env CF_Token="$token" ${zone:+CF_Zone_ID="$zone"} "$acme" --issue --dns dns_cf -d "$domain" --keylength ec-256 \
+    --server letsencrypt --force >"$log" 2>&1 || rc=$?
+  if ((rc != 0 && rc != 2)); then
+    tail -n 15 "$log" >&2
+    rm -f "$log"
+    die "Сертификат не выпущен. Лог выше."
+  fi
+  rm -f "$log"
+  dir="$SHARED_TLS_DIR/$domain"
+  mkdir -p "$dir"
+  "$acme" --install-cert -d "$domain" --ecc \
+    --fullchain-file "$dir/fullchain.pem" \
+    --key-file "$dir/privkey.pem" \
+    --reloadcmd "chown -R $SERVICE_USER:$SERVICE_USER $SHARED_TLS_DIR; chmod 600 $dir/privkey.pem; systemctl restart $SERVICE" >/dev/null ||
+    die "Не удалось сохранить сертификат."
+  printf '%s\n' "$domain" >"$SHARED_TLS_DIR/current"
+  chown -R "$SERVICE_USER:$SERVICE_USER" "$SHARED_TLS_DIR"
+  chmod 700 "$SHARED_TLS_DIR" "$dir"
+  chmod 600 "$dir/privkey.pem"
+  systemctl restart "$SERVICE"
+
+  ok "Сертификат для $domain выпущен (продлевается автоматически)."
+  printf '\n  Вставьте в панели: Инбаунды → инбаунд на нужной ноде (например Hysteria2):\n\n'
+  printf '    %sCert file:%s       %s\n' "$C_BOLD" "$C_RESET" "$dir/fullchain.pem"
+  printf '    %sKey file:%s        %s\n' "$C_BOLD" "$C_RESET" "$dir/privkey.pem"
+  printf '    %sSNI:%s             %s\n' "$C_BOLD" "$C_RESET" "$domain"
+  printf '    %sPublic address:%s  %s\n\n' "$C_BOLD" "$C_RESET" "$domain"
+  info "Панель сама отправит сертификат ноде и обновит его после продления."
+}
+
 # ---------- меню ----------
 
 menu() {
@@ -1401,9 +1480,10 @@ menu() {
     printf '  %s4)%s Логи в реальном времени %s(выход — Ctrl+C)%s\n' "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
     printf '  %s5)%s Сбросить пароль / добавить администратора\n' "$C_BOLD" "$C_RESET"
     printf '  %s6)%s Домен и HTTPS-сертификат\n' "$C_BOLD" "$C_RESET"
-    printf '  %s7)%s Сделать резервную копию базы\n' "$C_BOLD" "$C_RESET"
-    printf '  %s8)%s Восстановить базу из копии\n' "$C_BOLD" "$C_RESET"
-    printf '  %s9)%s Удалить панель\n' "$C_BOLD" "$C_RESET"
+    printf '  %s7)%s Сертификат домена для нод (Hysteria2, Cloudflare)%s\n' "$C_BOLD" "$C_RESET" "$([[ -f $SHARED_TLS_DIR/current ]] && printf ' %s— %s%s' "$C_GREEN" "$(<"$SHARED_TLS_DIR/current")" "$C_RESET")"
+    printf '  %s8)%s Сделать резервную копию базы\n' "$C_BOLD" "$C_RESET"
+    printf '  %s9)%s Восстановить базу из копии\n' "$C_BOLD" "$C_RESET"
+    printf '  %s10)%s Удалить панель\n' "$C_BOLD" "$C_RESET"
     printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
     read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
     case $choice in
@@ -1413,9 +1493,10 @@ menu() {
       4) FOLLOW=1 run_menu_action cmd_logs ;;
       5) run_menu_action cmd_admin ;;
       6) run_menu_action cmd_cert ;;
-      7) run_menu_action cmd_backup ;;
-      8) run_menu_action cmd_restore ;;
-      9)
+      7) run_menu_action cmd_domain_cert ;;
+      8) run_menu_action cmd_backup ;;
+      9) run_menu_action cmd_restore ;;
+      10)
         run_menu_action cmd_uninstall
         [[ -f $ENV_FILE ]] || return 0
         ;;
@@ -1524,6 +1605,7 @@ usage() {
   node-info      состояние ноды
   node-logs [-f] логи ноды
   node-uninstall удалить ноду
+  domain-cert    сертификат домена для нод (Cloudflare DNS) — пути для инбаунда
   node-hysteria  Hysteria2 на ноде: домен в Cloudflare + сертификат Let's Encrypt
 
   --yes          не задавать вопросов (значения из CLOUDRIX_* переменных)
@@ -1577,6 +1659,7 @@ main() {
     node-logs) cmd_node_logs ;;
     node-uninstall) cmd_node_uninstall ;;
     node-hysteria) cmd_node_hysteria ;;
+    domain-cert) cmd_domain_cert ;;
     *)
       usage
       exit 1

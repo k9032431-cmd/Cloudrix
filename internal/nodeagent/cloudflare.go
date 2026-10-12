@@ -58,6 +58,26 @@ func cfCall(ctx context.Context, token, method, path string, body any, out any) 
 	return nil
 }
 
+// CloudflareZone finds the id of the Cloudflare zone holding domain: the
+// longest suffix of the domain the token can see.
+func CloudflareZone(ctx context.Context, token, domain string) (string, error) {
+	domain = strings.TrimSuffix(strings.ToLower(strings.TrimSpace(domain)), ".")
+	labels := strings.Split(domain, ".")
+	for i := 0; i < len(labels)-1; i++ {
+		name := strings.Join(labels[i:], ".")
+		var zones []struct {
+			ID string `json:"id"`
+		}
+		if err := cfCall(ctx, token, "GET", "/zones?name="+url.QueryEscape(name), nil, &zones); err != nil {
+			return "", err
+		}
+		if len(zones) > 0 {
+			return zones[0].ID, nil
+		}
+	}
+	return "", fmt.Errorf("no Cloudflare zone for %s visible to this token: add the domain to Cloudflare and give the token Zone → DNS → Edit", domain)
+}
+
 // CloudflarePointA makes domain resolve to ip with an A record that is not
 // proxied (Hysteria2 runs over UDP, which the Cloudflare proxy does not
 // carry). The token needs Zone → DNS → Edit on the domain's zone.
@@ -67,24 +87,9 @@ func CloudflarePointA(ctx context.Context, token, domain, ip string) (string, er
 	if token == "" || domain == "" || ip == "" {
 		return "", errors.New("domain, IP and Cloudflare token are required")
 	}
-	// the zone is the longest suffix of the domain Cloudflare knows
-	labels := strings.Split(domain, ".")
-	var zoneID string
-	for i := 0; i < len(labels)-1 && zoneID == ""; i++ {
-		name := strings.Join(labels[i:], ".")
-		var zones []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
-		}
-		if err := cfCall(ctx, token, "GET", "/zones?name="+url.QueryEscape(name), nil, &zones); err != nil {
-			return "", err
-		}
-		if len(zones) > 0 {
-			zoneID = zones[0].ID
-		}
-	}
-	if zoneID == "" {
-		return "", fmt.Errorf("no Cloudflare zone for %s visible to this token: add the domain to Cloudflare and give the token Zone → DNS → Edit", domain)
+	zoneID, err := CloudflareZone(ctx, token, domain)
+	if err != nil {
+		return "", err
 	}
 	var records []struct {
 		ID      string `json:"id"`

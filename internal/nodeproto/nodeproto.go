@@ -80,6 +80,9 @@ type SyncResponse struct {
 	// → IPs), applied as routing rules without restarting the core.
 	Kicks        map[string][]string `json:"kicks,omitempty"`
 	KicksVersion string              `json:"kicks_version,omitempty"`
+	// Files are certificates issued on the main server that this node's
+	// inbounds use (path → PEM); the node writes them to the same paths.
+	Files map[string]string `json:"files,omitempty"`
 }
 
 // NewSecret returns a random node secret (32 bytes, base64url).

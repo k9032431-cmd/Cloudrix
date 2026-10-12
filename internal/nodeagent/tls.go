@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -84,4 +85,26 @@ func (a *Agent) hysteria() *nodeproto.Hysteria {
 		return nil
 	}
 	return &h
+}
+
+// writeShared stores the main-server certificates the panel sent, at the
+// same paths (only under core.SharedTLSDir). It reports whether any changed.
+func writeShared(files map[string]string) (bool, error) {
+	changed := false
+	for p, content := range files {
+		if !core.Shared(p) || filepath.Clean(p) != p {
+			return changed, fmt.Errorf("refusing to write %s", p)
+		}
+		if old, err := os.ReadFile(p); err == nil && string(old) == content {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			return changed, err
+		}
+		if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+			return changed, err
+		}
+		changed = true
+	}
+	return changed, nil
 }

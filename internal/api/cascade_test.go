@@ -45,7 +45,7 @@ func TestCascade(t *testing.T) {
 		} `json:"routing"`
 	}
 	load := func(id int64) xcfg {
-		x, _, _, err := e.api.nodeConfigs(context.Background(), id)
+		x, _, _, _, err := e.api.nodeConfigs(context.Background(), id)
 		if err != nil {
 			t.Fatal(err)
 		}

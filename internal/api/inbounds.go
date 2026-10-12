@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -100,6 +101,14 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 			// one busy port makes the core refuse the node's whole config
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by inbound %s", in.Port, o.Tag))
 			return false
+		}
+	}
+	for _, p := range []string{in.Settings.CertFile, in.Settings.KeyFile} {
+		if core.Shared(p) {
+			if _, err := os.Stat(p); err != nil {
+				writeError(w, http.StatusBadRequest, "file "+p+" is not on the main server: issue the certificate in cloudrix-manager → «Сертификат домена» and copy the paths it shows")
+				return false
+			}
 		}
 	}
 	if node.Bridge.UUID != "" && node.Bridge.Port == in.Port {

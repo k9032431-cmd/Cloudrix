@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/k9032431-cmd/cloudrix/internal/core"
 )
 
 func TestCoreError(t *testing.T) {
@@ -42,5 +44,25 @@ func TestProbeExits(t *testing.T) {
 	got := a.probeExits()
 	if !strings.Contains(got, fmt.Sprintf("127.0.0.1:%d is unreachable", shut)) || strings.Contains(got, fmt.Sprintf(":%d ", open)) {
 		t.Fatalf("probe: %q", got)
+	}
+}
+
+func TestWriteShared(t *testing.T) {
+	dir := t.TempDir() + "/"
+	old := core.SharedTLSDir
+	core.SharedTLSDir = dir
+	t.Cleanup(func() { core.SharedTLSDir = old })
+	p := filepath.Join(dir, "d", "fullchain.pem")
+	if changed, err := writeShared(map[string]string{p: "A"}); err != nil || !changed {
+		t.Fatal(changed, err)
+	}
+	if changed, _ := writeShared(map[string]string{p: "A"}); changed {
+		t.Fatal("unchanged file reported as changed")
+	}
+	if _, err := writeShared(map[string]string{"/etc/passwd": "x"}); err == nil {
+		t.Fatal("wrote outside the shared dir")
+	}
+	if _, err := writeShared(map[string]string{dir + "../escape": "x"}); err == nil {
+		t.Fatal("path traversal accepted")
 	}
 }

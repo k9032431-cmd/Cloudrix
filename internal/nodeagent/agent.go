@@ -264,11 +264,26 @@ func (a *Agent) sync(ctx context.Context, req nodeproto.SyncRequest) (*nodeproto
 func (a *Agent) apply(ctx context.Context, resp *nodeproto.SyncResponse) {
 	var problems []string
 	a.fw.allow(ports(resp.Xray, resp.SingBox))
+	oldX, _ := os.ReadFile(a.path("xray.json"))
+	oldS, _ := os.ReadFile(a.path("sing-box.json"))
+	filesChanged, err := writeShared(resp.Files)
+	if err != nil {
+		problems = append(problems, "certificates: "+err.Error())
+	}
 	if err := a.applyXray(ctx, resp.Xray); err != nil {
 		problems = append(problems, "xray: "+err.Error())
 	}
 	if err := a.applyCore(a.singbox, "sing-box.json", resp.SingBox, []string{"check", "-c"}); err != nil {
 		problems = append(problems, "sing-box: "+err.Error())
+	}
+	// a renewed certificate with the same config: reload the cores using it
+	if filesChanged {
+		if bytes.Equal(oldX, resp.Xray) && a.xray.running() {
+			_ = a.xray.restart()
+		}
+		if bytes.Equal(oldS, resp.SingBox) && a.singbox.running() {
+			_ = a.singbox.restart()
+		}
 	}
 	a.version = resp.Version
 	_ = os.WriteFile(a.path("version"), []byte(resp.Version), 0o600)

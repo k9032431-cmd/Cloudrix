@@ -156,6 +156,17 @@ func runCommand(cfg config.Config, args []string) error {
 		fmt.Println(api.Version)
 		return nil
 	}
+	if args[0] == "cf-zone" && len(args) == 2 {
+		// the installer's «Сертификат домена» passes the zone id to acme.sh
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		zone, err := nodeagent.CloudflareZone(ctx, os.Getenv("CLOUDFLARE_API_TOKEN"), args[1])
+		if err != nil {
+			return err
+		}
+		fmt.Println(zone)
+		return nil
+	}
 	if args[0] == "node" {
 		return runNode(args[1:])
 	}
