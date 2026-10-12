@@ -150,6 +150,9 @@ export default function BrandingCard() {
               <Toggle checked={form.hide_settings} onChange={(v) => setForm({ ...form, hide_settings: v })} label={t('br.hideSettings')} />
               <Toggle checked={form.always_hwid} onChange={(v) => setForm({ ...form, always_hwid: v })} label={t('br.alwaysHwid')} />
             </div>
+            <Field label={t('br.deviceBlock')} hint={t('br.deviceBlockHint')}>
+              <Input type="number" min={0} max={1440} value={form.device_block_minutes} onChange={(e) => setForm({ ...form, device_block_minutes: Math.max(0, Number(e.target.value)) })} />
+            </Field>
           </div>
           <Button type="submit" loading={busy}>
             {t('common.save')}

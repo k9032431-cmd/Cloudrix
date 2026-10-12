@@ -22,8 +22,6 @@ import (
 
 const driveSettingsKey = "gdrive"
 
-var errDriveDeviceLimit = errors.New("Google Drive links cannot check devices (HWID); remove the user's device limit to use them")
-
 type driveSettings struct {
 	Enabled         bool   `json:"enabled"`
 	APIKey          string `json:"api_key"`
@@ -296,21 +294,6 @@ func (d *driveSyncer) syncUserStat(ctx context.Context, u *model.User, create bo
 		rec = &store.DriveFile{UserID: u.ID}
 	} else if err != nil {
 		return nil, false, err
-	}
-
-	if u.DeviceLimit > 0 {
-		if rec.FileID != "" {
-			if err := d.client.Delete(ctx, rec.FileID); err != nil {
-				d.s.log.Warn("delete drive file", "user", u.Username, "err", err)
-			}
-		}
-		if err := d.s.store.DeleteDriveFile(ctx, u.ID); err != nil {
-			return nil, false, err
-		}
-		if create {
-			return nil, false, errDriveDeviceLimit
-		}
-		return nil, false, nil
 	}
 
 	content, err := d.render(ctx, u)
@@ -765,11 +748,7 @@ func (s *Server) handleUserDrive(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
 	defer cancel()
 	if _, err := s.drive.syncUser(ctx, u, true); err != nil {
-		status := http.StatusBadGateway
-		if errors.Is(err, errDriveDeviceLimit) {
-			status = http.StatusBadRequest
-		}
-		writeError(w, status, err.Error())
+		writeError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	s.audit(r, "user.gdrive", u.Username, "")

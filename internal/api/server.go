@@ -33,6 +33,7 @@ type Server struct {
 	brand   branding
 	nodes   *nodeHub
 	happ    *happ.Encryptor
+	devices *deviceGuard
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
 }
@@ -44,6 +45,7 @@ func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logg
 		started: time.Now(),
 		nodes:   newNodeHub(),
 		happ:    happ.NewEncryptor(),
+		devices: newDeviceGuard(),
 	}
 	s.drive = newDriveSyncer(s, gdrive.Google)
 	s.brand = s.defaultBranding()

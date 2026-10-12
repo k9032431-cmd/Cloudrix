@@ -189,3 +189,48 @@ func str(v any) string {
 	s, _ := v.(string)
 	return s
 }
+
+// onlineIPs reads which IPs each user is connected from right now (Xray
+// drops an IP once its connections close). ok is false when Xray cannot
+// tell, so the panel does not mistake that for nobody being online.
+func (a *Agent) onlineIPs(ctx context.Context) (online map[string][]string, ok bool) {
+	if !a.xray.running() {
+		return nil, false
+	}
+	out, err := a.xrayAPI(ctx, "statsgetallonlineusers")
+	if err != nil {
+		a.log.Debug("xray online users", "err", err, "out", string(out))
+		return nil, false
+	}
+	var all struct {
+		Users []string `json:"users"`
+	}
+	if json.Unmarshal(out, &all) != nil {
+		return nil, false
+	}
+	online = map[string][]string{}
+	for i, name := range all.Users {
+		if i >= 1000 { // keep one sync cheap on a busy node
+			break
+		}
+		// user>>>{email}>>>online
+		parts := strings.Split(name, ">>>")
+		if len(parts) != 3 || parts[0] != "user" {
+			continue
+		}
+		out, err := a.xrayAPI(ctx, "statsonlineiplist", "-email", parts[1])
+		if err != nil {
+			continue
+		}
+		var res struct {
+			IPs map[string]int64 `json:"ips"`
+		}
+		if json.Unmarshal(out, &res) != nil || len(res.IPs) == 0 {
+			continue
+		}
+		for ip := range res.IPs {
+			online[parts[1]] = append(online[parts[1]], ip)
+		}
+	}
+	return online, true
+}

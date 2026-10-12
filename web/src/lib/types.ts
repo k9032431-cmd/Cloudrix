@@ -33,6 +33,8 @@ export interface User {
   online_at: string | null
   sub_updated_at: string | null
   sub_user_agent: string
+  online_ips?: string[]
+  device_blocked_until?: string | null
 }
 
 export interface UserInput {
@@ -203,6 +205,7 @@ export interface Branding {
   provider_id: string
   hide_settings: boolean
   always_hwid: boolean
+  device_block_minutes: number
 }
 
 export interface SubscriptionInfo {

@@ -90,6 +90,15 @@ export default function UserDetails({
         <Info label={t('users.expire')}>{user.expire_at ? formatDate(user.expire_at, lang) : '∞'}</Info>
         <Info label={t('users.lifetime')}>{formatBytes(user.lifetime_used)}</Info>
         <Info label={t('users.online')}>{relativeTime(user.online_at, lang)}</Info>
+        {(user.device_limit > 0 || (user.online_ips?.length ?? 0) > 0) && (
+          <Info label={t('users.devicesOnline')}>
+            <span className={cx('tabular-nums', user.device_limit > 0 && (user.online_ips?.length ?? 0) > user.device_limit && 'text-destructive')}>
+              {user.online_ips?.length ?? 0}
+              {user.device_limit > 0 && <span className="text-faint"> / {user.device_limit}</span>}
+            </span>
+            {user.online_ips && user.online_ips.length > 0 && <div className="truncate font-mono text-xs text-faint">{user.online_ips.join(', ')}</div>}
+          </Info>
+        )}
         <Info label={t('users.lastSub')}>
           {relativeTime(user.sub_updated_at, lang)}
           {user.sub_user_agent && <div className="truncate text-xs text-faint">{user.sub_user_agent}</div>}
@@ -293,8 +302,6 @@ function SubscriptionLinks({ user, sub, onDriveChanged }: { user: User; sub: Sub
         <p className="rounded-lg bg-muted/60 p-4 text-sm text-muted-foreground">
           {admin?.role === 'sudo' ? t('sub.gdriveNotSetUp') : t('sub.gdriveNotSetUpAdmin')}
         </p>
-      ) : user.device_limit > 0 ? (
-        <p className="rounded-lg bg-warning/10 p-4 text-sm text-warning">{t('sub.gdriveDeviceLimit')}</p>
       ) : (
         <Button onClick={createDrive} loading={busy}>
           <CloudUpload className="h-4 w-4" />

@@ -135,6 +135,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			errText = strings.TrimPrefix(errText+"; "+p, "; ")
 		}
 		req := nodeproto.SyncRequest{Version: a.version, Cores: a.cores, Agent: a.cfg.Version, Error: errText, Wait: true, CertSHA256: a.certPin}
+		req.Online, req.OnlineReported = a.onlineIPs(ctx)
 		for _, st := range a.pending {
 			req.Stats = append(req.Stats, *st)
 		}

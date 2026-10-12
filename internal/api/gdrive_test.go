@@ -257,13 +257,13 @@ func TestGoogleDriveSubscriptions(t *testing.T) {
 		t.Fatalf("new link content: %d %q", code, body)
 	}
 
-	// A device limit cannot be enforced through Drive: the link is refused.
+	// A device limit no longer rules Drive out: the nodes enforce it by IPs.
 	e.do("PUT", "/api/users/"+itoa(u.ID), root, userInput{Username: "alice", DeviceLimit: 2}, nil)
-	if resp := e.do("POST", "/api/users/"+itoa(u.ID)+"/gdrive", root, nil, nil); resp.StatusCode != 400 {
-		t.Fatalf("device-limited user got a drive link: %d", resp.StatusCode)
+	if resp := e.do("POST", "/api/users/"+itoa(u.ID)+"/gdrive", root, nil, nil); resp.StatusCode != 200 {
+		t.Fatalf("device-limited user's drive link: %d", resp.StatusCode)
 	}
-	if code, _ := fetch(sub.GDrive.URL); code != 404 {
-		t.Fatalf("device-limited user's drive file must be removed: %d", code)
+	if code, _ := fetch(sub.GDrive.URL); code != 200 {
+		t.Fatalf("device-limited user's drive file must stay: %d", code)
 	}
 
 	// Deleting a user removes their Drive file.

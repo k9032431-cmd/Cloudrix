@@ -181,7 +181,6 @@ const ru = {
   'sub.gdriveNotSetUp': 'Google Drive не настроен. Подключите его в «Настройках».',
   'sub.gdriveNotSetUpAdmin': 'Google Drive не настроен. Попросите главного администратора подключить его.',
   'sub.gdriveSynced': 'Обновлено',
-  'sub.gdriveDeviceLimit': 'У пользователя включён лимит устройств. Через Google Drive устройства (HWID) проверить нельзя, поэтому такая ссылка недоступна. Уберите лимит, чтобы её выдать.',
   'sub.backup': 'Резервная',
   'br.title': 'Оформление подписки',
   'br.desc': 'Так подписка выглядит в приложениях клиентов (Happ, v2RayTun, Streisand и др.): название, объявление и кнопки. В тексте можно использовать данные пользователя — они подставятся для каждого отдельно.',
@@ -393,6 +392,12 @@ const ru = {
   'nodes.bridgePortHint': 'На этот порт подключаются другие ноды, если выходят через эту. 0 — выбрать автоматически.',
   'inbounds.portClash': 'порт занят',
   'inbounds.portClashHint': 'Этот порт на ноде уже у инбаунда {tag}. Из-за этого ядро не запускает конфиг ноды целиком — смените порт у одного из них.',
+  'users.devicesOnline': 'Устройств онлайн',
+  'presence.blocked': 'Лимит устройств',
+  'presence.blockedUntil': 'ключи отключены до {time}',
+  'presence.blockedHint': 'Подключено больше устройств, чем разрешено: ключи временно сняты со всех нод.',
+  'br.deviceBlock': 'Превышение лимита устройств: отключать ключи на, минут',
+  'br.deviceBlockHint': 'Ноды считают одновременные подключения (по IP) — так лимит работает и для Google-ссылок, и для пересланных ключей. 0 — не отключать, только показывать.',
 }
 
 type Key = keyof typeof ru
@@ -576,7 +581,6 @@ const en: Record<Key, string> = {
   'sub.gdriveNotSetUp': 'Google Drive is not set up. Connect it in Settings.',
   'sub.gdriveNotSetUpAdmin': 'Google Drive is not set up. Ask the main admin to connect it.',
   'sub.gdriveSynced': 'Updated',
-  'sub.gdriveDeviceLimit': 'This user has a device limit. Google Drive cannot check devices (HWID), so this link is unavailable. Remove the limit to issue it.',
   'sub.backup': 'Backup',
   'br.title': 'Subscription branding',
   'br.desc': 'How the subscription looks in client apps (Happ, v2RayTun, Streisand, …): title, announcement and buttons. Text can include user data, filled in for each user.',
@@ -788,6 +792,12 @@ const en: Record<Key, string> = {
   'nodes.bridgePortHint': 'Other nodes connect here when they exit through this one. 0 picks one automatically.',
   'inbounds.portClash': 'port in use',
   'inbounds.portClashHint': 'Inbound {tag} already uses this port on the node, so the core refuses the node\'s whole config — change the port of one of them.',
+  'users.devicesOnline': 'Devices online',
+  'presence.blocked': 'Device limit',
+  'presence.blockedUntil': 'keys off until {time}',
+  'presence.blockedHint': 'More devices connected than allowed: keys are withheld on every node for a while.',
+  'br.deviceBlock': 'Over the device limit: withhold keys for, minutes',
+  'br.deviceBlockHint': 'Nodes count simultaneous connections (by IP), so the limit also covers Google links and shared keys. 0 — never withhold, only show.',
 }
 
 const dicts: Record<Lang, Record<Key, string>> = { ru, en }

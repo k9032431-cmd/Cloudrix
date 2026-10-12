@@ -245,7 +245,7 @@ func (s *Server) handleSubscriptionInfo(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusOK, info)
 		return
 	}
-	if d := s.userDrive(r.Context(), u); d.URL != "" && u.DeviceLimit == 0 {
+	if d := s.userDrive(r.Context(), u); d.URL != "" {
 		info.DriveURL = d.URL
 	}
 	// With a device limit, links would bypass HWID checks, so only the URL is shown.

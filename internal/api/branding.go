@@ -35,12 +35,15 @@ type branding struct {
 	ProviderID   string `json:"provider_id"`
 	HideSettings bool   `json:"hide_settings"`
 	AlwaysHWID   bool   `json:"always_hwid"`
+	// Minutes a user over the device limit (counted by IPs on the nodes,
+	// so Google Drive links are covered too) loses the keys; 0 = never.
+	DeviceBlockMinutes int `json:"device_block_minutes"`
 }
 
 var providerIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
 
 func (s *Server) defaultBranding() branding {
-	return branding{Title: s.cfg.SubTitle, UpdateHours: s.cfg.SubUpdateHours}
+	return branding{Title: s.cfg.SubTitle, UpdateHours: s.cfg.SubUpdateHours, DeviceBlockMinutes: 10}
 }
 
 func (s *Server) loadBranding(ctx context.Context) error {
@@ -118,6 +121,9 @@ func (s *Server) handleUpdateBranding(w http.ResponseWriter, r *http.Request) {
 		return
 	case !providerIDRe.MatchString(in.ProviderID):
 		writeError(w, http.StatusBadRequest, "provider ID: letters, digits, _ and - only")
+		return
+	case in.DeviceBlockMinutes < 0 || in.DeviceBlockMinutes > 1440:
+		writeError(w, http.StatusBadRequest, "device limit block must be 0-1440 minutes")
 		return
 	case (in.HideSettings || in.AlwaysHWID) && in.ProviderID == "":
 		writeError(w, http.StatusBadRequest, "hiding settings and forced HWID need a Happ provider ID")

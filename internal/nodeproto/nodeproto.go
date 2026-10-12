@@ -48,6 +48,10 @@ type SyncRequest struct {
 	Wait    bool   `json:"wait,omitempty"`  // long-poll until the config changes
 	// CertSHA256 is the hex SHA-256 of the agent's self-signed certificate.
 	CertSHA256 string `json:"cert_sha256,omitempty"`
+	// Online maps user email to the IPs it is connected from right now;
+	// OnlineReported tells an empty map apart from an agent that cannot tell.
+	Online         map[string][]string `json:"online,omitempty"`
+	OnlineReported bool                `json:"online_reported,omitempty"`
 }
 
 // SyncResponse carries the core configs when they changed.

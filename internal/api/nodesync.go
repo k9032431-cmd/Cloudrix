@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +74,10 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 	users, err := s.store.AllUsers(ctx)
 	if err != nil {
 		return nil, nil, "", err
+	}
+	// users over their device limit get no keys until the block ends
+	if blocked := s.devices.blockedSet(); len(blocked) > 0 {
+		users = slices.DeleteFunc(slices.Clone(users), func(u *model.User) bool { return blocked[u.ID] })
 	}
 	groups, err := s.store.GroupMap(ctx)
 	if err != nil {
@@ -145,6 +150,10 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	up, down := s.applyNodeStats(ctx, node, req.Stats)
+	if req.OnlineReported {
+		s.devices.report(id, req.Online)
+		s.checkDevices(ctx)
+	}
 	msg := req.Error
 	if len(msg) > 500 {
 		msg = msg[:500]
@@ -249,6 +258,7 @@ func (s *Server) watchNodes(ctx context.Context) {
 			if _, err := s.store.MarkStaleNodes(ctx, time.Now().Add(-nodeStaleAfter), "no contact from the node agent"); err != nil {
 				s.log.Warn("node watch", "err", err)
 			}
+			s.checkDevices(ctx) // release device-limit blocks on time
 		}
 	}
 }
