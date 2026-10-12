@@ -143,6 +143,7 @@ func (a *Agent) Run(ctx context.Context) error {
 			a.kicks = "" // a restarted xray lost the rules set through its API
 		}
 		req.Kicks = a.kicks
+		req.Hysteria = a.hysteria()
 		for _, st := range a.pending {
 			req.Stats = append(req.Stats, *st)
 		}

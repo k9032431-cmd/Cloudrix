@@ -55,6 +55,17 @@ type SyncRequest struct {
 	OnlineReported bool                        `json:"online_reported,omitempty"`
 	// Kicks is the version of the device cut-offs the agent has applied.
 	Kicks string `json:"kicks,omitempty"`
+	// Hysteria is set once the installer gave this node a domain with a
+	// real certificate; the panel then creates the Hysteria2 inbound.
+	Hysteria *Hysteria `json:"hysteria,omitempty"`
+}
+
+// Hysteria describes a node's Hysteria2 setup made by the installer.
+type Hysteria struct {
+	Domain string `json:"domain"`
+	Port   int    `json:"port"`
+	Cert   string `json:"cert"`
+	Key    string `json:"key"`
 }
 
 // SyncResponse carries the core configs when they changed.

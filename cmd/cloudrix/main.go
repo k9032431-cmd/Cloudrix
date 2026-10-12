@@ -6,6 +6,7 @@
 //	cloudrix backup FILE           write a consistent copy of the database
 //	cloudrix node run              run the node agent (Xray + sing-box, synced with the panel)
 //	cloudrix node status           print the agent's last sync state
+//	cloudrix node dns DOMAIN IP    point DOMAIN at IP in Cloudflare (CLOUDFLARE_API_TOKEN)
 package main
 
 import (
@@ -240,6 +241,20 @@ func runNode(args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 		return nodeagent.New(cfg).Run(ctx)
+	case "dns":
+		// cloudrix node dns DOMAIN IP — the installer points the Hysteria2
+		// domain at this node; the token comes from CLOUDFLARE_API_TOKEN.
+		if len(args) != 3 {
+			return errors.New("usage: cloudrix node dns DOMAIN IP (token in CLOUDFLARE_API_TOKEN)")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		zone, err := nodeagent.CloudflarePointA(ctx, os.Getenv("CLOUDFLARE_API_TOKEN"), args[1], args[2])
+		if err != nil {
+			return err
+		}
+		fmt.Println(zone) // the installer passes it to acme.sh
+		return nil
 	case "status":
 		b, err := os.ReadFile(filepath.Join(cfg.Dir, "state.json"))
 		if err != nil {

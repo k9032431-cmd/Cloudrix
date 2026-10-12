@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"math/big"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/core"
+	"github.com/k9032431-cmd/cloudrix/internal/nodeproto"
 )
 
 // ensureSelfSigned creates the certificate hysteria2/tuic inbounds use when
@@ -68,4 +70,18 @@ func certSHA256(path string) (string, error) {
 	}
 	sum := sha256.Sum256(blk.Bytes)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// hysteria reads the Hysteria2 setup the installer wrote (domain, UDP port
+// and the Let's Encrypt certificate), or nil when there is none.
+func (a *Agent) hysteria() *nodeproto.Hysteria {
+	raw, err := os.ReadFile(a.path("hysteria.json"))
+	if err != nil {
+		return nil
+	}
+	var h nodeproto.Hysteria
+	if json.Unmarshal(raw, &h) != nil || h.Domain == "" || h.Port <= 0 || !fileExists(h.Cert) || !fileExists(h.Key) {
+		return nil
+	}
+	return &h
 }

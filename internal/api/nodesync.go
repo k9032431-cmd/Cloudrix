@@ -145,6 +145,9 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	up, down := s.applyNodeStats(ctx, node, req.Stats)
+	if req.Hysteria != nil {
+		s.ensureHysteria(ctx, node, *req.Hysteria)
+	}
 	if req.OnlineReported {
 		s.devices.report(id, req.Online)
 		s.checkDevices(ctx)

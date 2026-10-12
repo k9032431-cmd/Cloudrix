@@ -1252,6 +1252,92 @@ cmd_node_uninstall() {
   ok "Нода удалена. Удалите её и в панели (раздел «Ноды»)."
 }
 
+# ---------- Hysteria2 на ноде ----------
+
+HY_CONF="$NODE_DATA_DIR/hysteria.json"
+HY_CERT_DIR="$NODE_DATA_DIR/tls/hysteria"
+
+# ask_secret VAR "Вопрос" — ввод без отображения на экране
+ask_secret() {
+  local __var=$1 prompt=$2 reply
+  if [[ -n ${!__var-} ]]; then return; fi
+  have_tty || die "Нужен ввод в терминале или переменная окружения."
+  read -r -s -p "$(printf '%s?%s %s: ' "$C_CYAN" "$C_RESET" "$prompt")" reply <"$TTY"
+  echo
+  printf -v "$__var" '%s' "$reply"
+}
+
+# cmd_node_hysteria: домен + токен Cloudflare → A-запись на эту ноду,
+# сертификат Let's Encrypt через DNS (порт 80 не нужен) и инбаунд Hysteria2,
+# который панель создаёт сама. Повторный запуск заменяет прежнюю установку.
+cmd_node_hysteria() {
+  require_root
+  detect_os
+  [[ -f $NODE_ENV ]] || die "Сначала установите ноду (команда из панели, раздел «Ноды»)."
+  local old="" domain=${CLOUDRIX_HY_DOMAIN-} token=${CLOUDRIX_CF_TOKEN-} port=${CLOUDRIX_HY_PORT-} ip zone acme="$HOME/.acme.sh/acme.sh"
+  if [[ -f $HY_CONF ]]; then
+    old=$(sed -n 's/.*"domain": *"\([^"]*\)".*/\1/p' "$HY_CONF")
+    warn "Hysteria2 уже установлен${old:+ для $old}. Прежняя установка будет удалена, и будет установлена новая."
+    ((ASSUME_YES)) || ask_yes_no "Продолжить?" n || return 0
+  fi
+
+  echo
+  info "Нужны домен в Cloudflare и API-токен с правом Zone → DNS → Edit"
+  info "(dash.cloudflare.com → My Profile → API Tokens → Create Token → «Edit zone DNS»)."
+  ask domain "Домен для Hysteria2, например hy.example.com"
+  domain=$(printf '%s' "$domain" | tr '[:upper:]' '[:lower:]' | sed 's#^https\?://##; s#/.*##; s/\.$//')
+  [[ $domain =~ ^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$ ]] || die "Это не похоже на домен: $domain"
+  ask_secret token "API-токен Cloudflare (ввод скрыт)"
+  [[ -n $token ]] || die "Токен не введён."
+  ask port "UDP-порт для Hysteria2" 443
+  [[ $port =~ ^[0-9]+$ ]] && ((port >= 1 && port <= 65535)) || die "Неверный порт: $port"
+
+  ip=$(public_ip)
+  [[ -n $ip ]] || die "Не удалось узнать внешний IP этого сервера."
+  info "Направляю $domain на $ip в Cloudflare (без проксирования — Hysteria2 работает по UDP)"
+  zone=$(CLOUDFLARE_API_TOKEN=$token "$BIN" node dns "$domain" "$ip") || die "Cloudflare не принял запрос. Проверьте токен (право Zone → DNS → Edit) и что домен добавлен в Cloudflare."
+
+  if ! command -v crontab >/dev/null; then
+    [[ $PKG == apt ]] && install_packages cron || install_packages cronie
+  fi
+  if [[ ! -x $acme ]]; then
+    info "Устанавливаю acme.sh"
+    curl -fsSL https://get.acme.sh | sh -s >/dev/null || die "Не удалось установить acme.sh"
+  fi
+  if [[ -n $old ]]; then
+    info "Удаляю прежнюю установку ($old)"
+    "$acme" --remove -d "$old" --ecc >/dev/null 2>&1 || true
+    rm -rf "$HOME/.acme.sh/${old}_ecc"
+  fi
+  rm -rf "$HY_CERT_DIR" "$HY_CONF"
+
+  info "Получаю сертификат Let's Encrypt для $domain через DNS (1–2 минуты)"
+  local rc=0 log
+  log=$(mktemp)
+  CF_Token=$token CF_Zone_ID=$zone "$acme" --issue --dns dns_cf -d "$domain" --keylength ec-256 \
+    --server letsencrypt --force >"$log" 2>&1 || rc=$?
+  if ((rc != 0 && rc != 2)); then
+    tail -n 15 "$log" >&2
+    rm -f "$log"
+    die "Сертификат не выпущен. Лог выше."
+  fi
+  rm -f "$log"
+  mkdir -p "$HY_CERT_DIR"
+  "$acme" --install-cert -d "$domain" --ecc \
+    --fullchain-file "$HY_CERT_DIR/fullchain.pem" \
+    --key-file "$HY_CERT_DIR/key.pem" \
+    --reloadcmd "chmod 600 $HY_CERT_DIR/key.pem; systemctl restart $NODE_SERVICE" >/dev/null || die "Не удалось сохранить сертификат."
+
+  umask 077
+  printf '{\n  "domain": "%s",\n  "port": %d,\n  "cert": "%s",\n  "key": "%s"\n}\n' \
+    "$domain" "$port" "$HY_CERT_DIR/fullchain.pem" "$HY_CERT_DIR/key.pem" >"$HY_CONF"
+  umask 022
+  systemctl restart "$NODE_SERVICE"
+  ok "Hysteria2 установлен: $domain, UDP $port. Сертификат продлевается автоматически."
+  info "Панель сама создаст инбаунд «hysteria2-node…» и добавит его в первую группу (Default)."
+  info "Если у хостинга есть свой файрвол в личном кабинете, откройте в нём UDP $port."
+}
+
 node_menu() {
   have_tty || die "Меню работает только в терминале. Команды: $(basename "$0") --help"
   local choice
@@ -1263,7 +1349,8 @@ node_menu() {
     printf '  %s2)%s Перезапустить\n' "$C_BOLD" "$C_RESET"
     printf '  %s3)%s Логи (последние строки)\n' "$C_BOLD" "$C_RESET"
     printf '  %s4)%s Логи в реальном времени %s(выход — Ctrl+C)%s\n' "$C_BOLD" "$C_RESET" "$C_DIM" "$C_RESET"
-    printf '  %s5)%s Удалить ноду\n' "$C_BOLD" "$C_RESET"
+    printf '  %s5)%s Hysteria2 (домен + Cloudflare)%s\n' "$C_BOLD" "$C_RESET" "$([[ -f $HY_CONF ]] && printf ' %s— установлен%s' "$C_GREEN" "$C_RESET")"
+    printf '  %s6)%s Удалить ноду\n' "$C_BOLD" "$C_RESET"
     printf '  %s0)%s Выход\n\n' "$C_BOLD" "$C_RESET"
     read -r -p "$(printf '%s?%s Выберите пункт: ' "$C_CYAN" "$C_RESET")" choice <"$TTY" || return 0
     case $choice in
@@ -1271,7 +1358,8 @@ node_menu() {
       2) run_menu_action bash -c "systemctl restart $NODE_SERVICE && echo '✔ Перезапущено'" ;;
       3) run_menu_action cmd_node_logs ;;
       4) FOLLOW=1 run_menu_action cmd_node_logs ;;
-      5)
+      5) run_menu_action cmd_node_hysteria ;;
+      6)
         run_menu_action cmd_node_uninstall
         [[ -f $NODE_ENV ]] || return 0
         ;;
@@ -1429,6 +1517,7 @@ usage() {
   node-info      состояние ноды
   node-logs [-f] логи ноды
   node-uninstall удалить ноду
+  node-hysteria  Hysteria2 на ноде: домен в Cloudflare + сертификат Let's Encrypt
 
   --yes          не задавать вопросов (значения из CLOUDRIX_* переменных)
   --force        для update: переустановить, даже если версия последняя
@@ -1480,6 +1569,7 @@ main() {
     node-info) cmd_node_info ;;
     node-logs) cmd_node_logs ;;
     node-uninstall) cmd_node_uninstall ;;
+    node-hysteria) cmd_node_hysteria ;;
     *)
       usage
       exit 1
