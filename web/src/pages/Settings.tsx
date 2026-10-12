@@ -70,6 +70,25 @@ function DriveCard() {
     }, t('common.saved'))
   }
 
+  // Connect saves first, so pasted credentials count without pressing Save.
+  const dirty =
+    !!data &&
+    (form.client_secret !== '' ||
+      form.client_id !== data.client_id ||
+      form.api_key !== data.api_key ||
+      form.enabled !== data.enabled ||
+      form.format !== data.format ||
+      form.interval_minutes !== data.interval_minutes)
+  const canConnect = !!form.client_id && (!!form.client_secret || !!data?.has_client_secret)
+  const connect = () =>
+    run('connect', async () => {
+      if (dirty) {
+        setData(await put<DriveSettings>('/api/settings/gdrive', form))
+        setForm((f) => ({ ...f, client_secret: '' }))
+      }
+      await post('/api/settings/gdrive/connect')
+    })
+
   const conn = data?.connect
   return (
     <Card className="p-6">
@@ -195,12 +214,13 @@ function DriveCard() {
             <Button
               variant={data?.connected ? 'secondary' : 'primary'}
               loading={busy === 'connect'}
-              disabled={!data?.client_id || !data?.has_client_secret}
-              onClick={() => run('connect', () => post('/api/settings/gdrive/connect'))}
+              disabled={!canConnect}
+              onClick={connect}
             >
               <ShieldCheck className="h-4 w-4" />
               {data?.connected ? t('gd.reconnect') : t('gd.connect')}
             </Button>
+            {!canConnect && <span className="hint">{t('gd.needClient')}</span>}
             {data?.connected && (
               <>
                 <Button variant="secondary" loading={busy === 'test'} onClick={() => run('test', () => post('/api/settings/gdrive/test'), t('gd.testOk'))}>

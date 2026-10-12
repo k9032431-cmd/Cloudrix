@@ -265,7 +265,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttrib
 // Field puts the label above the control and the hint below it.
 export function Field({ label, hint, children, className }: { label: string; hint?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <label className={cx('grid gap-1.5', className)}>
+    <label className={cx('grid min-w-0 gap-1.5', className)}>
       <span className="label">{label}</span>
       {children}
       {hint && <span className="hint">{hint}</span>}
