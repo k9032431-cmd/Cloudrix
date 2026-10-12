@@ -265,6 +265,9 @@ func (d *driveSyncer) render(ctx context.Context, u *model.User) ([]byte, error)
 	if brand.SupportURL != "" {
 		fmt.Fprintf(&b, "#support-url: %s\n", brand.SupportURL)
 	}
+	if brand.WebPageURL != "" {
+		fmt.Fprintf(&b, "#profile-web-page-url: %s\n", brand.WebPageURL)
+	}
 	fmt.Fprintf(&b, "#subscription-userinfo: upload=0; download=%d; total=%d; expire=%d\n", u.UsedTraffic, u.DataLimit, expire)
 	for _, l := range links {
 		b.WriteString(l)
