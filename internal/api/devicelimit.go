@@ -58,6 +58,19 @@ func (g *deviceGuard) report(nodeID int64, online map[string]map[string]int64) {
 	g.nodes[nodeID] = nodeOnline{at: time.Now(), users: users}
 }
 
+// onlineByNode counts the users each node reports online now.
+func (g *deviceGuard) onlineByNode() map[int64]int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := map[int64]int{}
+	for id, n := range g.nodes {
+		if time.Since(n.at) <= onlineFreshness {
+			out[id] = len(n.users)
+		}
+	}
+	return out
+}
+
 // online merges the fresh reports of all nodes: user id → IP → last seen.
 func (g *deviceGuard) onlineLocked() map[int64]map[string]int64 {
 	out := map[int64]map[string]int64{}

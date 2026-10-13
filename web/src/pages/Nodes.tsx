@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { CircleAlert, Info, Pencil, Plus, RefreshCw, Terminal, Trash2 } from '../components/icons'
+import { ChartUp, CircleAlert, Info, Pencil, Plus, RefreshCw, Terminal, Trash2 } from '../components/icons'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -8,6 +8,7 @@ import type { Node } from '../lib/types'
 import { useToast } from '../components/toast'
 import { Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Skeleton, Table, Td, Th, Toggle } from '../components/ui'
 import { NodeStatusBadge } from '../components/StatusBadge'
+import { NodeStatsDialog, NodesOverview, PeriodSwitch, type StatsPeriod } from './nodes/NodeStats'
 
 interface InstallInfo {
   command: string
@@ -21,6 +22,8 @@ export default function Nodes() {
   const [editing, setEditing] = useState<Node | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Node | null>(null)
   const [installing, setInstalling] = useState<Node | null>(null)
+  const [period, setPeriod] = useState<StatsPeriod>('30')
+  const [stats, setStats] = useState<{ id: number; name: string } | null>(null)
 
   // the agent reports in every ~25s; keep the list fresh while the page is open
   useEffect(() => {
@@ -36,13 +39,17 @@ export default function Nodes() {
         title={t('nav.nodes')}
         subtitle={t('nodes.agentNote')}
         actions={
-          <Button onClick={() => setEditing('new')}>
-            <Plus />
-            {t('nodes.new')}
-          </Button>
+          <>
+            {!!data?.length && <PeriodSwitch value={period} onChange={setPeriod} />}
+            <Button onClick={() => setEditing('new')}>
+              <Plus />
+              {t('nodes.new')}
+            </Button>
+          </>
         }
       />
       <ErrorNote error={error} />
+      {!!data?.length && <NodesOverview period={period} onOpen={setStats} />}
       <Card>
         {data?.length === 0 ? (
           <div className="empty">
@@ -102,6 +109,9 @@ export default function Nodes() {
                         <Terminal />
                         <span className="hide-sm">{t('nodes.install')}</span>
                       </Button>
+                      <IconButton onClick={() => setStats(n)} aria-label={t('nodes.stats.open')} title={t('nodes.stats.open')}>
+                        <ChartUp />
+                      </IconButton>
                       <IconButton onClick={() => setEditing(n)} aria-label={t('common.edit')}>
                         <Pencil />
                       </IconButton>
@@ -127,6 +137,7 @@ export default function Nodes() {
           }}
         />
       )}
+      {stats && <NodeStatsDialog node={stats} initial={period} onClose={() => setStats(null)} />}
       {installing && <InstallDialog node={installing} onClose={() => setInstalling(null)} />}
       <Confirm
         open={!!deleting}

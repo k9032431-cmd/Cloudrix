@@ -168,6 +168,22 @@ var migrations = []string{
 	ALTER TABLE admins ADD COLUMN max_user_data INTEGER NOT NULL DEFAULT 0;
 	ALTER TABLE admins ADD COLUMN max_user_devices INTEGER NOT NULL DEFAULT 0;
 	UPDATE admins SET used_traffic = (SELECT COALESCE(SUM(lifetime_used), 0) FROM users WHERE users.admin_id = admins.id);`,
+	// 8: traffic per node and day, and per user on each node
+	`CREATE TABLE node_traffic_daily (
+		day TEXT NOT NULL,
+		node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+		up INTEGER NOT NULL DEFAULT 0,
+		down INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (day, node_id)
+	);
+	CREATE TABLE node_user_traffic_daily (
+		day TEXT NOT NULL,
+		node_id INTEGER NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,
+		user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		bytes INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (day, node_id, user_id)
+	);
+	CREATE INDEX node_user_traffic_node ON node_user_traffic_daily (node_id, day);`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

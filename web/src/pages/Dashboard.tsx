@@ -198,7 +198,7 @@ export default function Dashboard() {
   )
 }
 
-function Trend({ value }: { value: number }) {
+export function Trend({ value }: { value: number }) {
   const up = value >= 0
   const Arrow = up ? TrendingUp : TrendingDown
   const v = Math.abs(value)

@@ -129,6 +129,8 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/groups/{id}", s.handleDeleteGroup)
 
 				r.Get("/nodes", s.handleListNodes)
+				r.Get("/nodes/stats", s.handleNodesStats)
+				r.Get("/nodes/{id}/stats", s.handleNodeStats)
 				r.Post("/nodes", s.handleCreateNode)
 				r.Put("/nodes/{id}", s.handleUpdateNode)
 				r.Delete("/nodes/{id}", s.handleDeleteNode)

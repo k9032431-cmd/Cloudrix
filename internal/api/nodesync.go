@@ -276,6 +276,10 @@ func (s *Server) applyNodeStats(ctx context.Context, node *model.Node, stats []n
 			}
 		}
 	}
+	// node statistics count what really went through the node
+	if err := s.store.AddNodeTraffic(ctx, node.ID, up, down, perUser); err != nil {
+		s.log.Warn("node statistics", "node", node.Name, "err", err)
+	}
 	return up, down
 }
 
@@ -283,11 +287,18 @@ func (s *Server) applyNodeStats(ctx context.Context, node *model.Node, stats []n
 func (s *Server) watchNodes(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
+	var pruned time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if time.Since(pruned) > 6*time.Hour {
+				pruned = time.Now()
+				if err := s.store.PruneNodeTraffic(ctx, nodeUserStatsDays, nodeStatsDays); err != nil {
+					s.log.Warn("prune node statistics", "err", err)
+				}
+			}
 			if _, err := s.store.MarkStaleNodes(ctx, time.Now().Add(-nodeStaleAfter), "no contact from the node agent"); err != nil {
 				s.log.Warn("node watch", "err", err)
 			}

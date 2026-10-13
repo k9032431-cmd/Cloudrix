@@ -104,6 +104,31 @@ func TestNodeSync(t *testing.T) {
 		t.Fatalf("node after sync: %+v", nodes[len(nodes)-1])
 	}
 
+	// node statistics: daily traffic, totals and the top users
+	var ns struct {
+		Node struct {
+			Up, Down int64
+			Users    int
+		} `json:"node"`
+		History  []struct{ Up, Down, Bytes int64 } `json:"history"`
+		TopUsers []struct {
+			Username string `json:"username"`
+			Bytes    int64  `json:"bytes"`
+		} `json:"top_users"`
+	}
+	if r := e.do("GET", "/api/nodes/"+strconv.FormatInt(node.ID, 10)+"/stats?days=7", root, nil, &ns); r.StatusCode != 200 ||
+		ns.Node.Up != 1000 || ns.Node.Down != 4000 || ns.Node.Users != 1 ||
+		len(ns.History) != 1 || ns.History[0].Bytes != 5000 || len(ns.TopUsers) != 1 || ns.TopUsers[0].Username != "alice" {
+		t.Fatalf("node stats: %d %+v", r.StatusCode, ns)
+	}
+	var all struct {
+		Nodes   []struct{ ID, Up, Down int64 } `json:"nodes"`
+		History []struct{ Bytes int64 }        `json:"history"`
+	}
+	if r := e.do("GET", "/api/nodes/stats", root, nil, &all); r.StatusCode != 200 || len(all.History) != 1 || all.Nodes[len(all.Nodes)-1].Down != 4000 {
+		t.Fatalf("nodes stats: %d %+v", r.StatusCode, all)
+	}
+
 	// a waiting agent hears about a new user right away (well before the 25s poll window ends)
 	type result struct {
 		code int
