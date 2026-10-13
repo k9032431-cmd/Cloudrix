@@ -489,4 +489,21 @@ func TestInboundPortConflict(t *testing.T) {
 	if r := e.do("PUT", fmt.Sprintf("/api/inbounds/%d", a.ID), root, mk("a", model.ProtoTrojan, 443), nil); r.StatusCode != 200 {
 		t.Fatalf("saving itself: %d", r.StatusCode)
 	}
+	// same server side, own address, remark and SNI: shares the port
+	host := mk("a-nl", model.ProtoTrojan, 443)
+	host.Address, host.Remark, host.Settings.SNI = "nl.example.com", "NL", "nl.example.com"
+	if r := e.do("POST", "/api/inbounds", root, host, nil); r.StatusCode != 201 {
+		t.Fatalf("host on a shared port: %d", r.StatusCode)
+	}
+	// another transport on the same socket still clashes
+	ws := mk("a-ws", model.ProtoTrojan, 443)
+	ws.Settings.Network = "ws"
+	if r := e.do("POST", "/api/inbounds", root, ws, nil); r.StatusCode != 400 {
+		t.Fatalf("other transport on the port: %d", r.StatusCode)
+	}
+	// a different listen IP is a different socket
+	ws.Listen = "10.0.0.2"
+	if r := e.do("POST", "/api/inbounds", root, ws, nil); r.StatusCode != 400 {
+		t.Fatalf("specific IP next to 0.0.0.0: %d", r.StatusCode)
+	}
 }

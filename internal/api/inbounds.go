@@ -97,9 +97,11 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		return false
 	}
 	for _, o := range others {
-		if o.ID != in.ID && o.NodeID != nil && *o.NodeID == *in.NodeID && o.Port == in.Port && sharesTransport(o.Protocol, in.Protocol) {
+		if o.ID != in.ID && o.Enabled && in.Enabled && o.NodeID != nil && *o.NodeID == *in.NodeID && core.PortClash(o, in) {
 			// one busy port makes the core refuse the node's whole config
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by inbound %s", in.Port, o.Tag))
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by inbound %s. "+
+				"Several inbounds can share a port when protocol, transport, security, keys and exit match "+
+				"(address, remark and SNI may differ) — copy that inbound and change only those, or pick another port", in.Port, o.Tag))
 			return false
 		}
 	}
@@ -130,16 +132,6 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		}
 	}
 	return true
-}
-
-// sharesTransport reports whether two protocols would listen on the same
-// TCP or UDP socket of a port (hysteria2 on UDP 443 can sit next to VLESS on TCP 443).
-func sharesTransport(a, b model.Protocol) bool {
-	tcp := func(p model.Protocol) bool {
-		return p == model.ProtoVLESS || p == model.ProtoVMess || p == model.ProtoTrojan || p == model.ProtoShadowsocks
-	}
-	udp := func(p model.Protocol) bool { return !tcp(p) || p == model.ProtoShadowsocks }
-	return (tcp(a) && tcp(b)) || (udp(a) && udp(b))
 }
 
 func (s *Server) handleListInbounds(w http.ResponseWriter, r *http.Request) {

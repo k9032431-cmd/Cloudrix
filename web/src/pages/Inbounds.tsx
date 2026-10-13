@@ -21,31 +21,64 @@ const PRESETS: Record<Protocol, Partial<Inbound>> = {
   wireguard: { port: 51820, settings: { wg_network: '10.8.0.0/16', wg_dns: '1.1.1.1', mtu: 1420 } },
 }
 
-// Inbounds sharing a port on one node (same TCP or UDP socket) make the core
-// refuse the node's whole config; the panel now rejects them, older ones are flagged.
+// Inbounds on one port of a node clash (the core would refuse the node's
+// whole config) unless they listen on different IPs or have the same server
+// side, which the panel folds into one listener: like hosts in Marzban, they
+// may differ only in address, remark, SNI and other client-side fields.
 const TCP: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
 const sharesTransport = (a: Protocol, b: Protocol) => {
   const udp = (p: Protocol) => !TCP.includes(p) || p === 'shadowsocks'
   return (TCP.includes(a) && TCP.includes(b)) || (udp(a) && udp(b))
 }
+// mirrors core.ShareKey on the server
+function shareKey(ib: Inbound): string | null {
+  if (!TCP.includes(ib.protocol)) return null
+  const s = ib.settings
+  const net = s.network || 'tcp'
+  const paths = ['ws', 'httpupgrade', 'xhttp'].includes(net) || (net === 'tcp' && s.header_type === 'http')
+  return JSON.stringify([
+    ib.protocol,
+    ib.listen || '0.0.0.0',
+    net,
+    paths ? [s.path || '/', s.host ?? ''] : null,
+    net === 'grpc' ? s.service_name ?? '' : null,
+    net === 'xhttp' ? s.xhttp_mode || 'auto' : null,
+    s.security || 'none',
+    s.security === 'tls' ? [s.cert_file ?? '', s.key_file ?? '', s.alpn ?? []] : null,
+    s.security === 'reality' ? [s.reality_dest ?? '', s.reality_private_key ?? ''] : null,
+    ib.protocol === 'vless' && net === 'tcp' ? s.flow ?? '' : null,
+    ib.protocol === 'shadowsocks' ? [s.ss_method ?? '', s.ss_server_key ?? ''] : null,
+    s.exit_node_id ?? null,
+  ])
+}
+const wildcard = (l: string) => !l || l === '0.0.0.0' || l === '::'
+function clashes(a: Inbound, b: Inbound): boolean {
+  if (a.port !== b.port || !sharesTransport(a.protocol, b.protocol)) return false
+  if (a.listen !== b.listen && !wildcard(a.listen) && !wildcard(b.listen)) return false
+  const k = shareKey(a)
+  return k === null || k !== shareKey(b)
+}
 function portClashes(list: Inbound[]): Map<number, string> {
   const out = new Map<number, string>()
   for (const a of list)
     for (const b of list)
-      if (a.id !== b.id && a.enabled && b.enabled && a.node_id != null && a.node_id === b.node_id && a.port === b.port && sharesTransport(a.protocol, b.protocol))
+      if (a.id !== b.id && a.enabled && b.enabled && a.node_id != null && a.node_id === b.node_id && clashes(a, b))
         out.set(a.id, b.tag)
   return out
 }
 
-// duplicate makes a new-inbound draft from an existing one: same settings,
-// a free tag, and the next port not taken on that node.
+// duplicate makes a new-inbound draft from an existing one: same settings
+// and a free tag. Xray inbounds keep the port (the copy shares it — change
+// the address, remark or SNI); sing-box ones move to the next free port.
 function duplicate(ib: Inbound, all: Inbound[]): Inbound {
   const tags = new Set(all.map((x) => x.tag))
   let tag = `${ib.tag}-copy`
   for (let i = 2; tags.has(tag); i++) tag = `${ib.tag}-copy${i}`
-  const ports = new Set(all.filter((x) => x.node_id === ib.node_id).map((x) => x.port))
   let port = ib.port
-  while (ports.has(port) && port < 65535) port++
+  if (shareKey(ib) === null) {
+    const ports = new Set(all.filter((x) => x.node_id === ib.node_id).map((x) => x.port))
+    while (ports.has(port) && port < 65535) port++
+  }
   return { ...ib, id: 0, tag, port, settings: { ...ib.settings } }
 }
 

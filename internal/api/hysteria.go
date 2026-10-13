@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/k9032431-cmd/cloudrix/internal/core"
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 	"github.com/k9032431-cmd/cloudrix/internal/nodeproto"
 )
@@ -33,7 +34,7 @@ func (s *Server) ensureHysteria(ctx context.Context, node *model.Node, h nodepro
 			continue
 		}
 		// a port taken by another UDP inbound would stop the node's sing-box
-		if in.NodeID != nil && *in.NodeID == node.ID && in.Port == h.Port && sharesTransport(in.Protocol, model.ProtoHysteria2) {
+		if in.NodeID != nil && *in.NodeID == node.ID && core.PortClash(in, &model.Inbound{Protocol: model.ProtoHysteria2, Listen: "0.0.0.0", Port: h.Port}) {
 			s.log.Warn("hysteria2 setup: port in use", "node", node.Name, "port", h.Port, "inbound", in.Tag)
 			return
 		}

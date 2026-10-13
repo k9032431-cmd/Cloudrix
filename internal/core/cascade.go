@@ -1,6 +1,9 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // BridgeSNI is the site the node-to-node Reality link imitates.
 const BridgeSNI = "www.microsoft.com"
@@ -82,4 +85,27 @@ func (c Cascade) apply(inbounds *[]map[string]any, outbounds *[]map[string]any, 
 		}
 		*rules = append(*rules, map[string]any{"inboundTag": e.Inbounds, "outboundTag": to})
 	}
+}
+
+// renamed points the exits at the listeners that serve folded inbounds.
+func (c Cascade) renamed(alias map[string]string) Cascade {
+	if len(alias) == 0 {
+		return c
+	}
+	exits := make([]Exit, len(c.Exits))
+	for i, e := range c.Exits {
+		var tags []string
+		for _, t := range e.Inbounds {
+			if a, ok := alias[t]; ok {
+				t = a
+			}
+			if !slices.Contains(tags, t) {
+				tags = append(tags, t)
+			}
+		}
+		e.Inbounds = tags
+		exits[i] = e
+	}
+	c.Exits = exits
+	return c
 }
