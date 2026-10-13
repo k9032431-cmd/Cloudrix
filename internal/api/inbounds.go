@@ -97,11 +97,10 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		return false
 	}
 	for _, o := range others {
-		if o.ID != in.ID && o.Enabled && in.Enabled && o.NodeID != nil && *o.NodeID == *in.NodeID && core.PortClash(o, in) {
+		if o.ID != in.ID && o.NodeID != nil && *o.NodeID == *in.NodeID && core.PortClash(o, in) {
 			// one busy port makes the core refuse the node's whole config
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by inbound %s. "+
-				"Several inbounds can share a port when protocol, transport, security, keys and exit match "+
-				"(address, remark and SNI may differ) — copy that inbound and change only those, or pick another port", in.Port, o.Tag))
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by %s inbound %s: "+
+				"only another %s inbound can share it (as its host), or pick another port", in.Port, o.Protocol, o.Tag, o.Protocol))
 			return false
 		}
 	}
@@ -167,7 +166,7 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !s.checkInboundNode(w, r, &in) {
+	if !s.joinListener(w, r, &in, nil) || !s.checkInboundNode(w, r, &in) {
 		return
 	}
 	if err := s.store.CreateInbound(r.Context(), &in); err != nil {
@@ -194,18 +193,19 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !s.checkInboundNode(w, r, &in) {
-		return
-	}
 	old, err := s.store.GetInbound(r.Context(), id)
 	if err != nil {
 		s.writeStoreError(w, err)
+		return
+	}
+	if !s.joinListener(w, r, &in, old) || !s.checkInboundNode(w, r, &in) {
 		return
 	}
 	if err := s.store.UpdateInbound(r.Context(), &in); err != nil {
 		s.writeStoreError(w, err)
 		return
 	}
+	s.syncHosts(r, &in)
 	s.applyInboundGroups(r, in.ID)
 	if old.Tag != in.Tag { // keep users that picked this inbound on it
 		s.editUserInbounds(r, func(tags []string) ([]string, bool) {
@@ -220,6 +220,44 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 	s.audit(r, "inbound.update", in.Tag, "")
 	s.usersChanged()
 	writeJSON(w, http.StatusOK, in)
+}
+
+// joinListener makes an inbound that moves onto a port already served by
+// an inbound of its protocol on the node a host of that listener: it takes
+// the owner's server side. An inbound already on the listener keeps what was
+// sent, and syncHosts passes it on to the others.
+func (s *Server) joinListener(w http.ResponseWriter, r *http.Request, in, old *model.Inbound) bool {
+	if in.NodeID == nil || in.Protocol.Core() != "xray" {
+		return true
+	}
+	if old != nil && old.NodeID != nil && *old.NodeID == *in.NodeID && core.Hosted(old, in) {
+		return true
+	}
+	all, err := s.store.ListInbounds(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return false
+	}
+	if owner := core.Owner(in, all); owner != nil {
+		core.AdoptServer(in, owner)
+	}
+	return true
+}
+
+// syncHosts gives the server side of a saved inbound to the others sharing
+// its listener, so the keys, transport and exit stay one for all of them.
+func (s *Server) syncHosts(r *http.Request, in *model.Inbound) {
+	all, err := s.store.ListInbounds(r.Context())
+	if err != nil {
+		return
+	}
+	for _, o := range core.Peers(in, all) {
+		if core.AdoptServer(o, in) {
+			if err := s.store.UpdateInbound(r.Context(), o); err != nil {
+				s.log.Warn("sync shared-port inbound", "inbound", o.Tag, "err", err)
+			}
+		}
+	}
 }
 
 // applyInboundGroups puts the inbound into the groups named by ?groups=1,2

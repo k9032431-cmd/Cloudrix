@@ -22,7 +22,7 @@ func TestCascade(t *testing.T) {
 		t.Fatalf("create cascade inbound: %d", r.StatusCode)
 	}
 	self := in
-	self.Tag, self.Settings.ExitNodeID = "loop", &entry
+	self.Tag, self.Port, self.Settings.ExitNodeID = "loop", 8443, &entry
 	if r := e.do("POST", "/api/inbounds", root, self, nil); r.StatusCode != 400 {
 		t.Fatalf("exit through own node: %d", r.StatusCode)
 	}

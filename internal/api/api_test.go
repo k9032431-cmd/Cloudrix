@@ -495,15 +495,34 @@ func TestInboundPortConflict(t *testing.T) {
 	if r := e.do("POST", "/api/inbounds", root, host, nil); r.StatusCode != 201 {
 		t.Fatalf("host on a shared port: %d", r.StatusCode)
 	}
-	// another transport on the same socket still clashes
+	// other settings: it joins as a host and takes the owner's server side
 	ws := mk("a-ws", model.ProtoTrojan, 443)
-	ws.Settings.Network = "ws"
-	if r := e.do("POST", "/api/inbounds", root, ws, nil); r.StatusCode != 400 {
-		t.Fatalf("other transport on the port: %d", r.StatusCode)
+	ws.Settings.Network, ws.Settings.SNI = "ws", "ws.example.com"
+	var got model.Inbound
+	if r := e.do("POST", "/api/inbounds", root, ws, &got); r.StatusCode != 201 || got.Settings.Network != "" || got.Settings.SNI != "ws.example.com" {
+		t.Fatalf("host with other settings: %d %+v", r.StatusCode, got.Settings)
 	}
-	// a different listen IP is a different socket
-	ws.Listen = "10.0.0.2"
-	if r := e.do("POST", "/api/inbounds", root, ws, nil); r.StatusCode != 400 {
+	// another protocol on the socket clashes
+	if r := e.do("POST", "/api/inbounds", root, mk("v", model.ProtoVLESS, 443), nil); r.StatusCode != 400 {
+		t.Fatalf("other protocol on the port: %d", r.StatusCode)
+	}
+	// a specific IP overlaps 0.0.0.0
+	ip := mk("a-ip", model.ProtoTrojan, 443)
+	ip.Listen = "10.0.0.2"
+	if r := e.do("POST", "/api/inbounds", root, ip, nil); r.StatusCode != 400 {
 		t.Fatalf("specific IP next to 0.0.0.0: %d", r.StatusCode)
+	}
+	// editing one of them passes its server side to the others
+	upd := mk("a", model.ProtoTrojan, 443)
+	upd.Settings.Network = "grpc"
+	if r := e.do("PUT", fmt.Sprintf("/api/inbounds/%d", a.ID), root, upd, nil); r.StatusCode != 200 {
+		t.Fatalf("update owner: %d", r.StatusCode)
+	}
+	var list []model.Inbound
+	e.do("GET", "/api/inbounds", root, nil, &list)
+	for _, ib := range list {
+		if ib.ID == got.ID && (ib.Settings.Network != "grpc" || ib.Settings.SNI != "ws.example.com") {
+			t.Fatalf("host after owner update: %+v", ib.Settings)
+		}
 	}
 }

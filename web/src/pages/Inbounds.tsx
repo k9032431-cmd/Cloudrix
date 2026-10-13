@@ -22,41 +22,22 @@ const PRESETS: Record<Protocol, Partial<Inbound>> = {
 }
 
 // Inbounds on one port of a node clash (the core would refuse the node's
-// whole config) unless they listen on different IPs or have the same server
-// side, which the panel folds into one listener: like hosts in Marzban, they
-// may differ only in address, remark, SNI and other client-side fields.
+// whole config) unless they listen on different IPs or are of one Xray
+// protocol: then, like hosts in Marzban/PasarGuard, they share a listener
+// whose server side (transport, keys, exit) is the first one's, and each
+// keeps its own address, remark and SNI. Mirrors core.PortClash.
 const TCP: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
 const sharesTransport = (a: Protocol, b: Protocol) => {
   const udp = (p: Protocol) => !TCP.includes(p) || p === 'shadowsocks'
   return (TCP.includes(a) && TCP.includes(b)) || (udp(a) && udp(b))
 }
-// mirrors core.ShareKey on the server
-function shareKey(ib: Inbound): string | null {
-  if (!TCP.includes(ib.protocol)) return null
-  const s = ib.settings
-  const net = s.network || 'tcp'
-  const paths = ['ws', 'httpupgrade', 'xhttp'].includes(net) || (net === 'tcp' && s.header_type === 'http')
-  return JSON.stringify([
-    ib.protocol,
-    ib.listen || '0.0.0.0',
-    net,
-    paths ? [s.path || '/', s.host ?? ''] : null,
-    net === 'grpc' ? s.service_name ?? '' : null,
-    net === 'xhttp' ? s.xhttp_mode || 'auto' : null,
-    s.security || 'none',
-    s.security === 'tls' ? [s.cert_file ?? '', s.key_file ?? '', s.alpn ?? []] : null,
-    s.security === 'reality' ? [s.reality_dest ?? '', s.reality_private_key ?? ''] : null,
-    ib.protocol === 'vless' && net === 'tcp' ? s.flow ?? '' : null,
-    ib.protocol === 'shadowsocks' ? [s.ss_method ?? '', s.ss_server_key ?? ''] : null,
-    s.exit_node_id ?? null,
-  ])
-}
 const wildcard = (l: string) => !l || l === '0.0.0.0' || l === '::'
+const hosted = (a: Inbound, b: Inbound) =>
+  a.port === b.port && a.protocol === b.protocol && TCP.includes(a.protocol) && (a.listen === b.listen || (wildcard(a.listen) && wildcard(b.listen)))
 function clashes(a: Inbound, b: Inbound): boolean {
   if (a.port !== b.port || !sharesTransport(a.protocol, b.protocol)) return false
   if (a.listen !== b.listen && !wildcard(a.listen) && !wildcard(b.listen)) return false
-  const k = shareKey(a)
-  return k === null || k !== shareKey(b)
+  return !hosted(a, b)
 }
 function portClashes(list: Inbound[]): Map<number, string> {
   const out = new Map<number, string>()
@@ -68,14 +49,15 @@ function portClashes(list: Inbound[]): Map<number, string> {
 }
 
 // duplicate makes a new-inbound draft from an existing one: same settings
-// and a free tag. Xray inbounds keep the port (the copy shares it — change
-// the address, remark or SNI); sing-box ones move to the next free port.
+// and a free tag. Xray inbounds keep the port (the copy becomes a host of the
+// same listener: change its address, remark or SNI); sing-box ones move to
+// the next free port.
 function duplicate(ib: Inbound, all: Inbound[]): Inbound {
   const tags = new Set(all.map((x) => x.tag))
   let tag = `${ib.tag}-copy`
   for (let i = 2; tags.has(tag); i++) tag = `${ib.tag}-copy${i}`
   let port = ib.port
-  if (shareKey(ib) === null) {
+  if (!TCP.includes(ib.protocol)) {
     const ports = new Set(all.filter((x) => x.node_id === ib.node_id).map((x) => x.port))
     while (ports.has(port) && port < 65535) port++
   }
@@ -221,6 +203,7 @@ export default function Inbounds() {
       {editing && (
         <InboundForm
           initial={editing}
+          all={data ?? []}
           nodes={nodes ?? []}
           groups={groups ?? []}
           onClose={() => setEditing(null)}
@@ -253,7 +236,21 @@ const parseList = (s: string) =>
     .map((x) => x.trim())
     .filter(Boolean)
 
-function InboundForm({ initial, nodes, groups, onClose, onSaved }: { initial: Inbound; nodes: Node[]; groups: Group[]; onClose: () => void; onSaved: () => void }) {
+function InboundForm({
+  initial,
+  all,
+  nodes,
+  groups,
+  onClose,
+  onSaved,
+}: {
+  initial: Inbound
+  all: Inbound[]
+  nodes: Node[]
+  groups: Group[]
+  onClose: () => void
+  onSaved: () => void
+}) {
   const { t } = useI18n()
   const [ib, setIb] = useState<Inbound>(initial)
   const [error, setError] = useState<string | null>(null)
@@ -267,6 +264,10 @@ function InboundForm({ initial, nodes, groups, onClose, onSaved }: { initial: In
     isNew ? groups.slice(0, 1).map((g) => g.id) : groups.filter((g) => g.inbound_ids.includes(initial.id)).map((g) => g.id),
   )
   const streamProto = ['vless', 'vmess', 'trojan'].includes(ib.protocol)
+  // other inbounds on this listener; joining takes the first one's server side
+  const peers = all.filter((o) => o.id !== ib.id && ib.node_id != null && o.node_id === ib.node_id && hosted(o, ib))
+  const joining = peers.length > 0 && !(initial.id !== 0 && initial.node_id === ib.node_id && hosted(initial, ib))
+  const owner = peers.reduce<Inbound | undefined>((a, o) => (!a || o.id < a.id ? o : a), undefined)
   const needsCert = ib.protocol === 'hysteria2' || ib.protocol === 'tuic' || s.security === 'tls'
 
   const submit = async (e: FormEvent) => {
@@ -382,6 +383,17 @@ function InboundForm({ initial, nodes, groups, onClose, onSaved }: { initial: In
             </Field>
           )}
         </div>
+
+        {peers.length > 0 && (
+          <div className="flex gap-2 rounded-lg bg-primary/5 px-3 py-2.5 text-[13px] text-muted-foreground ring-1 ring-inset ring-primary/15">
+            <Copy className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <span>
+              {joining
+                ? t('inbounds.hostJoin', { port: ib.port, tag: owner!.tag })
+                : t('inbounds.hostShared', { tags: peers.map((o) => o.tag).join(', ') })}
+            </span>
+          </div>
+        )}
 
         {streamProto && (
           <Section title={t('inbounds.transport')}>

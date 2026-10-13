@@ -65,8 +65,8 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		"tag": "api", "listen": "127.0.0.1", "port": 10085, "protocol": "dokodemo-door",
 		"settings": map[string]any{"address": "127.0.0.1"},
 	}}
-	shared := map[string]int{}   // share key → index in xin
-	alias := map[string]string{} // tag of a folded inbound → listener tag
+	listener := map[string]int{} // protocol, listen and port → index in xin
+	alias := map[string]string{} // tag of a hosted inbound → listener tag
 	for _, in := range inbounds {
 		if in.Protocol.Core() != "xray" {
 			continue
@@ -75,14 +75,19 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		if err != nil {
 			return nil, fmt.Errorf("inbound %s: %w", in.Tag, err)
 		}
-		// inbounds on one port with the same server side share a listener
-		key := ShareKey(in)
-		if i, ok := shared[key]; ok {
+		// inbounds of one protocol on one port share a listener; the first
+		// (lowest id) one's server side counts
+		listen := in.Listen
+		if wildcard(listen) {
+			listen = "*"
+		}
+		key := fmt.Sprint(in.Protocol, "|", listen, "|", in.Port)
+		if i, ok := listener[key]; ok {
 			mergeXray(xin[i], x)
 			alias[in.Tag] = xin[i]["tag"].(string)
 			continue
 		}
-		shared[key] = len(xin)
+		listener[key] = len(xin)
 		xin = append(xin, x)
 	}
 	cascade = cascade.renamed(alias)

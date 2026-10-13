@@ -1,49 +1,29 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 )
 
-// Several panel inbounds may sit on one port of a node, like hosts in
-// Marzban/PasarGuard: when their server side is the same (protocol,
-// transport, TLS/Reality keys, exit) the core gets one inbound serving all
-// their users, and each panel inbound still gives its own link with its
-// own address, remark and SNI.
-
-// ShareKey identifies the server side of an Xray inbound; inbounds with the
-// same key share one listener. Empty for protocols Xray does not serve.
-func ShareKey(in *model.Inbound) string {
-	if in.Protocol.Core() != "xray" {
-		return ""
-	}
-	x, err := xrayInbound(in, nil)
-	if err != nil {
-		return ""
-	}
-	delete(x, "tag")
-	delete(x["settings"].(map[string]any), "clients")
-	// names and short ids only pick clients in; the merged inbound accepts all
-	st := x["streamSettings"].(map[string]any)
-	if t, ok := st["tlsSettings"].(map[string]any); ok {
-		delete(t, "serverName")
-	}
-	if r, ok := st["realitySettings"].(map[string]any); ok {
-		delete(r, "serverNames")
-		delete(r, "shortIds")
-	}
-	if ex := in.Settings.ExitNodeID; ex != nil {
-		x["exit"] = *ex // traffic is routed by inbound, so the exit must match
-	}
-	b, _ := json.Marshal(x)
-	return string(b)
-}
+// Several panel inbounds of one protocol may sit on one port of a node, like
+// hosts in Marzban/PasarGuard. The first of them (lowest id) owns the server
+// side: transport, TLS/Reality keys, flow, exit. The others take it over and
+// keep their own address, remark, SNI and fingerprint, so each gives its own
+// link while the core runs one listener for all their users.
 
 func wildcard(listen string) bool {
 	return listen == "" || listen == "0.0.0.0" || listen == "::"
+}
+
+func sameListen(a, b string) bool {
+	return a == b || (wildcard(a) && wildcard(b))
+}
+
+// Hosted reports whether two inbounds of one node share a listener.
+func Hosted(a, b *model.Inbound) bool {
+	return a.Port == b.Port && a.Protocol == b.Protocol && a.Protocol.Core() == "xray" && sameListen(a.Listen, b.Listen)
 }
 
 // sharesTransport reports whether two protocols would listen on the same
@@ -55,8 +35,8 @@ func sharesTransport(a, b model.Protocol) bool {
 }
 
 // PortClash reports whether two inbounds of one node cannot both run: the
-// same port and kind of socket on overlapping addresses, without a server
-// side they could share.
+// same port and kind of socket on overlapping addresses, not as hosts of one
+// listener.
 func PortClash(a, b *model.Inbound) bool {
 	if a.Port != b.Port || !sharesTransport(a.Protocol, b.Protocol) {
 		return false
@@ -64,13 +44,66 @@ func PortClash(a, b *model.Inbound) bool {
 	if a.Listen != b.Listen && !wildcard(a.Listen) && !wildcard(b.Listen) {
 		return false // different IPs of the server
 	}
-	if k := ShareKey(a); k != "" && k == ShareKey(b) {
-		return false
-	}
-	return true
+	return !Hosted(a, b)
 }
 
-// mergeXray folds inbound x into the listener m serving the same port.
+// AdoptServer gives dst the server side of src; it reports whether anything
+// changed.
+func AdoptServer(dst, src *model.Inbound) bool {
+	d, s := &dst.Settings, src.Settings
+	before := fmt.Sprint(dst.Listen, *d, deref(d.ExitNodeID))
+	dst.Listen = src.Listen
+	d.Network, d.Path, d.Host, d.ServiceName, d.HeaderType, d.XHTTPMode = s.Network, s.Path, s.Host, s.ServiceName, s.HeaderType, s.XHTTPMode
+	d.Security, d.ALPN, d.CertFile, d.KeyFile, d.AllowInsecure = s.Security, slices.Clone(s.ALPN), s.CertFile, s.KeyFile, s.AllowInsecure
+	d.RealityDest, d.RealityPrivateKey, d.RealityPublicKey = s.RealityDest, s.RealityPrivateKey, s.RealityPublicKey
+	d.Flow, d.SSMethod, d.SSServerKey = s.Flow, s.SSMethod, s.SSServerKey
+	d.ExitNodeID = nil
+	if s.ExitNodeID != nil {
+		v := *s.ExitNodeID
+		d.ExitNodeID = &v
+	}
+	if d.Security == "reality" && len(d.RealityShortIDs) == 0 {
+		d.RealityShortIDs = slices.Clone(s.RealityShortIDs)
+	}
+	return fmt.Sprint(dst.Listen, *d, deref(d.ExitNodeID)) != before
+}
+
+func deref(p *int64) any {
+	if p == nil {
+		return nil
+	}
+	return *p
+}
+
+func sameNode(a, b *model.Inbound) bool {
+	return (a.NodeID == nil && b.NodeID == nil) || (a.NodeID != nil && b.NodeID != nil && *a.NodeID == *b.NodeID)
+}
+
+// Owner returns the inbound owning the listener in would join (the lowest
+// id among the others hosted with it), or nil.
+func Owner(in *model.Inbound, all []*model.Inbound) *model.Inbound {
+	var owner *model.Inbound
+	for _, o := range all {
+		if o.ID != in.ID && sameNode(o, in) && Hosted(o, in) && (owner == nil || o.ID < owner.ID) {
+			owner = o
+		}
+	}
+	return owner
+}
+
+// Peers returns the other inbounds sharing in's listener.
+func Peers(in *model.Inbound, all []*model.Inbound) []*model.Inbound {
+	var out []*model.Inbound
+	for _, o := range all {
+		if o.ID != in.ID && sameNode(o, in) && Hosted(o, in) {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// mergeXray folds inbound x into the listener m serving the same port: its
+// users, and the Reality names and short ids its links use.
 func mergeXray(m, x map[string]any) {
 	ms, xs := m["settings"].(map[string]any), x["settings"].(map[string]any)
 	clients, _ := ms["clients"].([]map[string]any)

@@ -29,9 +29,22 @@ func TestSharedPort(t *testing.T) {
 	if PortClash(inbounds[0], inbounds[1]) {
 		t.Fatal("hosts of one server side clash")
 	}
-	if !PortClash(inbounds[0], &model.Inbound{Protocol: model.ProtoVLESS, Port: 443, Settings: ws}) {
-		t.Fatal("other exit on the same port does not clash")
+	if PortClash(inbounds[0], &model.Inbound{Protocol: model.ProtoVLESS, Port: 443, Settings: ws}) {
+		t.Fatal("a host with other settings clashes")
 	}
+	if !PortClash(inbounds[0], &model.Inbound{Protocol: model.ProtoTrojan, Port: 443}) {
+		t.Fatal("another protocol on the port does not clash")
+	}
+	host := &model.Inbound{ID: 7, Protocol: model.ProtoVLESS, Port: 443, Address: "3.3.3.3", Settings: ws}
+	host.Settings.SNI = "nl.example.com"
+	if Owner(host, inbounds) != inbounds[0] || !AdoptServer(host, inbounds[0]) ||
+		host.Settings.ExitNodeID != nil || host.Settings.RealityPrivateKey != lux.RealityPrivateKey ||
+		host.Settings.SNI != "nl.example.com" || host.Address != "3.3.3.3" {
+		t.Fatalf("adopt: %+v", host)
+	}
+	// a host whose stored settings differ still runs on the owner's listener
+	nl.RealityPrivateKey = "other"
+	inbounds[1].Settings = nl
 	users := []*model.User{
 		{ID: 1, Username: "a", Status: model.StatusActive, Inbounds: []string{"lux"}, Credentials: model.Credentials{UUID: "11111111-1111-1111-1111-111111111111"}},
 		{ID: 2, Username: "b", Status: model.StatusActive, Inbounds: []string{"nl"}, Credentials: model.Credentials{UUID: "22222222-2222-2222-2222-222222222222"}},
