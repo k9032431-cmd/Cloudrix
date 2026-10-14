@@ -15,6 +15,8 @@ const ICONS = [
   ['Users', 'users'],
   ['Network', 'network'],
   ['GripVertical', 'grip-vertical'],
+  ['Shuffle', 'shuffle'],
+  ['Power', 'power'],
   ['Server', 'server'],
   ['ShieldCheck', 'shield-check'],
   ['ScrollText', 'scroll-text'],

@@ -120,6 +120,12 @@ func (s *Server) Handler() http.Handler {
 				r.Put("/admins/{id}", s.handleUpdateAdmin)
 				r.Delete("/admins/{id}", s.handleDeleteAdmin)
 
+				r.Get("/cores", s.handleListCores)
+				r.Post("/cores", s.handleCreateCore)
+				r.Put("/cores/{id}", s.handleUpdateCore)
+				r.Delete("/cores/{id}", s.handleDeleteCore)
+				r.Post("/cores/{id}/duplicate", s.handleDuplicateCore)
+
 				r.Get("/hosts", s.handleListHosts)
 				r.Post("/hosts", s.handleCreateHost)
 				r.Put("/hosts/order", s.handleReorderHosts)

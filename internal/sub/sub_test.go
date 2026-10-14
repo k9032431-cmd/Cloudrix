@@ -35,14 +35,21 @@ func allInbounds() []*model.Inbound {
 		{Tag: "disabled", Protocol: model.ProtoVLESS, Port: 1, Enabled: false},
 	}
 	for _, in := range list {
-		in.NodeID = &node
+		in.CoreID = 1
 	}
+	_ = node
 	return list
+}
+
+// oneNode is a node running core 1 with no address of its own, so links
+// take the default host.
+func oneNode() map[int64]*model.Node {
+	return map[int64]*model.Node{1: {ID: 1, CoreID: 1}}
 }
 
 func TestLinksCoverEveryProtocol(t *testing.T) {
 	u := testUser()
-	eps := Resolve(u, allInbounds(), nil, nil, "vpn.example.com")
+	eps := Resolve(u, allInbounds(), nil, oneNode(), "vpn.example.com")
 	if len(eps) != 7 {
 		t.Fatalf("expected 7 endpoints (disabled skipped), got %d", len(eps))
 	}
@@ -93,7 +100,7 @@ func TestLinksCoverEveryProtocol(t *testing.T) {
 func TestUserInboundFilter(t *testing.T) {
 	u := testUser()
 	u.Inbounds = []string{"hy2"}
-	eps := Resolve(u, allInbounds(), nil, nil, "h")
+	eps := Resolve(u, allInbounds(), nil, oneNode(), "h")
 	if len(eps) != 1 || eps[0].Inbound.Tag != "hy2" {
 		t.Fatalf("expected only hy2, got %v", eps)
 	}
@@ -101,7 +108,7 @@ func TestUserInboundFilter(t *testing.T) {
 
 func TestClashAndSingBoxRender(t *testing.T) {
 	u := testUser()
-	eps := Resolve(u, allInbounds(), nil, nil, "vpn.example.com")
+	eps := Resolve(u, allInbounds(), nil, oneNode(), "vpn.example.com")
 
 	body, err := Clash(u, eps)
 	if err != nil {
@@ -156,7 +163,7 @@ func TestWGAddress(t *testing.T) {
 
 func TestSelfSignedPin(t *testing.T) {
 	pin := strings.Repeat("ab", 32)
-	nodes := map[int64]*model.Node{1: {ID: 1, Address: "fi.example.com", CertSHA256: pin}}
+	nodes := map[int64]*model.Node{1: {ID: 1, CoreID: 1, Address: "fi.example.com", CertSHA256: pin}}
 	eps := Resolve(testUser(), allInbounds(), nil, nodes, "h")
 	links := map[string]string{}
 	for _, ep := range eps {
@@ -173,7 +180,7 @@ func TestSelfSignedPin(t *testing.T) {
 		t.Fatalf("reality must not pin: %s", r)
 	}
 	// without a known fingerprint (old agent) links fall back to allowInsecure
-	eps = Resolve(testUser(), allInbounds(), nil, nil, "h")
+	eps = Resolve(testUser(), allInbounds(), nil, oneNode(), "h")
 	for _, ep := range eps {
 		if ep.Inbound.Tag == "trojan-grpc" && !strings.Contains(Link(testUser(), ep), "allowInsecure=1") {
 			t.Fatalf("fallback: %s", Link(testUser(), ep))

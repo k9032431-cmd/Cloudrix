@@ -287,12 +287,12 @@ export default function Layout() {
             { to: '/hosts', label: t('nav.hosts'), icon: Globe, show: sudo },
             { to: '/groups', label: t('nav.groups'), icon: Layers, show: sudo },
             { to: '/nodes', label: t('nav.nodes'), icon: Server, show: sudo, count: stats?.nodes?.total ? `${stats.nodes.connected}/${stats.nodes.total}` : undefined },
+            { to: '/cores', label: t('nav.cores'), icon: Cpu, show: sudo },
           ] as Item[],
         },
         {
           label: t('nav.groupAdmin'),
           items: [
-            { to: '/core', label: t('nav.core'), icon: Cpu, show: sudo },
             { to: '/admins', label: t('nav.admins'), icon: ShieldCheck, show: sudo },
             { to: '/audit', label: t('nav.audit'), icon: ScrollText, show: sudo },
             { to: '/settings', label: t('nav.settings'), icon: Settings, show: sudo },

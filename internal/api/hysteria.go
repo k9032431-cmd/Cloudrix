@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/k9032431-cmd/cloudrix/internal/core"
@@ -34,19 +35,20 @@ func (s *Server) ensureHysteria(ctx context.Context, node *model.Node, h nodepro
 			continue
 		}
 		// a port taken by another UDP inbound would stop the node's sing-box
-		if in.NodeID != nil && *in.NodeID == node.ID && core.PortClash(in, &model.Inbound{Protocol: model.ProtoHysteria2, Listen: "0.0.0.0", Port: h.Port}) {
+		if in.Runs(node) && core.PortClash(in, &model.Inbound{Protocol: model.ProtoHysteria2, Listen: "0.0.0.0", Port: h.Port}) {
 			s.log.Warn("hysteria2 setup: port in use", "node", node.Name, "port", h.Port, "inbound", in.Tag)
 			return
 		}
 	}
 	want := model.Inbound{
-		Tag: tag, Protocol: model.ProtoHysteria2, Listen: "0.0.0.0", Port: h.Port, NodeID: &node.ID, Enabled: true,
+		// in the node's core, pinned to the node: the certificate is only there
+		Tag: tag, Protocol: model.ProtoHysteria2, Listen: "0.0.0.0", Port: h.Port, CoreID: node.CoreID, NodeID: &node.ID, Enabled: true,
 		Address: domain, Remark: "{USERNAME} · Hysteria2",
 		Settings: model.InboundSettings{SNI: domain, CertFile: h.Cert, KeyFile: h.Key, ALPN: []string{"h3"}},
 	}
 	if cur != nil {
 		s2 := cur.Settings
-		if cur.Port == want.Port && cur.Address == domain && s2.SNI == domain && s2.CertFile == h.Cert && s2.KeyFile == h.Key {
+		if cur.Port == want.Port && cur.CoreID == node.CoreID && cur.Address == domain && s2.SNI == domain && s2.CertFile == h.Cert && s2.KeyFile == h.Key {
 			return // up to date
 		}
 		// keep what the admin changed (name, obfs, enabled); refresh the rest
@@ -63,8 +65,8 @@ func (s *Server) ensureHysteria(ctx context.Context, node *model.Node, h nodepro
 		if err = s.store.UpdateInbound(ctx, &want); err == nil {
 			// hosts that pointed at the old domain follow it
 			for _, h := range cur.Hosts {
-				if h.Address == cur.Address || h.SNI == cur.Settings.SNI {
-					h.Address, h.SNI = domain, domain
+				if slices.Contains(h.Address, cur.Address) || slices.Contains(h.SNI, cur.Settings.SNI) {
+					h.Address, h.SNI = []string{domain}, []string{domain}
 					if herr := s.store.UpdateHost(ctx, &h); herr != nil {
 						s.log.Warn("hysteria2 host", "node", node.Name, "err", herr)
 					}

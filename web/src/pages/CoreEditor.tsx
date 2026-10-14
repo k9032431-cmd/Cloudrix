@@ -1,11 +1,12 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { Code2, Copy, Pencil, Plus, Trash2, Wand2 } from '../components/icons'
+import { Link, useParams } from 'react-router-dom'
+import { ChevronLeft, Code2, Copy, Pencil, Plus, Server, Shuffle, Trash2, Wand2 } from '../components/icons'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import { PROTOCOLS, type Group, type Inbound, type InboundSettings, type Node, type Protocol } from '../lib/types'
-import { Badge, Button, Card, Confirm, CopyButton, Empty, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Table, Td, Th, Toggle } from '../components/ui'
+import { PROTOCOLS, type Core, type Group, type Inbound, type InboundSettings, type Node, type Protocol } from '../lib/types'
+import { Badge, Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Skeleton, Table, Td, Th, Toggle } from '../components/ui'
+import { CoreNameDialog } from './Cores'
 
 const XRAY: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
 const coreOf = (p: Protocol) => (XRAY.includes(p) ? 'xray' : 'sing-box')
@@ -39,11 +40,13 @@ function clashes(a: Inbound, b: Inbound): boolean {
   if (a.listen !== b.listen && !wildcard(a.listen) && !wildcard(b.listen)) return false
   return !hosted(a, b)
 }
+// two inbounds run side by side: one core, no pins to different nodes
+const together = (a: Inbound, b: Inbound) => a.core_id === b.core_id && (a.node_id == null || b.node_id == null || a.node_id === b.node_id)
 function portClashes(list: Inbound[]): Map<number, string> {
   const out = new Map<number, string>()
   for (const a of list)
     for (const b of list)
-      if (a.id !== b.id && a.enabled && b.enabled && a.node_id != null && a.node_id === b.node_id && clashes(a, b))
+      if (a.id !== b.id && a.enabled && b.enabled && together(a, b) && clashes(a, b))
         out.set(a.id, b.tag)
   return out
 }
@@ -58,13 +61,24 @@ function duplicate(ib: Inbound, all: Inbound[]): Inbound {
   for (let i = 2; tags.has(tag); i++) tag = `${ib.tag}-copy${i}`
   let port = ib.port
   if (!TCP.includes(ib.protocol)) {
-    const ports = new Set(all.filter((x) => x.node_id === ib.node_id).map((x) => x.port))
+    const ports = new Set(all.filter((x) => together(x, ib)).map((x) => x.port))
     while (ports.has(port) && port < 65535) port++
   }
   return { ...ib, id: 0, tag, port, settings: { ...ib.settings } }
 }
 
-const blank = (p: Protocol): Inbound => ({
+const randomPort = () => 10000 + Math.floor(Math.random() * 50000)
+
+// newInbound starts a protocol's preset in the core, on a port the core does
+// not use yet (the preset's when free, else a random one)
+const newInbound = (p: Protocol, core: number, all: Inbound[]): Inbound => {
+  const ib = blank(p, core)
+  const used = new Set(all.filter((x) => x.core_id === core).map((x) => x.port))
+  while (used.has(ib.port)) ib.port = randomPort()
+  return ib
+}
+
+const blank = (p: Protocol, core: number): Inbound => ({
   id: 0,
   tag: `${p}-${Math.random().toString(36).slice(2, 6)}`,
   protocol: p,
@@ -72,77 +86,124 @@ const blank = (p: Protocol): Inbound => ({
   port: PRESETS[p].port ?? 443,
   address: '',
   remark: '{USERNAME} · ' + p.toUpperCase(),
+  core_id: core,
   node_id: null,
   enabled: true,
   settings: { ...PRESETS[p].settings },
 })
 
-export default function Inbounds() {
+// CoreEditor edits one core configuration, as in PasarGuard: its name and
+// the inbounds (protocols and ports) every node of the core runs. The links
+// users get are set up under Hosts.
+export default function CoreEditor() {
   const { t } = useI18n()
-  const { data, error, reload } = useFetch<Inbound[]>('/api/inbounds')
-  const clash = portClashes(data ?? [])
+  const id = Number(useParams().id)
+  const { data: cores, reload: reloadCores } = useFetch<Core[]>('/api/cores')
+  const { data: all, error, reload } = useFetch<Inbound[]>('/api/inbounds')
   const { data: nodes } = useFetch<Node[]>('/api/nodes')
   const { data: groups, reload: reloadGroups } = useFetch<Group[]>('/api/groups')
   const [editing, setEditing] = useState<Inbound | null>(null)
   const [deleting, setDeleting] = useState<Inbound | null>(null)
   const [preview, setPreview] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const core = cores?.find((c) => c.id === id)
+  const data = all?.filter((ib) => ib.core_id === id)
+  const clash = portClashes(all ?? [])
+  const running = (nodes ?? []).filter((n) => n.core_id === id)
 
   return (
     <>
+      <Link to="/cores" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+        <ChevronLeft className="h-4 w-4" />
+        {t('nav.cores')}
+      </Link>
       <PageHeader
-        title={t('nav.core')}
-        subtitle={t('inbounds.subtitle')}
+        title={core ? core.name : '…'}
+        subtitle={t('core.editorSubtitle')}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setPreview(true)}>
-              <Code2 className="h-4 w-4" />
-              {t('inbounds.preview')}
+            <Button variant="secondary" onClick={() => setRenaming(true)} disabled={!core}>
+              <Pencil className="h-4 w-4" />
+              <span className="hide-sm">{t('core.rename')}</span>
             </Button>
-            <Button onClick={() => setEditing({ ...blank('vless'), node_id: nodes?.[0]?.id ?? null })}>
+            <Button variant="secondary" onClick={() => setPreview(true)} disabled={!running.length}>
+              <Code2 className="h-4 w-4" />
+              <span className="hide-sm">{t('inbounds.preview')}</span>
+            </Button>
+            <Button onClick={() => setEditing(newInbound('vless', id, all ?? []))} disabled={!core}>
               <Plus className="h-4 w-4" />
-              {t('inbounds.new')}
+              {t('core.addInbound')}
             </Button>
           </>
         }
       />
       <ErrorNote error={error} />
-      {nodes?.length === 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-lg bg-warning/10 px-3 py-2.5 text-[13px] text-foreground ring-1 ring-inset ring-warning/20">
-          <span className="flex-1">{t('inbounds.needNodes')}</span>
-          <Link to="/nodes" className="btn btn-outline btn-sm">
-            <Plus />
-            {t('inbounds.addNode')}
-          </Link>
-        </div>
-      )}
+      <div className="mb-4 flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground">
+        <Server className="h-4 w-4" />
+        {running.length ? (
+          <>
+            <span>{t('core.runsOn')}</span>
+            {running.map((n) => (
+              <Badge key={n.id} tone="gray">
+                {n.name}
+              </Badge>
+            ))}
+          </>
+        ) : (
+          <span>
+            {t('core.noNodes')}{' '}
+            <Link to="/nodes" className="text-foreground underline underline-offset-2">
+              {t('nav.nodes')}
+            </Link>
+          </span>
+        )}
+      </div>
       <Card>
-        {data?.length === 0 ? (
-          <Empty />
+        <div className="card-head">
+          <div>
+            <h2 className="card-title">{t('core.inbounds')}</h2>
+            <p className="card-desc">{t('core.inboundsDesc')}</p>
+          </div>
+        </div>
+        {!data ? (
+          <div className="p-4">
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : data.length === 0 ? (
+          <div className="empty">
+            <h3>{t('core.noInbounds')}</h3>
+            <Button className="mt-2" onClick={() => setEditing(newInbound('vless', id, all ?? []))}>
+              <Plus className="h-4 w-4" />
+              {t('core.addInbound')}
+            </Button>
+          </div>
         ) : (
           <Table>
             <thead>
               <tr>
+                <Th className="w-10">#</Th>
                 <Th>{t('inbounds.tag')}</Th>
                 <Th className="hide-sm">{t('inbounds.protocol')}</Th>
                 <Th className="hide-sm">{t('inbounds.port')}</Th>
                 <Th className="hide-md">{t('inbounds.transport')}</Th>
-                <Th className="hide-sm">{t('inbounds.node')}</Th>
-                <Th className="hide-md">{t('inbounds.core')}</Th>
                 <Th className="w-24" />
               </tr>
             </thead>
             <tbody>
-              {data?.map((ib) => (
-                <tr key={ib.id} className={ib.enabled ? '' : 'opacity-50'}>
+              {data.map((ib, i) => (
+                <tr key={ib.id} className={ib.enabled ? 'cursor-pointer' : 'cursor-pointer opacity-50'} onClick={() => setEditing(ib)}>
+                  <Td className="tabular-nums text-faint">{i + 1}</Td>
                   <Td className="max-w-[200px] sm:max-w-none">
                     <div className="truncate font-medium text-foreground">{ib.tag}</div>
-                    <Link to="/hosts" className="hide-sm text-xs text-faint hover:text-foreground hover:underline">
-                      {t('inbounds.hostsCount', { n: ib.hosts?.filter((h) => h.enabled).length ?? 0 })}
-                    </Link>
-                    {/* phones: the hidden columns in one line */}
                     <div className="truncate text-xs text-muted-foreground show-sm">
-                      {ib.protocol} · {ib.port} · {nodes?.find((n) => n.id === ib.node_id)?.name ?? '—'}
-                      {ib.settings.exit_node_id != null && ` → ${nodes?.find((n) => n.id === ib.settings.exit_node_id)?.name ?? '?'}`}
+                      {ib.protocol} · {ib.port}
+                    </div>
+                    <div className="flex flex-wrap gap-1 text-xs text-faint">
+                      <Link to="/hosts" onClick={(e) => e.stopPropagation()} className="hover:text-foreground hover:underline">
+                        {t('inbounds.hostsCount', { n: ib.hosts?.filter((h) => h.enabled).length ?? 0 })}
+                      </Link>
+                      {ib.node_id != null && <span>· {t('core.pinned', { node: nodes?.find((n) => n.id === ib.node_id)?.name ?? '?' })}</span>}
+                      {ib.settings.exit_node_id != null && <span>· → {nodes?.find((n) => n.id === ib.settings.exit_node_id)?.name ?? '?'}</span>}
                     </div>
                     {clash.get(ib.id) && (
                       <div className="mt-1 show-sm">
@@ -151,7 +212,7 @@ export default function Inbounds() {
                     )}
                   </Td>
                   <Td className="hide-sm">
-                    <Badge tone="blue">{ib.protocol}</Badge>
+                    <Badge tone={coreOf(ib.protocol) === 'xray' ? 'blue' : 'violet'}>{ib.protocol}</Badge>
                   </Td>
                   <Td className="hide-sm tabular-nums">
                     {ib.port}
@@ -168,27 +229,12 @@ export default function Inbounds() {
                         ? ib.settings.ss_method
                         : 'udp'}
                   </Td>
-                  <Td className="hide-sm text-muted-foreground">
-                    {nodes?.find((n) => n.id === ib.node_id)?.name ?? (
-                      <span title={t('inbounds.noNodeHint')}>
-                        <Badge tone="red">{t('inbounds.noNode')}</Badge>
-                      </span>
-                    )}
-                    {ib.settings.exit_node_id != null && (
-                      <span className="ml-1.5 whitespace-nowrap text-foreground" title={t('inbounds.exitHint')}>
-                        → {nodes?.find((n) => n.id === ib.settings.exit_node_id)?.name ?? '?'}
-                      </span>
-                    )}
-                  </Td>
-                  <Td className="hide-md">
-                    <Badge tone={coreOf(ib.protocol) === 'xray' ? 'gray' : 'violet'}>{coreOf(ib.protocol)}</Badge>
-                  </Td>
                   <Td>
-                    <div className="flex justify-end gap-0.5 sm:gap-1">
+                    <div className="flex justify-end gap-0.5 sm:gap-1" onClick={(e) => e.stopPropagation()}>
                       <IconButton onClick={() => setEditing(ib)} aria-label={t('common.edit')}>
                         <Pencil className="h-4 w-4" />
                       </IconButton>
-                      <IconButton onClick={() => setEditing(duplicate(ib, data ?? []))} aria-label={t('inbounds.duplicate')} title={t('inbounds.duplicate')}>
+                      <IconButton onClick={() => setEditing(duplicate(ib, all ?? []))} aria-label={t('inbounds.duplicate')} title={t('inbounds.duplicate')}>
                         <Copy className="h-4 w-4" />
                       </IconButton>
                       <IconButton onClick={() => setDeleting(ib)} aria-label={t('common.delete')}>
@@ -206,7 +252,7 @@ export default function Inbounds() {
       {editing && (
         <InboundForm
           initial={editing}
-          all={data ?? []}
+          all={all ?? []}
           nodes={nodes ?? []}
           groups={groups ?? []}
           onClose={() => setEditing(null)}
@@ -214,18 +260,30 @@ export default function Inbounds() {
             setEditing(null)
             reload()
             reloadGroups()
+            reloadCores()
           }}
         />
       )}
-      {preview && <CorePreview nodes={nodes ?? []} onClose={() => setPreview(false)} />}
+      {preview && <CorePreview nodes={running} onClose={() => setPreview(false)} />}
+      {renaming && core && (
+        <CoreNameDialog
+          core={core}
+          onClose={() => setRenaming(false)}
+          onSaved={() => {
+            setRenaming(false)
+            reloadCores()
+          }}
+        />
+      )}
       <Confirm
         open={!!deleting}
         onClose={() => setDeleting(null)}
         title={t('common.delete')}
-        message={t('common.confirmDelete', { name: deleting?.tag ?? '' })}
+        message={t('core.deleteInbound', { name: deleting?.tag ?? '' })}
         onConfirm={async () => {
           await del(`/api/inbounds/${deleting!.id}`)
           reload()
+          reloadCores()
         }}
       />
     </>
@@ -262,14 +320,13 @@ function InboundForm({
   const set = <K extends keyof Inbound>(k: K, v: Inbound[K]) => setIb((x) => ({ ...x, [k]: v }))
   const setS = (patch: InboundSettings) => setIb((x) => ({ ...x, settings: { ...x.settings, ...patch } }))
   const isNew = ib.id === 0
-  // New inbounds go into the first group (Default) so its users get them at once.
-  const [groupIDs, setGroupIDs] = useState<number[]>(() =>
-    isNew ? groups.slice(0, 1).map((g) => g.id) : groups.filter((g) => g.inbound_ids.includes(initial.id)).map((g) => g.id),
-  )
+  // New inbounds go into the first group (Default) so its users get them
+  // at once; groups are managed on their own page, as in PasarGuard.
+  const groupIDs = groups.slice(0, 1).map((g) => g.id)
   const streamProto = ['vless', 'vmess', 'trojan'].includes(ib.protocol)
   // other inbounds on this listener; joining takes the first one's server side
-  const peers = all.filter((o) => o.id !== ib.id && ib.node_id != null && o.node_id === ib.node_id && hosted(o, ib))
-  const joining = peers.length > 0 && !(initial.id !== 0 && initial.node_id === ib.node_id && hosted(initial, ib))
+  const peers = all.filter((o) => o.id !== ib.id && together(o, ib) && hosted(o, ib))
+  const joining = peers.length > 0 && !(initial.id !== 0 && together(initial, ib) && hosted(initial, ib))
   const owner = peers.reduce<Inbound | undefined>((a, o) => (!a || o.id < a.id ? o : a), undefined)
   const needsCert = ib.protocol === 'hysteria2' || ib.protocol === 'tuic' || s.security === 'tls'
 
@@ -278,9 +335,8 @@ function InboundForm({
     setBusy(true)
     setError(null)
     try {
-      const q = `?groups=${groupIDs.join(',')}`
-      if (isNew) await post(`/api/inbounds${q}`, ib)
-      else await put(`/api/inbounds/${ib.id}${q}`, ib)
+      if (isNew) await post(`/api/inbounds?groups=${groupIDs.join(',')}`, ib)
+      else await put(`/api/inbounds/${ib.id}`, ib)
       onSaved()
     } catch (err) {
       setError((err as Error).message)
@@ -329,7 +385,7 @@ function InboundForm({
               <button
                 type="button"
                 key={p}
-                onClick={() => setIb(blank(p))}
+                onClick={() => setIb(newInbound(p, ib.core_id, all))}
                 className={
                   'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
                   (ib.protocol === p
@@ -348,19 +404,12 @@ function InboundForm({
             <Input value={ib.tag} onChange={(e) => set('tag', e.target.value)} required />
           </Field>
           <Field label={t('inbounds.port')}>
-            <Input type="number" min={1} max={65535} value={ib.port} onChange={(e) => set('port', Number(e.target.value))} required />
-          </Field>
-          <Field label={t('inbounds.node')}>
-            <Select value={ib.node_id ?? ''} onChange={(e) => set('node_id', e.target.value ? Number(e.target.value) : null)} required aria-invalid={!ib.node_id}>
-              <option value="" disabled>
-                {t('inbounds.local')}
-              </option>
-              {nodes.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.name}
-                </option>
-              ))}
-            </Select>
+            <div className="flex gap-2">
+              <Input type="number" min={1} max={65535} value={ib.port} onChange={(e) => set('port', Number(e.target.value))} required />
+              <Button type="button" variant="secondary" onClick={() => set('port', randomPort())} aria-label={t('core.randomPort')} title={t('core.randomPort')}>
+                <Shuffle className="h-4 w-4" />
+              </Button>
+            </div>
           </Field>
           <Field label="Listen" hint={t('inbounds.listenHint')}>
             <Input value={ib.listen} onChange={(e) => set('listen', e.target.value)} placeholder="0.0.0.0" />
@@ -373,7 +422,7 @@ function InboundForm({
               >
                 <option value="">{t('inbounds.exitDirect')}</option>
                 {nodes
-                  .filter((n) => n.id !== ib.node_id)
+                  .filter((n) => n.core_id !== ib.core_id)
                   .map((n) => (
                     <option key={n.id} value={n.id}>
                       {n.name} · {n.address}
@@ -597,28 +646,7 @@ function InboundForm({
         )}
 
         <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
-        {groups.length > 0 && (
-          <Field label={t('nav.groups')} hint={t('inbounds.groupsHint')}>
-            <div className="flex flex-wrap gap-2">
-              {groups.map((g) => {
-                const on = groupIDs.includes(g.id)
-                return (
-                  <button
-                    type="button"
-                    key={g.id}
-                    onClick={() => setGroupIDs((x) => (on ? x.filter((v) => v !== g.id) : [...x, g.id]))}
-                    className={
-                      'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
-                      (on ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60')
-                    }
-                  >
-                    {g.name}
-                  </button>
-                )
-              })}
-            </div>
-          </Field>
-        )}
+        {ib.node_id != null && <p className="hint">{t('core.pinnedHint', { node: nodes.find((n) => n.id === ib.node_id)?.name ?? '?' })}</p>}
       </form>
     </Modal>
   )

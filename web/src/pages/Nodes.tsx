@@ -4,10 +4,11 @@ import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { formatBytes, relativeTime } from '../lib/format'
-import type { Node } from '../lib/types'
+import type { Core, Node } from '../lib/types'
 import { useToast } from '../components/toast'
-import { Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Skeleton, Table, Td, Th, Toggle } from '../components/ui'
+import { Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Skeleton, Table, Td, Th, Toggle } from '../components/ui'
 import { NodeStatusBadge } from '../components/StatusBadge'
+import { NodesTabs } from '../components/NodesTabs'
 import { NodeStatsDialog, NodesOverview, PeriodSwitch, type StatsPeriod } from './nodes/NodeStats'
 
 interface InstallInfo {
@@ -19,6 +20,7 @@ interface InstallInfo {
 export default function Nodes() {
   const { t, lang } = useI18n()
   const { data, error, reload } = useFetch<Node[]>('/api/nodes')
+  const { data: cores } = useFetch<Core[]>('/api/cores')
   const [editing, setEditing] = useState<Node | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Node | null>(null)
   const [installing, setInstalling] = useState<Node | null>(null)
@@ -35,6 +37,7 @@ export default function Nodes() {
 
   return (
     <>
+      <NodesTabs value="nodes" />
       <PageHeader
         title={t('nav.nodes')}
         subtitle={t('nodes.agentNote')}
@@ -87,6 +90,9 @@ export default function Nodes() {
                   <Td>
                     <div className="ent-name">{n.name}</div>
                     <div className="ent-sub font-mono">{n.address}</div>
+                    <div className="ent-sub">
+                      {t('nodes.core')}: {cores?.find((c) => c.id === n.core_id)?.name ?? '—'}
+                    </div>
                   </Td>
                   <Td className="max-sm:[&_.badge]:whitespace-normal max-sm:[&_.badge]:text-left">
                     <NodeStatusBadge status={n.status} />
@@ -213,9 +219,11 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
 
 function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () => void; onSaved: (n: Node, created: boolean) => void }) {
   const { t } = useI18n()
+  const { data: cores } = useFetch<Core[]>('/api/cores')
   const [form, setForm] = useState({
     name: node?.name ?? '',
     address: node?.address ?? '',
+    core_id: node?.core_id ?? 0,
     usage_coefficient: node?.usage_coefficient ?? 1,
     bridge_port: node?.bridge_port ?? 0,
     disabled: node?.status === 'disabled',
@@ -263,6 +271,15 @@ function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () =
         </Field>
         <Field label={t('nodes.address')} hint={t('nodes.addressHint')}>
           <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="46.8.103.95" required />
+        </Field>
+        <Field label={t('nodes.coreConfig')} hint={t('nodes.coreConfigHint')}>
+          <Select value={form.core_id || cores?.[0]?.id || ''} onChange={(e) => setForm({ ...form, core_id: Number(e.target.value) })} required>
+            {(cores ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label={t('nodes.coefficient')}>
           <Input type="number" min={0.1} max={100} step={0.1} value={form.usage_coefficient} onChange={(e) => setForm({ ...form, usage_coefficient: Number(e.target.value) })} />

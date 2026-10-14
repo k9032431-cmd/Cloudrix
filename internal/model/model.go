@@ -259,9 +259,10 @@ type Inbound struct {
 	Protocol Protocol        `json:"protocol"`
 	Listen   string          `json:"listen"`
 	Port     int             `json:"port"`
-	Address  string          `json:"address"` // public address put into client links; empty = node/panel host
-	Remark   string          `json:"remark"`
-	NodeID   *int64          `json:"node_id"` // nil = local core
+	Address  string          `json:"address"` // seeds the first host only
+	Remark   string          `json:"remark"`  // seeds the first host only
+	CoreID   int64           `json:"core_id"` // the core config it belongs to; runs on every node of that core
+	NodeID   *int64          `json:"node_id"` // optional: only on this node of the core (installer-made Hysteria2)
 	Enabled  bool            `json:"enabled"`
 	Settings InboundSettings `json:"settings"`
 	// Hosts are the links clients get for this inbound, as in Marzban and
@@ -279,17 +280,37 @@ type Host struct {
 	HostSettings
 }
 
-// HostSettings are a host's own fields; empty ones fall back to the inbound.
+// HostSettings are a host's own fields, as in PasarGuard; empty ones fall
+// back to the inbound. Where a field takes several values, each
+// subscription picks one at random.
 type HostSettings struct {
-	Remark        string   `json:"remark"`         // link name, with {USERNAME} and other variables
-	Address       string   `json:"address"`        // empty = the node's address
-	Port          int      `json:"port,omitempty"` // 0 = the inbound's port
-	SNI           string   `json:"sni,omitempty"`  // TLS / Reality server name
-	Host          string   `json:"host,omitempty"` // HTTP Host header (ws, xhttp, httpupgrade)
-	Path          string   `json:"path,omitempty"` // overrides the inbound's path
-	ALPN          []string `json:"alpn,omitempty"` // overrides the inbound's ALPN
-	Fingerprint   string   `json:"fingerprint,omitempty"`
-	AllowInsecure bool     `json:"allow_insecure,omitempty"`
+	Remark        string       `json:"remark"`                    // link name, with {USERNAME} and other variables
+	Address       []string     `json:"address"`                   // empty = the addresses of the core's nodes
+	Port          int          `json:"port,omitempty"`            // 0 = the inbound's port
+	Status        []UserStatus `json:"status,omitempty"`          // only users in these states get it; empty = all
+	Host          []string     `json:"host,omitempty"`            // HTTP Host header (ws, xhttp, httpupgrade)
+	Path          string       `json:"path,omitempty"`            // overrides the inbound's path
+	Security      string       `json:"security,omitempty"`        // "" = inbound's default, tls, none
+	SNI           []string     `json:"sni,omitempty"`             // TLS / Reality server name
+	ALPN          []string     `json:"alpn,omitempty"`            // overrides the inbound's ALPN
+	Fingerprint   string       `json:"fingerprint,omitempty"`     // uTLS fingerprint
+	AllowInsecure bool         `json:"allow_insecure,omitempty"`  // skip certificate checks
+	UseSNIAsHost  bool         `json:"use_sni_as_host,omitempty"` // Host header = the SNI picked
+}
+
+// Core is a core configuration, as in PasarGuard: a named set of inbounds.
+// Each node runs one core; the first core is the default.
+type Core struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	Inbounds  int       `json:"inbounds"` // how many inbounds it has
+	Nodes     int       `json:"nodes"`    // how many nodes run it
+}
+
+// Runs reports whether the inbound is served by the node.
+func (in *Inbound) Runs(n *Node) bool {
+	return in.Enabled && in.CoreID == n.CoreID && (in.NodeID == nil || *in.NodeID == n.ID)
 }
 
 type NodeStatus string
@@ -307,6 +328,7 @@ type Node struct {
 	Address          string     `json:"address"`
 	APIPort          int        `json:"api_port"`
 	UsageCoefficient float64    `json:"usage_coefficient"`
+	CoreID           int64      `json:"core_id"` // the core config it runs (the default one when unset)
 	Status           NodeStatus `json:"status"`
 	Message          string     `json:"message"`
 	CoreVersion      string     `json:"core_version"`

@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"net/netip"
 	"slices"
 	"sort"
@@ -26,50 +27,77 @@ type Endpoint struct {
 }
 
 // Resolve picks the inbounds the user can use and gives one endpoint per
-// enabled host of each, in host order. nodes maps node id to the node (its
-// public address and certificate).
+// enabled host of each, in host order. An inbound is served by the nodes
+// running its core; nodes maps node id to the node (its address, core and
+// certificate).
 func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, nodes map[int64]*model.Node, defaultHost string) []Endpoint {
 	type ranked struct {
 		ep       Endpoint
 		priority int
 		id       int64
 	}
+	var runners []*model.Node
+	for _, n := range nodes {
+		runners = append(runners, n)
+	}
+	sort.Slice(runners, func(i, j int) bool { return runners[i].ID < runners[j].ID })
 	var all []ranked
 	for _, in := range inbounds {
-		// inbounds without a node are not served anywhere: no dead links
-		if !in.Enabled || in.NodeID == nil || !u.Allows(in, groups) {
+		if !in.Enabled || !u.Allows(in, groups) {
 			continue
 		}
-		node := nodes[*in.NodeID]
+		// only inbounds some node serves: no dead links
+		var serving []*model.Node
+		for _, n := range runners {
+			if in.Runs(n) {
+				serving = append(serving, n)
+			}
+		}
+		if len(serving) == 0 {
+			continue
+		}
 		hosts := in.Hosts
 		if hosts == nil {
 			// not loaded from the store: the inbound's own fields are its host
-			hosts = []model.Host{{Enabled: true, HostSettings: model.HostSettings{
-				Remark: in.Remark, Address: in.Address, SNI: in.Settings.SNI, Fingerprint: in.Settings.Fingerprint,
-			}}}
+			h := model.Host{Enabled: true, HostSettings: model.HostSettings{Remark: in.Remark, Fingerprint: in.Settings.Fingerprint}}
+			if in.Address != "" {
+				h.Address = []string{in.Address}
+			}
+			if in.Settings.SNI != "" {
+				h.SNI = []string{in.Settings.SNI}
+			}
+			hosts = []model.Host{h}
 		}
 		for _, h := range hosts {
-			if !h.Enabled {
+			if !h.Enabled || (len(h.Status) > 0 && !slices.Contains(h.Status, u.Status)) {
 				continue
 			}
-			c := withHost(in, h.HostSettings)
-			host := c.Address
-			if host == "" && node != nil {
-				host = node.Address
-			}
-			if host == "" {
-				host = defaultHost
-			}
-			ep := Endpoint{Inbound: c, Host: host, Remark: RenderRemark(c, u)}
-			if in.SelfSigned() {
-				// self-signed: clients cannot verify the chain, so they skip it
-				// (older apps) or pin the certificate hash (Xray 26+)
-				c.Settings.AllowInsecure = true
-				if node != nil {
-					ep.CertPin = node.CertSHA256
+			// several addresses: one picked per subscription; none: every
+			// node of the core
+			var addrs []string
+			if len(h.Address) > 0 {
+				addrs = []string{pick(h.Address)}
+			} else {
+				for _, n := range serving {
+					addrs = append(addrs, n.Address)
 				}
 			}
-			all = append(all, ranked{ep, h.Priority, h.ID})
+			for _, addr := range addrs {
+				if addr == "" {
+					addr = defaultHost
+				}
+				c := withHost(in, h.HostSettings)
+				ep := Endpoint{Inbound: c, Host: addr, Remark: RenderRemark(c, u)}
+				if in.SelfSigned() && h.Security != "none" {
+					// self-signed: clients cannot verify the chain, so they skip
+					// it (older apps) or pin the certificate hash (Xray 26+)
+					c.Settings.AllowInsecure = true
+					if n := nodeAt(serving, addr); n != nil {
+						ep.CertPin = n.CertSHA256
+					}
+				}
+				all = append(all, ranked{ep, h.Priority, h.ID})
+			}
 		}
 	}
 	sort.SliceStable(all, func(i, j int) bool {
@@ -85,20 +113,48 @@ func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, node
 	return out
 }
 
+// nodeAt finds the serving node a link points at: by address, or the only one.
+func nodeAt(serving []*model.Node, addr string) *model.Node {
+	for _, n := range serving {
+		if strings.EqualFold(n.Address, addr) {
+			return n
+		}
+	}
+	if len(serving) == 1 {
+		return serving[0]
+	}
+	return nil
+}
+
+func pick(v []string) string {
+	if len(v) == 0 {
+		return ""
+	}
+	return v[rand.IntN(len(v))]
+}
+
 // withHost returns a copy of the inbound as one host's link sees it: the
-// host's address, remark and client fields; the inbound's server side.
+// host's remark and client fields; the inbound's server side.
 func withHost(in *model.Inbound, h model.HostSettings) *model.Inbound {
 	c := *in
 	c.Hosts = nil
 	c.Settings.ALPN = slices.Clone(in.Settings.ALPN)
-	c.Address, c.Remark = h.Address, h.Remark
-	c.Settings.SNI, c.Settings.Fingerprint = h.SNI, h.Fingerprint
+	c.Remark = h.Remark
+	c.Settings.SNI, c.Settings.Fingerprint = pick(h.SNI), h.Fingerprint
 	c.Settings.AllowInsecure = in.Settings.AllowInsecure || h.AllowInsecure
+	switch h.Security {
+	case "tls", "none":
+		// a middle server (CDN, relay) talks to clients differently
+		c.Settings.Security = h.Security
+	}
 	if h.Port > 0 {
 		c.Port = h.Port
 	}
-	if h.Host != "" {
-		c.Settings.Host = h.Host
+	if host := pick(h.Host); host != "" {
+		c.Settings.Host = host
+	}
+	if h.UseSNIAsHost && c.Settings.SNI != "" {
+		c.Settings.Host = c.Settings.SNI
 	}
 	if h.Path != "" {
 		c.Settings.Path = h.Path

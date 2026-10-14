@@ -11,7 +11,7 @@ import (
 )
 
 const nodeCols = `id, name, address, api_port, usage_coefficient, status, message, core_version, last_seen,
-	upload_bytes, download_bytes, created_at, cert_sha256, bridge`
+	upload_bytes, download_bytes, created_at, cert_sha256, bridge, COALESCE(core_id, (SELECT MIN(id) FROM cores), 0)`
 
 func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	var n model.Node
@@ -19,7 +19,7 @@ func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	var created int64
 	var bridge string
 	err := row.Scan(&n.ID, &n.Name, &n.Address, &n.APIPort, &n.UsageCoefficient, &n.Status, &n.Message, &n.CoreVersion,
-		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created, &n.CertSHA256, &bridge)
+		&lastSeen, &n.UploadBytes, &n.DownloadBytes, &created, &n.CertSHA256, &bridge, &n.CoreID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -36,8 +36,8 @@ func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 func (s *Store) CreateNode(ctx context.Context, n *model.Node) error {
 	n.CreatedAt = time.Now().UTC()
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, secret, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, n.Secret, unix(n.CreatedAt))
+		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, secret, created_at, core_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, n.Secret, unix(n.CreatedAt), nullID(coreRef(n.CoreID)))
 	if isUnique(err) {
 		return ErrConflict
 	}
@@ -51,9 +51,15 @@ func (s *Store) CreateNode(ctx context.Context, n *model.Node) error {
 func (s *Store) UpdateNode(ctx context.Context, n *model.Node) error {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE nodes SET name = ?, address = ?, api_port = ?, usage_coefficient = ?, status = ?, message = ?, core_version = ?,
-		last_seen = ?, upload_bytes = ?, download_bytes = ? WHERE id = ?`,
+		last_seen = ?, upload_bytes = ?, download_bytes = ?, core_id = ? WHERE id = ?`,
 		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, n.Message, n.CoreVersion, nullUnix(n.LastSeen),
-		n.UploadBytes, n.DownloadBytes, n.ID)
+		n.UploadBytes, n.DownloadBytes, nullID(coreRef(n.CoreID)), n.ID)
+	if isUnique(err) {
+		return ErrConflict
+	}
+	if isForeignKey(err) {
+		return ErrNotFound
+	}
 	return affected(res, err)
 }
 
@@ -127,4 +133,12 @@ func (s *Store) MarkStaleNodes(ctx context.Context, before time.Time, message st
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// coreRef stores 0 (no choice) as NULL: the node then runs the default core.
+func coreRef(id int64) *int64 {
+	if id <= 0 {
+		return nil
+	}
+	return &id
 }

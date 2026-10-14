@@ -32,7 +32,7 @@ func (s *Server) ensureBridge(ctx context.Context, n *model.Node, inbounds []*mo
 	if b.Port == 0 {
 		used := map[int]bool{}
 		for _, in := range inbounds {
-			if in.NodeID != nil && *in.NodeID == n.ID {
+			if in.Runs(n) {
 				used[in.Port] = true
 			}
 		}
@@ -64,15 +64,21 @@ func (s *Server) cascadeFor(ctx context.Context, id int64, inbounds []*model.Inb
 	}
 	exits := map[int64]*core.Exit{}
 	servesBridge := false
+	self := byID[id]
 	for _, in := range inbounds {
 		ex := in.Settings.ExitNodeID
-		if !in.Enabled || in.NodeID == nil || ex == nil || in.Protocol.Core() != "xray" {
+		if !in.Enabled || ex == nil || in.Protocol.Core() != "xray" {
 			continue
 		}
-		if *ex == id && *in.NodeID != id {
-			servesBridge = true
+		if *ex == id {
+			// this node is the exit for the inbound's other nodes
+			for _, n := range nodes {
+				if n.ID != id && in.Runs(n) {
+					servesBridge = true
+				}
+			}
 		}
-		if *in.NodeID != id {
+		if self == nil || !in.Runs(self) || *ex == id {
 			continue
 		}
 		e := exits[*ex]

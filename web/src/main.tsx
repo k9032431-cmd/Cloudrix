@@ -14,7 +14,8 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import UsersPage from './pages/Users'
 
-const Inbounds = lazy(() => import('./pages/Inbounds'))
+const Cores = lazy(() => import('./pages/Cores'))
+const CoreEditor = lazy(() => import('./pages/CoreEditor'))
 const Hosts = lazy(() => import('./pages/Hosts'))
 const Nodes = lazy(() => import('./pages/Nodes'))
 const Groups = lazy(() => import('./pages/Groups'))
@@ -54,8 +55,10 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="users" element={<UsersPage />} />
-          <Route path="core" element={<Protected sudo><Inbounds /></Protected>} />
-          <Route path="inbounds" element={<Navigate to="/core" replace />} />
+          <Route path="cores" element={<Protected sudo><Cores /></Protected>} />
+          <Route path="cores/:id" element={<Protected sudo><CoreEditor /></Protected>} />
+          <Route path="core" element={<Navigate to="/cores" replace />} />
+          <Route path="inbounds" element={<Navigate to="/cores" replace />} />
           <Route path="hosts" element={<Protected sudo><Hosts /></Protected>} />
           <Route path="nodes" element={<Protected sudo><Nodes /></Protected>} />
           <Route path="groups" element={<Protected sudo><Groups /></Protected>} />

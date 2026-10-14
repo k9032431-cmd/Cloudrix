@@ -143,6 +143,24 @@ type nodeInput struct {
 	UsageCoefficient float64 `json:"usage_coefficient"`
 	Disabled         bool    `json:"disabled"`
 	BridgePort       int     `json:"bridge_port"` // cascade port when other nodes exit here, 0 = auto
+	CoreID           int64   `json:"core_id"`     // core configuration it runs, 0 = the default one
+}
+
+// nodeCore checks the chosen core; 0 picks the default one.
+func (s *Server) nodeCore(w http.ResponseWriter, r *http.Request, id int64) (int64, bool) {
+	if id == 0 {
+		def, err := s.store.DefaultCore(r.Context())
+		if err != nil {
+			s.writeStoreError(w, err)
+			return 0, false
+		}
+		return def, true
+	}
+	if _, err := s.store.GetCore(r.Context(), id); err != nil {
+		writeError(w, http.StatusBadRequest, "core not found")
+		return 0, false
+	}
+	return id, true
 }
 
 // valid normalises the input. Address is the node's public IP or domain that
@@ -178,7 +196,11 @@ func (s *Server) handleCreateNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name and a public IP or domain are required")
 		return
 	}
-	n := &model.Node{Name: in.Name, Address: in.Address, APIPort: in.APIPort, UsageCoefficient: in.UsageCoefficient, Status: model.NodeConnecting, Secret: nodeproto.NewSecret()}
+	coreID, ok := s.nodeCore(w, r, in.CoreID)
+	if !ok {
+		return
+	}
+	n := &model.Node{Name: in.Name, Address: in.Address, APIPort: in.APIPort, UsageCoefficient: in.UsageCoefficient, CoreID: coreID, Status: model.NodeConnecting, Secret: nodeproto.NewSecret()}
 	if in.Disabled {
 		n.Status = model.NodeDisabled
 	}
@@ -209,6 +231,11 @@ func (s *Server) handleUpdateNode(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	n.Name, n.Address, n.APIPort, n.UsageCoefficient = in.Name, in.Address, in.APIPort, in.UsageCoefficient
+	if in.CoreID != 0 {
+		if n.CoreID, ok = s.nodeCore(w, r, in.CoreID); !ok {
+			return
+		}
+	}
 	if in.Disabled {
 		n.Status = model.NodeDisabled
 	} else if n.Status == model.NodeDisabled {

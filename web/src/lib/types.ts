@@ -112,10 +112,21 @@ export interface Inbound {
   port: number
   address: string
   remark: string
-  node_id: number | null
+  core_id: number
+  node_id: number | null // only on this node of the core (installer-made Hysteria2)
   enabled: boolean
   settings: InboundSettings
   hosts?: Host[]
+}
+
+// Core is a core configuration, as in PasarGuard: a set of inbounds that
+// every node running it serves.
+export interface Core {
+  id: number
+  name: string
+  created_at: string
+  inbounds: number
+  nodes: number
 }
 
 // Host is one client link of an inbound (address, name, SNI…), as in
@@ -126,14 +137,17 @@ export interface Host {
   priority: number
   enabled: boolean
   remark: string
-  address: string
+  address: string[]
   port?: number
-  sni?: string
-  host?: string
+  status?: UserStatus[]
+  host?: string[]
   path?: string
+  security?: '' | 'tls' | 'none'
+  sni?: string[]
   alpn?: string[]
   fingerprint?: string
   allow_insecure?: boolean
+  use_sni_as_host?: boolean
 }
 
 export type NodeStatus = 'connected' | 'connecting' | 'error' | 'disabled'
@@ -145,6 +159,7 @@ export interface Node {
   bridge_port: number
   api_port: number
   usage_coefficient: number
+  core_id: number
   status: NodeStatus
   message: string
   core_version: string

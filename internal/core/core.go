@@ -45,14 +45,12 @@ func usersFor(in *model.Inbound, users []*model.User, groups model.Groups) []*mo
 	return out
 }
 
-// ForNode filters inbounds served by the given node (nil = local core).
-func ForNode(inbounds []*model.Inbound, nodeID *int64) []*model.Inbound {
+// ForNode filters the inbounds the node serves: the enabled inbounds of its
+// core (those pinned to another node aside).
+func ForNode(inbounds []*model.Inbound, node *model.Node) []*model.Inbound {
 	var out []*model.Inbound
 	for _, in := range inbounds {
-		if !in.Enabled {
-			continue
-		}
-		if (nodeID == nil && in.NodeID == nil) || (nodeID != nil && in.NodeID != nil && *nodeID == *in.NodeID) {
+		if node != nil && in.Runs(node) {
 			out = append(out, in)
 		}
 	}

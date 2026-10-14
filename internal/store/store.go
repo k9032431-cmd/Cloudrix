@@ -204,6 +204,27 @@ var migrations = []string{
 		WHERE json_extract(settings, '$.security') = 'reality'
 		AND COALESCE(json_array_length(settings, '$.reality_server_names'), 0) = 0
 		AND COALESCE(json_extract(settings, '$.sni'), '') != '';`,
+	// 10: core configs as in PasarGuard — every node runs a core, inbounds
+	// belong to a core. Each node gets a core of its own name with its
+	// inbounds; hosts take address, SNI and Host as lists, and hosts that
+	// relied on the node address get it written in.
+	`CREATE TABLE cores (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL UNIQUE,
+		created_at INTEGER NOT NULL
+	);
+	INSERT INTO cores (name, created_at) SELECT name, created_at FROM nodes ORDER BY id;
+	INSERT INTO cores (name, created_at) SELECT 'Default', CAST(strftime('%s', 'now') AS INTEGER) WHERE NOT EXISTS (SELECT 1 FROM cores);
+	ALTER TABLE nodes ADD COLUMN core_id INTEGER REFERENCES cores(id) ON DELETE SET NULL;
+	UPDATE nodes SET core_id = (SELECT id FROM cores WHERE cores.name = nodes.name);
+	ALTER TABLE inbounds ADD COLUMN core_id INTEGER REFERENCES cores(id) ON DELETE CASCADE;
+	UPDATE inbounds SET core_id = COALESCE((SELECT core_id FROM nodes WHERE nodes.id = inbounds.node_id), (SELECT MIN(id) FROM cores));
+	UPDATE hosts SET data = json_set(data,
+		'$.address', json(CASE WHEN COALESCE(json_extract(data, '$.address'), '') != '' THEN json_array(json_extract(data, '$.address'))
+			ELSE COALESCE((SELECT json_array(n.address) FROM inbounds i JOIN nodes n ON n.id = i.node_id WHERE i.id = hosts.inbound_id), json_array()) END),
+		'$.sni', json(CASE WHEN COALESCE(json_extract(data, '$.sni'), '') != '' THEN json_array(json_extract(data, '$.sni')) ELSE json_array() END),
+		'$.host', json(CASE WHEN COALESCE(json_extract(data, '$.host'), '') != '' THEN json_array(json_extract(data, '$.host')) ELSE json_array() END));
+	UPDATE inbounds SET node_id = NULL WHERE tag NOT LIKE 'hysteria2-node%';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

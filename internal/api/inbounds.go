@@ -85,16 +85,50 @@ func validateInbound(in *model.Inbound) error {
 	return nil
 }
 
-// checkInboundNode requires an existing node: the panel itself never serves
-// proxy traffic, so an inbound without a node would hand out dead links.
-func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *model.Inbound) bool {
-	if in.NodeID == nil {
-		writeError(w, http.StatusBadRequest, "choose the node that serves this inbound")
+// inboundCore settles which core an inbound belongs to: the one sent, or
+// the core of the node sent (older API clients), or the default core.
+func (s *Server) inboundCore(w http.ResponseWriter, r *http.Request, in *model.Inbound) bool {
+	if in.CoreID == 0 && in.NodeID != nil {
+		node, err := s.store.GetNode(r.Context(), *in.NodeID)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "node not found")
+			return false
+		}
+		in.CoreID = node.CoreID
+	}
+	if in.CoreID == 0 {
+		def, err := s.store.DefaultCore(r.Context())
+		if err != nil {
+			s.writeStoreError(w, err)
+			return false
+		}
+		in.CoreID = def
+	}
+	if _, err := s.store.GetCore(r.Context(), in.CoreID); err != nil {
+		writeError(w, http.StatusBadRequest, "core not found")
 		return false
 	}
-	node, err := s.store.GetNode(r.Context(), *in.NodeID)
+	return true
+}
+
+// checkInboundNode checks an inbound against the nodes that will run it:
+// free port, cascade link, exit node, certificate files.
+func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *model.Inbound) bool {
+	nodes, err := s.store.ListNodes(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "node not found")
+		s.writeStoreError(w, err)
+		return false
+	}
+	on := *in
+	on.Enabled = true
+	var runners []*model.Node
+	for _, n := range nodes {
+		if on.Runs(n) {
+			runners = append(runners, n)
+		}
+	}
+	if in.NodeID != nil && len(runners) == 0 {
+		writeError(w, http.StatusBadRequest, "that node does not run this core")
 		return false
 	}
 	others, err := s.store.ListInbounds(r.Context())
@@ -103,10 +137,10 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 		return false
 	}
 	for _, o := range others {
-		if o.ID != in.ID && o.NodeID != nil && *o.NodeID == *in.NodeID && core.PortClash(o, in) {
+		if o.ID != in.ID && core.Together(o, in) && core.PortClash(o, in) {
 			// one busy port makes the core refuse the node's whole config
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d on this node is already used by %s inbound %s: "+
-				"only another %s inbound can share it (as its host), or pick another port", in.Port, o.Protocol, o.Tag, o.Protocol))
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("port %d in this core is already used by %s inbound %s: "+
+				"only another %s inbound can share it, or pick another port", in.Port, o.Protocol, o.Tag, o.Protocol))
 			return false
 		}
 	}
@@ -118,21 +152,24 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 			}
 		}
 	}
-	if node.Bridge.UUID != "" && node.Bridge.Port == in.Port {
-		writeError(w, http.StatusBadRequest, "this port carries the node's cascade link: pick another port or change it in the node settings")
-		return false
+	for _, n := range runners {
+		if n.Bridge.UUID != "" && n.Bridge.Port == in.Port {
+			writeError(w, http.StatusBadRequest, "port "+fmt.Sprint(in.Port)+" carries the cascade link of node "+n.Name+": pick another port")
+			return false
+		}
 	}
 	if ex := in.Settings.ExitNodeID; ex != nil {
-		switch {
-		case *ex == *in.NodeID:
-			writeError(w, http.StatusBadRequest, "the exit node must differ from the inbound's node")
-			return false
-		case in.Protocol.Core() != "xray":
+		if in.Protocol.Core() != "xray" {
 			writeError(w, http.StatusBadRequest, "cascades work for vless, vmess, trojan and shadowsocks inbounds")
 			return false
 		}
-		if _, err := s.store.GetNode(r.Context(), *ex); err != nil {
+		exit, err := s.store.GetNode(r.Context(), *ex)
+		if err != nil {
 			writeError(w, http.StatusBadRequest, "exit node not found")
+			return false
+		}
+		if on.Runs(exit) {
+			writeError(w, http.StatusBadRequest, "the exit node runs this inbound itself: pick a node with another core")
 			return false
 		}
 	}
@@ -172,7 +209,7 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !s.joinListener(w, r, &in, nil) || !s.checkInboundNode(w, r, &in) {
+	if !s.inboundCore(w, r, &in) || !s.joinListener(w, r, &in, nil) || !s.checkInboundNode(w, r, &in) {
 		return
 	}
 	if err := s.store.CreateInbound(r.Context(), &in); err != nil {
@@ -204,7 +241,7 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
-	if !s.joinListener(w, r, &in, old) || !s.checkInboundNode(w, r, &in) {
+	if !s.inboundCore(w, r, &in) || !s.joinListener(w, r, &in, old) || !s.checkInboundNode(w, r, &in) {
 		return
 	}
 	if err := s.store.UpdateInbound(r.Context(), &in); err != nil {
@@ -233,10 +270,10 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 // the owner's server side. An inbound already on the listener keeps what was
 // sent, and syncHosts passes it on to the others.
 func (s *Server) joinListener(w http.ResponseWriter, r *http.Request, in, old *model.Inbound) bool {
-	if in.NodeID == nil || in.Protocol.Core() != "xray" {
+	if in.Protocol.Core() != "xray" {
 		return true
 	}
-	if old != nil && old.NodeID != nil && *old.NodeID == *in.NodeID && core.Hosted(old, in) {
+	if old != nil && core.Together(old, in) && core.Hosted(old, in) {
 		return true
 	}
 	all, err := s.store.ListInbounds(r.Context())
@@ -336,11 +373,16 @@ func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var nodeID *int64
+	var node *model.Node
 	if n := queryInt(r, "node", 0); n > 0 {
 		id := int64(n)
 		nodeID = &id
+		if node, err = s.store.GetNode(r.Context(), id); err != nil {
+			s.writeStoreError(w, err)
+			return
+		}
 	}
-	selected := core.ForNode(inbounds, nodeID)
+	selected := core.ForNode(inbounds, node)
 	var cascade core.Cascade
 	if nodeID != nil {
 		if cascade, err = s.cascadeFor(r.Context(), *nodeID, inbounds); err != nil {

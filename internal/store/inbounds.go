@@ -9,13 +9,13 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 )
 
-const inboundCols = `id, tag, protocol, listen, port, address, remark, node_id, enabled, settings`
+const inboundCols = `id, tag, protocol, listen, port, address, remark, COALESCE(core_id, 0), node_id, enabled, settings`
 
 func scanInbound(row interface{ Scan(...any) error }) (*model.Inbound, error) {
 	var in model.Inbound
 	var node sql.NullInt64
 	var settings string
-	err := row.Scan(&in.ID, &in.Tag, &in.Protocol, &in.Listen, &in.Port, &in.Address, &in.Remark, &node, &in.Enabled, &settings)
+	err := row.Scan(&in.ID, &in.Tag, &in.Protocol, &in.Listen, &in.Port, &in.Address, &in.Remark, &in.CoreID, &node, &in.Enabled, &settings)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -48,10 +48,13 @@ func (s *Store) CreateInbound(ctx context.Context, in *model.Inbound) error {
 	}
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx,
-		`INSERT INTO inbounds (tag, protocol, listen, port, address, remark, node_id, enabled, settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		in.Tag, in.Protocol, in.Listen, in.Port, in.Address, in.Remark, nullID(in.NodeID), in.Enabled, string(settings))
+		`INSERT INTO inbounds (tag, protocol, listen, port, address, remark, core_id, node_id, enabled, settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		in.Tag, in.Protocol, in.Listen, in.Port, in.Address, in.Remark, in.CoreID, nullID(in.NodeID), in.Enabled, string(settings))
 	if isUnique(err) {
 		return ErrConflict
+	}
+	if isForeignKey(err) {
+		return ErrNotFound
 	}
 	if err != nil {
 		return err
@@ -60,7 +63,7 @@ func (s *Store) CreateInbound(ctx context.Context, in *model.Inbound) error {
 		return err
 	}
 	h := model.Host{InboundID: in.ID, Enabled: true, HostSettings: model.HostSettings{
-		Remark: in.Remark, Address: in.Address, SNI: in.Settings.SNI, Fingerprint: in.Settings.Fingerprint,
+		Remark: in.Remark, Address: nonEmpty(in.Address), SNI: nonEmpty(in.Settings.SNI), Fingerprint: in.Settings.Fingerprint,
 	}}
 	if err := insertHost(ctx, tx, &h); err != nil {
 		return err
@@ -75,8 +78,14 @@ func (s *Store) CreateInbound(ctx context.Context, in *model.Inbound) error {
 func (s *Store) UpdateInbound(ctx context.Context, in *model.Inbound) error {
 	settings, _ := json.Marshal(in.Settings)
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE inbounds SET tag = ?, protocol = ?, listen = ?, port = ?, address = ?, remark = ?, node_id = ?, enabled = ?, settings = ? WHERE id = ?`,
-		in.Tag, in.Protocol, in.Listen, in.Port, in.Address, in.Remark, nullID(in.NodeID), in.Enabled, string(settings), in.ID)
+		`UPDATE inbounds SET tag = ?, protocol = ?, listen = ?, port = ?, address = ?, remark = ?, core_id = ?, node_id = ?, enabled = ?, settings = ? WHERE id = ?`,
+		in.Tag, in.Protocol, in.Listen, in.Port, in.Address, in.Remark, in.CoreID, nullID(in.NodeID), in.Enabled, string(settings), in.ID)
+	if isUnique(err) {
+		return ErrConflict
+	}
+	if isForeignKey(err) {
+		return ErrNotFound
+	}
 	return affected(res, err)
 }
 
@@ -112,4 +121,12 @@ func (s *Store) ListInbounds(ctx context.Context) ([]*model.Inbound, error) {
 	}
 	rows.Close()
 	return out, s.attachHosts(ctx, out)
+}
+
+// nonEmpty makes a one-item list of v, or an empty one.
+func nonEmpty(v string) []string {
+	if v == "" {
+		return []string{}
+	}
+	return []string{v}
 }

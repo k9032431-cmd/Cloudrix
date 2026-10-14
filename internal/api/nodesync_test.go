@@ -63,9 +63,9 @@ func TestNodeSync(t *testing.T) {
 		t.Fatalf("install info: %+v", inst)
 	}
 
-	// an inbound without a node is refused: the panel serves no traffic itself
-	if r := e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "x", Protocol: model.ProtoTrojan, Port: 443, Enabled: true}, nil); r.StatusCode != 400 {
-		t.Fatalf("nodeless inbound: %d", r.StatusCode)
+	// inbounds belong to a core; a core that does not exist is refused
+	if r := e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "x", Protocol: model.ProtoTrojan, Port: 443, CoreID: 999, Enabled: true}, nil); r.StatusCode != 400 {
+		t.Fatalf("unknown core: %d", r.StatusCode)
 	}
 	if r := e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: &node.ID, Enabled: true}, nil); r.StatusCode != 201 {
 		t.Fatalf("inbound: %d", r.StatusCode)

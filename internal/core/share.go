@@ -75,8 +75,10 @@ func deref(p *int64) any {
 	return *p
 }
 
-func sameNode(a, b *model.Inbound) bool {
-	return (a.NodeID == nil && b.NodeID == nil) || (a.NodeID != nil && b.NodeID != nil && *a.NodeID == *b.NodeID)
+// Together reports whether two inbounds can run on the same node: one core,
+// and no pins to two different nodes.
+func Together(a, b *model.Inbound) bool {
+	return a.CoreID == b.CoreID && (a.NodeID == nil || b.NodeID == nil || *a.NodeID == *b.NodeID)
 }
 
 // Owner returns the inbound owning the listener in would join (the lowest
@@ -84,7 +86,7 @@ func sameNode(a, b *model.Inbound) bool {
 func Owner(in *model.Inbound, all []*model.Inbound) *model.Inbound {
 	var owner *model.Inbound
 	for _, o := range all {
-		if o.ID != in.ID && sameNode(o, in) && Hosted(o, in) && (owner == nil || o.ID < owner.ID) {
+		if o.ID != in.ID && Together(o, in) && Hosted(o, in) && (owner == nil || o.ID < owner.ID) {
 			owner = o
 		}
 	}
@@ -95,7 +97,7 @@ func Owner(in *model.Inbound, all []*model.Inbound) *model.Inbound {
 func Peers(in *model.Inbound, all []*model.Inbound) []*model.Inbound {
 	var out []*model.Inbound
 	for _, o := range all {
-		if o.ID != in.ID && sameNode(o, in) && Hosted(o, in) {
+		if o.ID != in.ID && Together(o, in) && Hosted(o, in) {
 			out = append(out, o)
 		}
 	}

@@ -85,7 +85,11 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	mine := core.ForNode(inbounds, &id)
+	node, err := s.store.GetNode(ctx, id)
+	if err != nil {
+		return nil, nil, nil, "", err
+	}
+	mine := core.ForNode(inbounds, node)
 	var xin, sin []*model.Inbound
 	for _, in := range mine {
 		if in.Protocol.Core() == "xray" {

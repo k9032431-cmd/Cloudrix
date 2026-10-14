@@ -3,7 +3,7 @@ import { Layers, Pencil, Plus, Trash2 } from '../components/icons'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import type { Group, Inbound, Node } from '../lib/types'
+import type { Core, Group, Inbound } from '../lib/types'
 import { Badge, Button, Card, Confirm, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Skeleton, Table, Td, Th, Toggle, cx } from '../components/ui'
 
 // Groups bundle inbounds: a user picks groups and gets every inbound inside,
@@ -12,7 +12,6 @@ export default function Groups() {
   const { t } = useI18n()
   const { data, error, reload } = useFetch<Group[]>('/api/groups')
   const { data: inbounds } = useFetch<Inbound[]>('/api/inbounds')
-  const { data: nodes } = useFetch<Node[]>('/api/nodes')
   const [editing, setEditing] = useState<Group | 'new' | null>(null)
   const [deleting, setDeleting] = useState<Group | null>(null)
   const byID = new Map((inbounds ?? []).map((ib) => [ib.id, ib]))
@@ -102,7 +101,6 @@ export default function Groups() {
         <GroupForm
           group={editing === 'new' ? null : editing}
           inbounds={inbounds ?? []}
-          nodes={nodes ?? []}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -124,12 +122,13 @@ export default function Groups() {
   )
 }
 
-function GroupForm({ group, inbounds, nodes, onClose, onSaved }: { group: Group | null; inbounds: Inbound[]; nodes: Node[]; onClose: () => void; onSaved: () => void }) {
+function GroupForm({ group, inbounds, onClose, onSaved }: { group: Group | null; inbounds: Inbound[]; onClose: () => void; onSaved: () => void }) {
   const { t } = useI18n()
   const [form, setForm] = useState({ name: group?.name ?? '', inbound_ids: group?.inbound_ids ?? [], disabled: group?.disabled ?? false })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const nodeName = (id: number | null) => nodes.find((n) => n.id === id)?.name
+  const { data: cores } = useFetch<Core[]>('/api/cores')
+  const coreName = (id: number) => cores?.find((c) => c.id === id)?.name
 
   const toggle = (id: number) =>
     setForm((f) => ({ ...f, inbound_ids: f.inbound_ids.includes(id) ? f.inbound_ids.filter((x) => x !== id) : [...f.inbound_ids, id] }))
@@ -192,7 +191,7 @@ function GroupForm({ group, inbounds, nodes, onClose, onSaved }: { group: Group 
                     </span>
                     <span className="min-w-0 flex-1 truncate font-medium text-foreground">{ib.tag}</span>
                     <Badge tone="gray">{ib.protocol}</Badge>
-                    <span className="hide-sm w-28 truncate text-right text-xs">{nodeName(ib.node_id) ?? '—'}</span>
+                    <span className="hide-sm w-28 truncate text-right text-xs">{coreName(ib.core_id) ?? '—'}</span>
                   </button>
                 )
               })}

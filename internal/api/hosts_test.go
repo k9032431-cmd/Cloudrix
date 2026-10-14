@@ -16,7 +16,7 @@ func TestHosts(t *testing.T) {
 	var in model.Inbound
 	e.do("POST", "/api/inbounds", root, model.Inbound{Tag: "tr", Protocol: model.ProtoTrojan, Port: 443, NodeID: e.node, Enabled: true,
 		Address: "a.example.com", Remark: "A {USERNAME}", Settings: model.InboundSettings{Security: "tls"}}, &in)
-	if len(in.Hosts) != 1 || in.Hosts[0].Address != "a.example.com" {
+	if len(in.Hosts) != 1 || len(in.Hosts[0].Address) != 1 || in.Hosts[0].Address[0] != "a.example.com" {
 		t.Fatalf("first host: %+v", in.Hosts)
 	}
 	var u model.User
@@ -33,7 +33,7 @@ func TestHosts(t *testing.T) {
 
 	// a second host: own address, port, remark and SNI
 	var b model.Host
-	nh := model.Host{InboundID: in.ID, Enabled: true, HostSettings: model.HostSettings{Remark: "B", Address: "b.example.com", Port: 8443, SNI: "cdn.example.com"}}
+	nh := model.Host{InboundID: in.ID, Enabled: true, HostSettings: model.HostSettings{Remark: "B", Address: []string{"b.example.com"}, Port: 8443, SNI: []string{"cdn.example.com"}}}
 	if r := e.do("POST", "/api/hosts", root, nh, &b); r.StatusCode != 201 || b.Priority <= in.Hosts[0].Priority {
 		t.Fatalf("create host: %d %+v", r.StatusCode, b)
 	}
@@ -60,7 +60,7 @@ func TestHosts(t *testing.T) {
 		t.Fatalf("disabled host still listed: %v", l)
 	}
 	bad := nh
-	bad.Address = "http://x"
+	bad.Address = []string{"http://x"}
 	if r := e.do("POST", "/api/hosts", root, bad, nil); r.StatusCode != 400 {
 		t.Fatalf("bad address: %d", r.StatusCode)
 	}
