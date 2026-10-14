@@ -15,8 +15,8 @@ import {
   Menu,
   Monitor,
   Moon,
-  Network,
   Globe,
+  Cpu,
   Layers,
   PanelLeft,
   Plus,
@@ -284,7 +284,6 @@ export default function Layout() {
           items: [
             { to: '/', label: t('nav.dashboard'), icon: LayoutDashboard, show: true },
             { to: '/users', label: t('nav.users'), icon: Users, show: true, count: stats ? String(stats.users.total) : undefined },
-            { to: '/inbounds', label: t('nav.inbounds'), icon: Network, show: sudo },
             { to: '/hosts', label: t('nav.hosts'), icon: Globe, show: sudo },
             { to: '/groups', label: t('nav.groups'), icon: Layers, show: sudo },
             { to: '/nodes', label: t('nav.nodes'), icon: Server, show: sudo, count: stats?.nodes?.total ? `${stats.nodes.connected}/${stats.nodes.total}` : undefined },
@@ -293,6 +292,7 @@ export default function Layout() {
         {
           label: t('nav.groupAdmin'),
           items: [
+            { to: '/core', label: t('nav.core'), icon: Cpu, show: sudo },
             { to: '/admins', label: t('nav.admins'), icon: ShieldCheck, show: sudo },
             { to: '/audit', label: t('nav.audit'), icon: ScrollText, show: sudo },
             { to: '/settings', label: t('nav.settings'), icon: Settings, show: sudo },

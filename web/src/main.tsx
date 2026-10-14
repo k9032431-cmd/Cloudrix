@@ -54,7 +54,8 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="users" element={<UsersPage />} />
-          <Route path="inbounds" element={<Protected sudo><Inbounds /></Protected>} />
+          <Route path="core" element={<Protected sudo><Inbounds /></Protected>} />
+          <Route path="inbounds" element={<Navigate to="/core" replace />} />
           <Route path="hosts" element={<Protected sudo><Hosts /></Protected>} />
           <Route path="nodes" element={<Protected sudo><Nodes /></Protected>} />
           <Route path="groups" element={<Protected sudo><Groups /></Protected>} />

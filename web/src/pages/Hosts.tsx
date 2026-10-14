@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Reorder, useDragControls } from 'framer-motion'
-import { Copy, Globe, GripVertical, Pencil, Plus, Trash2 } from '../components/icons'
+import { Link } from 'react-router-dom'
+import { Copy, Cpu, Globe, GripVertical, Pencil, Plus, Trash2 } from '../components/icons'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -75,11 +76,16 @@ export default function Hosts() {
               <Globe />
             </span>
             <h3>{inbounds?.length ? t('hosts.empty') : t('hosts.noInbounds')}</h3>
-            {!!inbounds?.length && (
+            {inbounds?.length ? (
               <Button className="mt-2" onClick={() => setEditing(blank())}>
                 <Plus />
                 {t('hosts.new')}
               </Button>
+            ) : (
+              <Link to="/core" className="btn btn-primary mt-2">
+                <Cpu />
+                {t('nav.core')}
+              </Link>
             )}
           </div>
         </Card>

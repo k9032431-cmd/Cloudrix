@@ -90,7 +90,7 @@ export default function Inbounds() {
   return (
     <>
       <PageHeader
-        title={t('nav.inbounds')}
+        title={t('nav.core')}
         subtitle={t('inbounds.subtitle')}
         actions={
           <>
