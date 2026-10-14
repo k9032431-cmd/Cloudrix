@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
@@ -90,5 +91,29 @@ func TestSharedPort(t *testing.T) {
 	_ = os.WriteFile(p, b, 0o600)
 	if out, err := exec.Command(xray, "run", "-test", "-c", p).CombinedOutput(); err != nil {
 		t.Fatalf("xray: %v\n%s", err, out)
+	}
+}
+
+func TestShadowsocksNextToHysteria(t *testing.T) {
+	ss := &model.Inbound{ID: 1, Tag: "ss", Protocol: model.ProtoShadowsocks, Port: 443, Enabled: true, Settings: model.InboundSettings{SSMethod: "aes-256-gcm"}}
+	hy := &model.Inbound{ID: 2, Tag: "hy", Protocol: model.ProtoHysteria2, Port: 443, Enabled: true}
+	if PortClash(ss, hy) {
+		t.Fatal("shadowsocks (TCP) and hysteria2 (UDP) clash on one port")
+	}
+	if !PortClash(hy, &model.Inbound{Protocol: model.ProtoTUIC, Port: 443}) {
+		t.Fatal("two UDP inbounds on one port do not clash")
+	}
+	users := []*model.User{{ID: 1, Username: "a", Status: model.StatusActive, Credentials: model.Credentials{Password: "p"}}}
+	b, err := Xray([]*model.Inbound{ss, hy}, users, nil, Cascade{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"network": "tcp"`) || strings.Contains(string(b), `"tcp,udp"`) {
+		t.Fatalf("shadowsocks keeps UDP next to hysteria2:\n%s", b)
+	}
+	// alone it keeps UDP
+	b, _ = Xray([]*model.Inbound{ss}, users, nil, Cascade{})
+	if !strings.Contains(string(b), `"tcp,udp"`) {
+		t.Fatal("shadowsocks alone lost UDP")
 	}
 }

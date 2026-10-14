@@ -27,11 +27,11 @@ func Hosted(a, b *model.Inbound) bool {
 }
 
 // sharesTransport reports whether two protocols would listen on the same
-// kind of socket (TCP or UDP); shadowsocks takes both.
+// kind of socket: Xray ones on TCP, sing-box ones (hysteria2, tuic,
+// wireguard) on UDP. Shadowsocks also takes UDP, but leaves it to a sing-box
+// inbound on the same port (see Xray), so it never clashes there.
 func sharesTransport(a, b model.Protocol) bool {
-	tcp := func(p model.Protocol) bool { return p.Core() == "xray" }
-	udp := func(p model.Protocol) bool { return p.Core() != "xray" || p == model.ProtoShadowsocks }
-	return (tcp(a) && tcp(b)) || (udp(a) && udp(b))
+	return (a.Core() == "xray") == (b.Core() == "xray")
 }
 
 // PortClash reports whether two inbounds of one node cannot both run: the

@@ -28,10 +28,9 @@ const PRESETS: Record<Protocol, Partial<Inbound>> = {
 // whose server side (transport, keys, exit) is the first one's, and each
 // keeps its own address, remark and SNI. Mirrors core.PortClash.
 const TCP: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
-const sharesTransport = (a: Protocol, b: Protocol) => {
-  const udp = (p: Protocol) => !TCP.includes(p) || p === 'shadowsocks'
-  return (TCP.includes(a) && TCP.includes(b)) || (udp(a) && udp(b))
-}
+// Xray protocols listen on TCP, sing-box ones on UDP; shadowsocks leaves
+// UDP to a sing-box inbound on its port, so they never clash
+const sharesTransport = (a: Protocol, b: Protocol) => TCP.includes(a) === TCP.includes(b)
 const wildcard = (l: string) => !l || l === '0.0.0.0' || l === '::'
 const hosted = (a: Inbound, b: Inbound) =>
   a.port === b.port && a.protocol === b.protocol && TCP.includes(a.protocol) && (a.listen === b.listen || (wildcard(a.listen) && wildcard(b.listen)))

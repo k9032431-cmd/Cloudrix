@@ -65,6 +65,14 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 	}}
 	listener := map[string]int{} // protocol, listen and port → index in xin
 	alias := map[string]string{} // tag of a hosted inbound → listener tag
+	// UDP ports sing-box takes (hysteria2, tuic, wireguard): shadowsocks on
+	// such a port listens on TCP only, so both run on one port number
+	udpTaken := map[int]bool{}
+	for _, in := range inbounds {
+		if in.Protocol.Core() != "xray" {
+			udpTaken[in.Port] = true
+		}
+	}
 	for _, in := range inbounds {
 		if in.Protocol.Core() != "xray" {
 			continue
@@ -72,6 +80,9 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		x, err := xrayInbound(in, usersFor(in, users, groups))
 		if err != nil {
 			return nil, fmt.Errorf("inbound %s: %w", in.Tag, err)
+		}
+		if in.Protocol == model.ProtoShadowsocks && udpTaken[in.Port] {
+			x["settings"].(map[string]any)["network"] = "tcp"
 		}
 		// inbounds of one protocol on one port share a listener; the first
 		// (lowest id) one's server side counts
