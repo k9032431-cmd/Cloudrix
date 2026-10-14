@@ -91,6 +91,7 @@ export default function Inbounds() {
     <>
       <PageHeader
         title={t('nav.inbounds')}
+        subtitle={t('inbounds.subtitle')}
         actions={
           <>
             <Button variant="secondary" onClick={() => setPreview(true)}>
@@ -135,7 +136,9 @@ export default function Inbounds() {
                 <tr key={ib.id} className={ib.enabled ? '' : 'opacity-50'}>
                   <Td className="max-w-[200px] sm:max-w-none">
                     <div className="truncate font-medium text-foreground">{ib.tag}</div>
-                    <div className="hide-sm truncate text-xs text-faint">{ib.remark}</div>
+                    <Link to="/hosts" className="hide-sm text-xs text-faint hover:text-foreground hover:underline">
+                      {t('inbounds.hostsCount', { n: ib.hosts?.filter((h) => h.enabled).length ?? 0 })}
+                    </Link>
                     {/* phones: the hidden columns in one line */}
                     <div className="truncate text-xs text-muted-foreground show-sm">
                       {ib.protocol} · {ib.port} · {nodes?.find((n) => n.id === ib.node_id)?.name ?? '—'}
@@ -359,11 +362,8 @@ function InboundForm({
               ))}
             </Select>
           </Field>
-          <Field label={t('inbounds.remark')} hint={t('inbounds.remarkHint')} className="sm:col-span-2">
-            <Input value={ib.remark} onChange={(e) => set('remark', e.target.value)} />
-          </Field>
-          <Field label={t('inbounds.address')} hint={t('inbounds.addressHint')}>
-            <Input value={ib.address} onChange={(e) => set('address', e.target.value)} placeholder="vpn.example.com" />
+          <Field label="Listen" hint={t('inbounds.listenHint')}>
+            <Input value={ib.listen} onChange={(e) => set('listen', e.target.value)} placeholder="0.0.0.0" />
           </Field>
           {coreOf(ib.protocol) === 'xray' && nodes.length > 1 && (
             <Field label={t('inbounds.exit')} hint={t('inbounds.exitHint')} className="sm:col-span-2">
@@ -448,20 +448,9 @@ function InboundForm({
                 {ib.protocol !== 'vmess' && <option>reality</option>}
               </Select>
             </Field>
-            {s.security && s.security !== 'none' && (
-              <Field label="Fingerprint">
-                <Select value={s.fingerprint ?? ''} onChange={(e) => setS({ fingerprint: e.target.value })}>
-                  {['', 'chrome', 'firefox', 'safari', 'ios', 'android', 'edge', 'random', 'randomized'].map((f) => (
-                    <option key={f} value={f}>
-                      {f || '—'}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-            )}
             {s.security === 'tls' && (
-              <Field label="SNI">
-                <Input value={s.sni ?? ''} onChange={(e) => setS({ sni: e.target.value })} />
+              <Field label="ALPN">
+                <Input value={list(s.alpn)} onChange={(e) => setS({ alpn: parseList(e.target.value) })} placeholder="h2, http/1.1" />
               </Field>
             )}
             {s.security === 'reality' && (
@@ -469,8 +458,13 @@ function InboundForm({
                 <Field label="Dest">
                   <Input value={s.reality_dest ?? ''} onChange={(e) => setS({ reality_dest: e.target.value })} placeholder="www.microsoft.com:443" />
                 </Field>
-                <Field label="Server names">
-                  <Input value={list(s.reality_server_names)} onChange={(e) => setS({ reality_server_names: parseList(e.target.value) })} />
+                <Field label="Server names" hint={t('inbounds.serverNamesHint')}>
+                  <Input
+                    value={list(s.reality_server_names)}
+                    onChange={(e) => setS({ reality_server_names: parseList(e.target.value) })}
+                    placeholder="www.microsoft.com"
+                    required
+                  />
                 </Field>
                 <Field label="Short IDs">
                   <Input value={list(s.reality_short_ids)} onChange={(e) => setS({ reality_short_ids: parseList(e.target.value) })} />
@@ -558,15 +552,9 @@ function InboundForm({
 
         {(ib.protocol === 'hysteria2' || ib.protocol === 'tuic') && (
           <Section title="TLS">
-            <Field label="SNI">
-              <Input value={s.sni ?? ''} onChange={(e) => setS({ sni: e.target.value })} />
-            </Field>
             <Field label="ALPN">
-              <Input value={list(s.alpn)} onChange={(e) => setS({ alpn: parseList(e.target.value) })} />
+              <Input value={list(s.alpn)} onChange={(e) => setS({ alpn: parseList(e.target.value) })} placeholder="h3" />
             </Field>
-            <div className="flex items-end pb-2">
-              <Toggle checked={!!s.allow_insecure} onChange={(v) => setS({ allow_insecure: v })} label="allow insecure" />
-            </div>
           </Section>
         )}
 

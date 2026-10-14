@@ -31,6 +31,7 @@ function make(name: string): Icon {
 export const LayoutDashboard = make('LayoutDashboard')
 export const Users = make('Users')
 export const Network = make('Network')
+export const GripVertical = make('GripVertical')
 export const Server = make('Server')
 export const ShieldCheck = make('ShieldCheck')
 export const ScrollText = make('ScrollText')

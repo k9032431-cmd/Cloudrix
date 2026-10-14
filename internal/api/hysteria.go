@@ -60,7 +60,17 @@ func (s *Server) ensureHysteria(ctx context.Context, node *model.Node, h nodepro
 	}
 	action := "inbound.update"
 	if cur != nil {
-		err = s.store.UpdateInbound(ctx, &want)
+		if err = s.store.UpdateInbound(ctx, &want); err == nil {
+			// hosts that pointed at the old domain follow it
+			for _, h := range cur.Hosts {
+				if h.Address == cur.Address || h.SNI == cur.Settings.SNI {
+					h.Address, h.SNI = domain, domain
+					if herr := s.store.UpdateHost(ctx, &h); herr != nil {
+						s.log.Warn("hysteria2 host", "node", node.Name, "err", herr)
+					}
+				}
+			}
+		}
 	} else {
 		action = "inbound.create"
 		if err = s.store.CreateInbound(ctx, &want); err == nil {

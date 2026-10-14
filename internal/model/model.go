@@ -264,6 +264,32 @@ type Inbound struct {
 	NodeID   *int64          `json:"node_id"` // nil = local core
 	Enabled  bool            `json:"enabled"`
 	Settings InboundSettings `json:"settings"`
+	// Hosts are the links clients get for this inbound, as in Marzban and
+	// PasarGuard (read only here, edited on their own). Nil when not loaded.
+	Hosts []Host `json:"hosts,omitempty"`
+}
+
+// Host is one client link of an inbound: where to connect and how it is
+// named. The inbound holds the server side (protocol, keys, transport).
+type Host struct {
+	ID        int64 `json:"id"`
+	InboundID int64 `json:"inbound_id"`
+	Priority  int   `json:"priority"` // order in subscriptions, lowest first
+	Enabled   bool  `json:"enabled"`
+	HostSettings
+}
+
+// HostSettings are a host's own fields; empty ones fall back to the inbound.
+type HostSettings struct {
+	Remark        string   `json:"remark"`             // link name, with {USERNAME} and other variables
+	Address       string   `json:"address"`            // empty = the node's address
+	Port          int      `json:"port,omitempty"`     // 0 = the inbound's port
+	SNI           string   `json:"sni,omitempty"`      // TLS / Reality server name
+	Host          string   `json:"host,omitempty"`     // HTTP Host header (ws, xhttp, httpupgrade)
+	Path          string   `json:"path,omitempty"`     // overrides the inbound's path
+	ALPN          []string `json:"alpn,omitempty"`     // overrides the inbound's ALPN
+	Fingerprint   string   `json:"fingerprint,omitempty"`
+	AllowInsecure bool     `json:"allow_insecure,omitempty"`
 }
 
 type NodeStatus string

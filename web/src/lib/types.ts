@@ -115,6 +115,25 @@ export interface Inbound {
   node_id: number | null
   enabled: boolean
   settings: InboundSettings
+  hosts?: Host[]
+}
+
+// Host is one client link of an inbound (address, name, SNI…), as in
+// Marzban and PasarGuard; the inbound keeps the server side.
+export interface Host {
+  id: number
+  inbound_id: number
+  priority: number
+  enabled: boolean
+  remark: string
+  address: string
+  port?: number
+  sni?: string
+  host?: string
+  path?: string
+  alpn?: string[]
+  fingerprint?: string
+  allow_insecure?: boolean
 }
 
 export type NodeStatus = 'connected' | 'connecting' | 'error' | 'disabled'

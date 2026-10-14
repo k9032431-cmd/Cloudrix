@@ -38,9 +38,16 @@ func nullID(id *int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: *id, Valid: true}
 }
 
+// CreateInbound stores a new inbound with its first host, made of the
+// inbound's address, remark, SNI and fingerprint.
 func (s *Store) CreateInbound(ctx context.Context, in *model.Inbound) error {
 	settings, _ := json.Marshal(in.Settings)
-	res, err := s.db.ExecContext(ctx,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx,
 		`INSERT INTO inbounds (tag, protocol, listen, port, address, remark, node_id, enabled, settings) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		in.Tag, in.Protocol, in.Listen, in.Port, in.Address, in.Remark, nullID(in.NodeID), in.Enabled, string(settings))
 	if isUnique(err) {
@@ -49,8 +56,20 @@ func (s *Store) CreateInbound(ctx context.Context, in *model.Inbound) error {
 	if err != nil {
 		return err
 	}
-	in.ID, err = res.LastInsertId()
-	return err
+	if in.ID, err = res.LastInsertId(); err != nil {
+		return err
+	}
+	h := model.Host{InboundID: in.ID, Enabled: true, HostSettings: model.HostSettings{
+		Remark: in.Remark, Address: in.Address, SNI: in.Settings.SNI, Fingerprint: in.Settings.Fingerprint,
+	}}
+	if err := insertHost(ctx, tx, &h); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	in.Hosts = []model.Host{h}
+	return nil
 }
 
 func (s *Store) UpdateInbound(ctx context.Context, in *model.Inbound) error {
@@ -67,7 +86,11 @@ func (s *Store) DeleteInbound(ctx context.Context, id int64) error {
 }
 
 func (s *Store) GetInbound(ctx context.Context, id int64) (*model.Inbound, error) {
-	return scanInbound(s.db.QueryRowContext(ctx, `SELECT `+inboundCols+` FROM inbounds WHERE id = ?`, id))
+	in, err := scanInbound(s.db.QueryRowContext(ctx, `SELECT `+inboundCols+` FROM inbounds WHERE id = ?`, id))
+	if err != nil {
+		return nil, err
+	}
+	return in, s.attachHosts(ctx, []*model.Inbound{in})
 }
 
 func (s *Store) ListInbounds(ctx context.Context) ([]*model.Inbound, error) {
@@ -84,5 +107,9 @@ func (s *Store) ListInbounds(ctx context.Context) ([]*model.Inbound, error) {
 		}
 		out = append(out, in)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	return out, s.attachHosts(ctx, out)
 }

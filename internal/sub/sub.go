@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,37 +25,88 @@ type Endpoint struct {
 	CertPin string
 }
 
-// Resolve picks the inbounds the user can use and fills in host and remark.
-// nodes maps node id to the node (its public address and certificate).
+// Resolve picks the inbounds the user can use and gives one endpoint per
+// enabled host of each, in host order. nodes maps node id to the node (its
+// public address and certificate).
 func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, nodes map[int64]*model.Node, defaultHost string) []Endpoint {
-	var out []Endpoint
+	type ranked struct {
+		ep       Endpoint
+		priority int
+		id       int64
+	}
+	var all []ranked
 	for _, in := range inbounds {
 		// inbounds without a node are not served anywhere: no dead links
 		if !in.Enabled || in.NodeID == nil || !u.Allows(in, groups) {
 			continue
 		}
 		node := nodes[*in.NodeID]
-		host := in.Address
-		if host == "" && node != nil {
-			host = node.Address
+		hosts := in.Hosts
+		if hosts == nil {
+			// not loaded from the store: the inbound's own fields are its host
+			hosts = []model.Host{{Enabled: true, HostSettings: model.HostSettings{
+				Remark: in.Remark, Address: in.Address, SNI: in.Settings.SNI, Fingerprint: in.Settings.Fingerprint,
+			}}}
 		}
-		if host == "" {
-			host = defaultHost
-		}
-		ep := Endpoint{Inbound: in, Host: host, Remark: RenderRemark(in, u)}
-		if in.SelfSigned() {
-			// self-signed: clients cannot verify the chain, so they skip it
-			// (older apps) or pin the certificate hash (Xray 26+)
-			c := *in
-			c.Settings.AllowInsecure = true
-			ep.Inbound = &c
-			if node != nil {
-				ep.CertPin = node.CertSHA256
+		for _, h := range hosts {
+			if !h.Enabled {
+				continue
 			}
+			c := withHost(in, h.HostSettings)
+			host := c.Address
+			if host == "" && node != nil {
+				host = node.Address
+			}
+			if host == "" {
+				host = defaultHost
+			}
+			ep := Endpoint{Inbound: c, Host: host, Remark: RenderRemark(c, u)}
+			if in.SelfSigned() {
+				// self-signed: clients cannot verify the chain, so they skip it
+				// (older apps) or pin the certificate hash (Xray 26+)
+				c.Settings.AllowInsecure = true
+				if node != nil {
+					ep.CertPin = node.CertSHA256
+				}
+			}
+			all = append(all, ranked{ep, h.Priority, h.ID})
 		}
-		out = append(out, ep)
+	}
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].priority != all[j].priority {
+			return all[i].priority < all[j].priority
+		}
+		return all[i].id < all[j].id
+	})
+	out := make([]Endpoint, 0, len(all))
+	for _, r := range all {
+		out = append(out, r.ep)
 	}
 	return out
+}
+
+// withHost returns a copy of the inbound as one host's link sees it: the
+// host's address, remark and client fields; the inbound's server side.
+func withHost(in *model.Inbound, h model.HostSettings) *model.Inbound {
+	c := *in
+	c.Hosts = nil
+	c.Settings.ALPN = slices.Clone(in.Settings.ALPN)
+	c.Address, c.Remark = h.Address, h.Remark
+	c.Settings.SNI, c.Settings.Fingerprint = h.SNI, h.Fingerprint
+	c.Settings.AllowInsecure = in.Settings.AllowInsecure || h.AllowInsecure
+	if h.Port > 0 {
+		c.Port = h.Port
+	}
+	if h.Host != "" {
+		c.Settings.Host = h.Host
+	}
+	if h.Path != "" {
+		c.Settings.Path = h.Path
+	}
+	if len(h.ALPN) > 0 {
+		c.Settings.ALPN = slices.Clone(h.ALPN)
+	}
+	return &c
 }
 
 // RenderRemark expands template variables in an inbound remark (see RenderTemplate).

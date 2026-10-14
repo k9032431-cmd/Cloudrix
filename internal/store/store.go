@@ -184,6 +184,26 @@ var migrations = []string{
 		PRIMARY KEY (day, node_id, user_id)
 	);
 	CREATE INDEX node_user_traffic_node ON node_user_traffic_daily (node_id, day);`,
+	// 9: hosts — the client links of inbounds; every inbound starts with one
+	// made of its address, remark, SNI and fingerprint
+	`CREATE TABLE hosts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		inbound_id INTEGER NOT NULL REFERENCES inbounds(id) ON DELETE CASCADE,
+		priority INTEGER NOT NULL DEFAULT 0,
+		enabled INTEGER NOT NULL DEFAULT 1,
+		data TEXT NOT NULL DEFAULT '{}'
+	);
+	CREATE INDEX hosts_inbound ON hosts (inbound_id);
+	INSERT INTO hosts (inbound_id, priority, enabled, data)
+		SELECT id, id, 1, json_object(
+			'remark', remark, 'address', address,
+			'sni', COALESCE(json_extract(settings, '$.sni'), ''),
+			'fingerprint', COALESCE(json_extract(settings, '$.fingerprint'), ''))
+		FROM inbounds;
+	UPDATE inbounds SET settings = json_set(settings, '$.reality_server_names', json_array(json_extract(settings, '$.sni')))
+		WHERE json_extract(settings, '$.security') = 'reality'
+		AND COALESCE(json_array_length(settings, '$.reality_server_names'), 0) = 0
+		AND COALESCE(json_extract(settings, '$.sni'), '') != '';`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {
@@ -242,6 +262,10 @@ func ptrUnix(v sql.NullInt64) *time.Time {
 
 func isUnique(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "UNIQUE constraint failed")
+}
+
+func isForeignKey(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }
 
 // Backup writes a consistent copy of the database to path while the panel keeps running.

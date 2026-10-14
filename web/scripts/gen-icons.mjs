@@ -14,6 +14,7 @@ const ICONS = [
   ['LayoutDashboard', 'layout-dashboard'],
   ['Users', 'users'],
   ['Network', 'network'],
+  ['GripVertical', 'grip-vertical'],
   ['Server', 'server'],
   ['ShieldCheck', 'shield-check'],
   ['ScrollText', 'scroll-text'],

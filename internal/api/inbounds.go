@@ -57,6 +57,12 @@ func validateInbound(in *model.Inbound) error {
 		if s.RealityPrivateKey == "" || s.RealityPublicKey == "" || s.RealityDest == "" {
 			return errors.New("reality requires reality_dest and a key pair")
 		}
+		if len(s.RealityServerNames) == 0 && s.SNI != "" {
+			s.RealityServerNames = []string{s.SNI}
+		}
+		if len(s.RealityServerNames) == 0 {
+			return errors.New("reality requires server names (the domains it poses as)")
+		}
 	}
 	switch in.Protocol {
 	case model.ProtoHysteria2, model.ProtoTUIC:
