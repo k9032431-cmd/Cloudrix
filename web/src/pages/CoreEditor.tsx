@@ -328,6 +328,16 @@ function InboundForm({
   const joining = peers.length > 0 && !(initial.id !== 0 && together(initial, ib) && hosted(initial, ib))
   const owner = peers.reduce<Inbound | undefined>((a, o) => (!a || o.id < a.id ? o : a), undefined)
   const needsCert = ib.protocol === 'hysteria2' || ib.protocol === 'tuic' || s.security === 'tls'
+  // tabs of the dialog, as sections in PasarGuard; only those the protocol uses
+  const xray = XRAY.includes(ib.protocol)
+  const tabs: { id: EditorTab; label: string }[] = [
+    { id: 'main', label: t('editor.tab.main') },
+    ...(streamProto ? [{ id: 'transport' as const, label: t('inbounds.transport') }] : []),
+    ...(streamProto || needsCert ? [{ id: 'security' as const, label: t('inbounds.security') }] : []),
+    ...(xray ? [{ id: 'sniffing' as const, label: t('editor.sniffing') }, { id: 'sockopt' as const, label: t('editor.tab.sockopt') }] : []),
+  ]
+  const [tabState, setTab] = useState<EditorTab>('main')
+  const tab = tabs.some((x) => x.id === tabState) ? tabState : 'main'
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
@@ -376,7 +386,16 @@ function InboundForm({
         </>
       }
     >
-      <form id="inbound-form" onSubmit={submit} className="space-y-5">
+      <form
+        id="inbound-form"
+        onSubmit={submit}
+        className="space-y-5"
+        // a field that fails the browser's check may sit on a hidden tab
+        onInvalidCapture={(e) => {
+          const pane = (e.target as HTMLElement).closest('[data-tab]')?.getAttribute('data-tab') as EditorTab | null
+          if (pane && pane !== tab) setTab(pane)
+        }}
+      >
         <ErrorNote error={error} />
         {isNew && (
           <div className="flex flex-wrap gap-1.5">
@@ -398,6 +417,9 @@ function InboundForm({
           </div>
         )}
 
+        <EditorTabs tabs={tabs} value={tab} onChange={setTab} />
+
+        <div data-tab="main" className={tab === 'main' ? 'space-y-5' : 'hidden'}>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label={t('inbounds.tag')}>
             <Input value={ib.tag} onChange={(e) => set('tag', e.target.value)} required />
@@ -432,6 +454,7 @@ function InboundForm({
           )}
         </div>
 
+
         {peers.length > 0 && (
           <div className="flex gap-2 rounded-lg bg-primary/5 px-3 py-2.5 text-[13px] text-muted-foreground ring-1 ring-inset ring-primary/15">
             <Copy className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
@@ -443,6 +466,129 @@ function InboundForm({
           </div>
         )}
 
+        {ib.protocol === 'shadowsocks' && (
+          <Section title="Shadowsocks">
+            <Field label="Method">
+              <Select value={s.ss_method || 'chacha20-ietf-poly1305'} onChange={(e) => setS({ ss_method: e.target.value })}>
+                {['chacha20-ietf-poly1305', 'aes-256-gcm', 'aes-128-gcm', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'].map((m) => (
+                  <option key={m}>{m}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Network">
+              <Select value={s.ss_network || 'tcp,udp'} onChange={(e) => setS({ ss_network: e.target.value })}>
+                {['tcp,udp', 'tcp', 'udp'].map((n) => (
+                  <option key={n}>{n}</option>
+                ))}
+              </Select>
+            </Field>
+            {s.ss_method?.startsWith('2022-') && (
+              <>
+                <Field label="Server key (base64)">
+                  <Input value={s.ss_server_key ?? ''} onChange={(e) => setS({ ss_server_key: e.target.value })} className="font-mono text-xs" />
+                </Field>
+                <div className="flex items-end">
+                  <Button type="button" variant="secondary" onClick={genSSKey}>
+                    <Wand2 className="h-4 w-4" />
+                    {t('common.generate')}
+                  </Button>
+                </div>
+              </>
+            )}
+          </Section>
+        )}
+
+        {ib.protocol === 'hysteria2' && (
+          <Section title="Hysteria2">
+            <Field label="Obfs">
+              <Select value={s.obfs ?? ''} onChange={(e) => setS({ obfs: e.target.value })}>
+                <option value="">none</option>
+                <option>salamander</option>
+              </Select>
+            </Field>
+            {s.obfs && (
+              <Field label="Obfs password">
+                <div className="flex gap-2">
+                  <Input value={s.obfs_password ?? ''} onChange={(e) => setS({ obfs_password: e.target.value })} />
+                  <Button type="button" variant="secondary" onClick={genObfs} aria-label={t('common.generate')}>
+                    <Wand2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </Field>
+            )}
+            <Field label="Up / Down Mbps" hint={t('editor.bandwidthHint')}>
+              <div className="flex gap-2">
+                <Input type="number" min={0} value={s.up_mbps ?? 0} onChange={(e) => setS({ up_mbps: Number(e.target.value) })} />
+                <Input type="number" min={0} value={s.down_mbps ?? 0} onChange={(e) => setS({ down_mbps: Number(e.target.value) })} />
+              </div>
+            </Field>
+            <Field label="Masquerade" hint={t('editor.masqueradeHint')} className="sm:col-span-2">
+              <Input value={s.masquerade ?? ''} onChange={(e) => setS({ masquerade: e.target.value })} placeholder="https://www.bing.com" />
+            </Field>
+            <Field label="UDP timeout" hint={t('editor.durationHint')}>
+              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
+            </Field>
+            <div className="flex items-end pb-2 sm:col-span-2">
+              <Toggle checked={!!s.ignore_client_bandwidth} onChange={(v) => setS({ ignore_client_bandwidth: v })} label="Ignore client bandwidth" />
+            </div>
+          </Section>
+        )}
+
+        {ib.protocol === 'tuic' && (
+          <Section title="TUIC">
+            <Field label="Congestion control">
+              <Select value={s.congestion_control || 'bbr'} onChange={(e) => setS({ congestion_control: e.target.value })}>
+                {['bbr', 'cubic', 'new_reno'].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Heartbeat" hint={t('editor.durationHint')}>
+              <Input value={s.heartbeat ?? ''} onChange={(e) => setS({ heartbeat: e.target.value })} placeholder="10s" />
+            </Field>
+            <Field label="Auth timeout" hint={t('editor.durationHint')}>
+              <Input value={s.auth_timeout ?? ''} onChange={(e) => setS({ auth_timeout: e.target.value })} placeholder="3s" />
+            </Field>
+            <Field label="UDP timeout" hint={t('editor.durationHint')}>
+              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
+            </Field>
+            <div className="flex items-end pb-2">
+              <Toggle checked={!!s.zero_rtt_handshake} onChange={(v) => setS({ zero_rtt_handshake: v })} label="Zero-RTT handshake" />
+            </div>
+          </Section>
+        )}
+
+        {ib.protocol === 'wireguard' && (
+          <Section title="WireGuard">
+            <Field label="Network">
+              <Input value={s.wg_network ?? ''} onChange={(e) => setS({ wg_network: e.target.value })} placeholder="10.8.0.0/16" />
+            </Field>
+            <Field label="DNS">
+              <Input value={s.wg_dns ?? ''} onChange={(e) => setS({ wg_dns: e.target.value })} />
+            </Field>
+            <Field label="MTU">
+              <Input type="number" value={s.mtu ?? 0} onChange={(e) => setS({ mtu: Number(e.target.value) })} />
+            </Field>
+            <Field label="Private key">
+              <Input value={s.wg_private_key ?? ''} onChange={(e) => setS({ wg_private_key: e.target.value })} className="font-mono text-xs" />
+            </Field>
+            <Field label="Public key">
+              <Input value={s.wg_public_key ?? ''} onChange={(e) => setS({ wg_public_key: e.target.value })} className="font-mono text-xs" />
+            </Field>
+            <div className="flex items-end">
+              <Button type="button" variant="secondary" onClick={genWG}>
+                <Wand2 className="h-4 w-4" />
+                {t('common.generate')}
+              </Button>
+            </div>
+          </Section>
+        )}
+
+        <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
+        {ib.node_id != null && <p className="hint">{t('core.pinnedHint', { node: nodes.find((n) => n.id === ib.node_id)?.name ?? '?' })}</p>}
+        </div>
+
+        <div data-tab="transport" className={tab === 'transport' ? 'space-y-5' : 'hidden'}>
         {streamProto && (
           <Section title={t('inbounds.transport')}>
             <Field label="Network">
@@ -538,7 +684,9 @@ function InboundForm({
             )}
           </Section>
         )}
+        </div>
 
+        <div data-tab="security" className={tab === 'security' ? 'space-y-5' : 'hidden'}>
         {streamProto && (
           <Section title={t('inbounds.security')}>
             <Field label="Security">
@@ -643,98 +791,6 @@ function InboundForm({
           </Section>
         )}
 
-        {ib.protocol === 'shadowsocks' && (
-          <Section title="Shadowsocks">
-            <Field label="Method">
-              <Select value={s.ss_method || 'chacha20-ietf-poly1305'} onChange={(e) => setS({ ss_method: e.target.value })}>
-                {['chacha20-ietf-poly1305', 'aes-256-gcm', 'aes-128-gcm', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'].map((m) => (
-                  <option key={m}>{m}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Network">
-              <Select value={s.ss_network || 'tcp,udp'} onChange={(e) => setS({ ss_network: e.target.value })}>
-                {['tcp,udp', 'tcp', 'udp'].map((n) => (
-                  <option key={n}>{n}</option>
-                ))}
-              </Select>
-            </Field>
-            {s.ss_method?.startsWith('2022-') && (
-              <>
-                <Field label="Server key (base64)">
-                  <Input value={s.ss_server_key ?? ''} onChange={(e) => setS({ ss_server_key: e.target.value })} className="font-mono text-xs" />
-                </Field>
-                <div className="flex items-end">
-                  <Button type="button" variant="secondary" onClick={genSSKey}>
-                    <Wand2 className="h-4 w-4" />
-                    {t('common.generate')}
-                  </Button>
-                </div>
-              </>
-            )}
-          </Section>
-        )}
-
-        {ib.protocol === 'hysteria2' && (
-          <Section title="Hysteria2">
-            <Field label="Obfs">
-              <Select value={s.obfs ?? ''} onChange={(e) => setS({ obfs: e.target.value })}>
-                <option value="">none</option>
-                <option>salamander</option>
-              </Select>
-            </Field>
-            {s.obfs && (
-              <Field label="Obfs password">
-                <div className="flex gap-2">
-                  <Input value={s.obfs_password ?? ''} onChange={(e) => setS({ obfs_password: e.target.value })} />
-                  <Button type="button" variant="secondary" onClick={genObfs} aria-label={t('common.generate')}>
-                    <Wand2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </Field>
-            )}
-            <Field label="Up / Down Mbps" hint={t('editor.bandwidthHint')}>
-              <div className="flex gap-2">
-                <Input type="number" min={0} value={s.up_mbps ?? 0} onChange={(e) => setS({ up_mbps: Number(e.target.value) })} />
-                <Input type="number" min={0} value={s.down_mbps ?? 0} onChange={(e) => setS({ down_mbps: Number(e.target.value) })} />
-              </div>
-            </Field>
-            <Field label="Masquerade" hint={t('editor.masqueradeHint')} className="sm:col-span-2">
-              <Input value={s.masquerade ?? ''} onChange={(e) => setS({ masquerade: e.target.value })} placeholder="https://www.bing.com" />
-            </Field>
-            <Field label="UDP timeout" hint={t('editor.durationHint')}>
-              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
-            </Field>
-            <div className="flex items-end pb-2 sm:col-span-2">
-              <Toggle checked={!!s.ignore_client_bandwidth} onChange={(v) => setS({ ignore_client_bandwidth: v })} label="Ignore client bandwidth" />
-            </div>
-          </Section>
-        )}
-
-        {ib.protocol === 'tuic' && (
-          <Section title="TUIC">
-            <Field label="Congestion control">
-              <Select value={s.congestion_control || 'bbr'} onChange={(e) => setS({ congestion_control: e.target.value })}>
-                {['bbr', 'cubic', 'new_reno'].map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="Heartbeat" hint={t('editor.durationHint')}>
-              <Input value={s.heartbeat ?? ''} onChange={(e) => setS({ heartbeat: e.target.value })} placeholder="10s" />
-            </Field>
-            <Field label="Auth timeout" hint={t('editor.durationHint')}>
-              <Input value={s.auth_timeout ?? ''} onChange={(e) => setS({ auth_timeout: e.target.value })} placeholder="3s" />
-            </Field>
-            <Field label="UDP timeout" hint={t('editor.durationHint')}>
-              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
-            </Field>
-            <div className="flex items-end pb-2">
-              <Toggle checked={!!s.zero_rtt_handshake} onChange={(v) => setS({ zero_rtt_handshake: v })} label="Zero-RTT handshake" />
-            </div>
-          </Section>
-        )}
-
         {(ib.protocol === 'hysteria2' || ib.protocol === 'tuic') && (
           <Section title="TLS">
             <Field label="ALPN">
@@ -754,35 +810,13 @@ function InboundForm({
             </Field>
           </Section>
         )}
+        </div>
 
-        {ib.protocol === 'wireguard' && (
-          <Section title="WireGuard">
-            <Field label="Network">
-              <Input value={s.wg_network ?? ''} onChange={(e) => setS({ wg_network: e.target.value })} placeholder="10.8.0.0/16" />
-            </Field>
-            <Field label="DNS">
-              <Input value={s.wg_dns ?? ''} onChange={(e) => setS({ wg_dns: e.target.value })} />
-            </Field>
-            <Field label="MTU">
-              <Input type="number" value={s.mtu ?? 0} onChange={(e) => setS({ mtu: Number(e.target.value) })} />
-            </Field>
-            <Field label="Private key">
-              <Input value={s.wg_private_key ?? ''} onChange={(e) => setS({ wg_private_key: e.target.value })} className="font-mono text-xs" />
-            </Field>
-            <Field label="Public key">
-              <Input value={s.wg_public_key ?? ''} onChange={(e) => setS({ wg_public_key: e.target.value })} className="font-mono text-xs" />
-            </Field>
-            <div className="flex items-end">
-              <Button type="button" variant="secondary" onClick={genWG}>
-                <Wand2 className="h-4 w-4" />
-                {t('common.generate')}
-              </Button>
-            </div>
-          </Section>
-        )}
-
+        <div data-tab="sniffing" className={tab === 'sniffing' ? 'space-y-5' : 'hidden'}>
         {XRAY.includes(ib.protocol) && <SniffingSection value={s.sniffing} onChange={(v) => setS({ sniffing: v })} />}
+        </div>
 
+        <div data-tab="sockopt" className={tab === 'sockopt' ? 'space-y-5' : 'hidden'}>
         {XRAY.includes(ib.protocol) && (
           <Section title={t('editor.sockopt')}>
             <Field label="TCP congestion">
@@ -804,11 +838,34 @@ function InboundForm({
             </div>
           </Section>
         )}
-
-        <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
-        {ib.node_id != null && <p className="hint">{t('core.pinnedHint', { node: nodes.find((n) => n.id === ib.node_id)?.name ?? '?' })}</p>}
+        </div>
       </form>
     </Modal>
+  )
+}
+
+type EditorTab = 'main' | 'transport' | 'security' | 'sniffing' | 'sockopt'
+
+// EditorTabs is the strip of sections at the top of the inbound dialog.
+function EditorTabs({ tabs, value, onChange }: { tabs: { id: EditorTab; label: string }[]; value: EditorTab; onChange: (t: EditorTab) => void }) {
+  return (
+    <div role="tablist" className="-mx-1 flex gap-1 overflow-x-auto border-b border-border px-1">
+      {tabs.map((x) => (
+        <button
+          key={x.id}
+          type="button"
+          role="tab"
+          aria-selected={value === x.id}
+          onClick={() => onChange(x.id)}
+          className={
+            '-mb-px shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-[13px] font-medium transition-colors ' +
+            (value === x.id ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')
+          }
+        >
+          {x.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
