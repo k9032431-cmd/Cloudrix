@@ -251,6 +251,78 @@ type InboundSettings struct {
 	WGNetwork      string `json:"wg_network,omitempty"` // e.g. 10.8.0.0/24
 	WGDNS          string `json:"wg_dns,omitempty"`
 	MTU            int    `json:"mtu,omitempty"`
+
+	// The rest follows the PasarGuard inbound editor (Xray / sing-box
+	// fields); empty values keep the core defaults.
+
+	// sniffing (Xray); nil = on for http, tls, quic
+	Sniffing *Sniffing `json:"sniffing,omitempty"`
+	// socket options (Xray sockopt / sing-box listen fields)
+	AcceptProxyProtocol  bool   `json:"accept_proxy_protocol,omitempty"`  // behind HAProxy / nginx with PROXY protocol
+	TCPFastOpen          bool   `json:"tcp_fast_open,omitempty"`          //
+	TCPCongestion        string `json:"tcp_congestion,omitempty"`         // bbr, cubic, reno
+	TCPKeepAliveInterval int    `json:"tcp_keepalive_interval,omitempty"` // seconds
+	UDPTimeout           string `json:"udp_timeout,omitempty"`            // sing-box, e.g. 5m
+
+	// vless / trojan with TLS on tcp: where other traffic goes
+	Fallbacks []Fallback `json:"fallbacks,omitempty"`
+	// shadowsocks: tcp,udp (default), tcp or udp
+	SSNetwork string `json:"ss_network,omitempty"`
+
+	// transport extras
+	WSHeartbeat          int    `json:"ws_heartbeat_period,omitempty"` // seconds
+	XPaddingBytes        string `json:"xhttp_padding_bytes,omitempty"` // e.g. 100-1000
+	XNoSSEHeader         bool   `json:"xhttp_no_sse_header,omitempty"`
+	XNoGRPCHeader        bool   `json:"xhttp_no_grpc_header,omitempty"`
+	XScMaxEachPostBytes  string `json:"xhttp_sc_max_each_post_bytes,omitempty"`
+	XScMaxBufferedPosts  int    `json:"xhttp_sc_max_buffered_posts,omitempty"`
+	XScStreamUpServerSec string `json:"xhttp_sc_stream_up_server_secs,omitempty"`
+	KCPMTU               int    `json:"kcp_mtu,omitempty"`
+	KCPTTI               int    `json:"kcp_tti,omitempty"`
+	KCPUplink            int    `json:"kcp_uplink_capacity,omitempty"`
+	KCPDownlink          int    `json:"kcp_downlink_capacity,omitempty"`
+	KCPCongestion        bool   `json:"kcp_congestion,omitempty"`
+	KCPReadBuffer        int    `json:"kcp_read_buffer_size,omitempty"`
+	KCPWriteBuffer       int    `json:"kcp_write_buffer_size,omitempty"`
+
+	// TLS extras
+	TLSMinVersion       string `json:"tls_min_version,omitempty"` // 1.0 … 1.3
+	TLSMaxVersion       string `json:"tls_max_version,omitempty"`
+	TLSCipherSuites     string `json:"tls_cipher_suites,omitempty"`
+	TLSRejectUnknownSNI bool   `json:"tls_reject_unknown_sni,omitempty"`
+
+	// REALITY extras
+	RealityShow          bool   `json:"reality_show,omitempty"`
+	RealityXver          int    `json:"reality_xver,omitempty"`
+	RealityMinClientVer  string `json:"reality_min_client_ver,omitempty"`
+	RealityMaxClientVer  string `json:"reality_max_client_ver,omitempty"`
+	RealityMaxTimeDiff   int    `json:"reality_max_time_diff,omitempty"` // ms
+	RealityMldsa65Seed   string `json:"reality_mldsa65_seed,omitempty"`
+	RealityMldsa65Verify string `json:"reality_mldsa65_verify,omitempty"`
+
+	// hysteria2 / tuic extras (sing-box)
+	Masquerade            string `json:"masquerade,omitempty"` // hysteria2: a site URL or file:///dir shown to probes
+	IgnoreClientBandwidth bool   `json:"ignore_client_bandwidth,omitempty"`
+	ZeroRTT               bool   `json:"zero_rtt_handshake,omitempty"` // tuic
+	Heartbeat             string `json:"heartbeat,omitempty"`          // tuic, e.g. 10s
+	AuthTimeout           string `json:"auth_timeout,omitempty"`       // tuic, e.g. 3s
+}
+
+// Sniffing makes Xray read the destination domain from the traffic.
+type Sniffing struct {
+	Enabled      bool     `json:"enabled"`
+	DestOverride []string `json:"dest_override,omitempty"` // http, tls, quic, fakedns
+	MetadataOnly bool     `json:"metadata_only,omitempty"`
+	RouteOnly    bool     `json:"route_only,omitempty"`
+}
+
+// Fallback sends non-proxy traffic of a vless/trojan TLS inbound elsewhere.
+type Fallback struct {
+	Name string `json:"name,omitempty"` // SNI to match
+	ALPN string `json:"alpn,omitempty"`
+	Path string `json:"path,omitempty"`
+	Dest string `json:"dest"` // port or host:port or unix socket
+	Xver int    `json:"xver,omitempty"`
 }
 
 type Inbound struct {

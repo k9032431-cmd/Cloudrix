@@ -5,6 +5,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
@@ -138,6 +139,7 @@ func xrayInbound(in *model.Inbound, users []*model.User) (map[string]any, error)
 		}
 		settings["clients"] = clients
 		settings["decryption"] = "none"
+		addFallbacks(settings, s)
 	case model.ProtoVMess:
 		for _, u := range users {
 			clients = append(clients, map[string]any{"id": u.Credentials.UUID, "email": Email(u)})
@@ -148,6 +150,7 @@ func xrayInbound(in *model.Inbound, users []*model.User) (map[string]any, error)
 			clients = append(clients, map[string]any{"password": u.Credentials.Password, "email": Email(u)})
 		}
 		settings["clients"] = clients
+		addFallbacks(settings, s)
 	case model.ProtoShadowsocks:
 		method := sub.SSMethod(s)
 		for _, u := range users {
@@ -158,7 +161,7 @@ func xrayInbound(in *model.Inbound, users []*model.User) (map[string]any, error)
 			clients = append(clients, c)
 		}
 		settings["clients"] = clients
-		settings["network"] = "tcp,udp"
+		settings["network"] = orDefault(s.SSNetwork, "tcp,udp")
 		if strings.HasPrefix(method, "2022-") {
 			if s.SSServerKey == "" {
 				return nil, fmt.Errorf("shadowsocks 2022 requires ss_server_key")
@@ -177,8 +180,49 @@ func xrayInbound(in *model.Inbound, users []*model.User) (map[string]any, error)
 		"protocol":       string(in.Protocol),
 		"settings":       settings,
 		"streamSettings": xrayStream(s),
-		"sniffing":       map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}},
+		"sniffing":       sniffing(s.Sniffing),
 	}, nil
+}
+
+func sniffing(sn *model.Sniffing) map[string]any {
+	if sn == nil {
+		return map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}}
+	}
+	out := map[string]any{"enabled": sn.Enabled}
+	if sn.Enabled {
+		out["destOverride"] = orDefaultSlice(sn.DestOverride, []string{"http", "tls", "quic"})
+		if sn.MetadataOnly {
+			out["metadataOnly"] = true
+		}
+		if sn.RouteOnly {
+			out["routeOnly"] = true
+		}
+	}
+	return out
+}
+
+// addFallbacks adds the fallbacks of a vless/trojan inbound on tcp.
+func addFallbacks(settings map[string]any, s model.InboundSettings) {
+	if len(s.Fallbacks) == 0 || orDefault(s.Network, "tcp") != "tcp" {
+		return
+	}
+	var list []map[string]any
+	for _, f := range s.Fallbacks {
+		fb := map[string]any{"dest": f.Dest}
+		if n, err := strconv.Atoi(f.Dest); err == nil {
+			fb["dest"] = n
+		}
+		for k, v := range map[string]string{"name": f.Name, "alpn": f.ALPN, "path": f.Path} {
+			if v != "" {
+				fb[k] = v
+			}
+		}
+		if f.Xver > 0 {
+			fb["xver"] = f.Xver
+		}
+		list = append(list, fb)
+	}
+	settings["fallbacks"] = list
 }
 
 func xrayStream(s model.InboundSettings) map[string]any {
@@ -190,11 +234,47 @@ func xrayStream(s model.InboundSettings) map[string]any {
 		if s.Host != "" {
 			ws["host"] = s.Host
 		}
+		if s.WSHeartbeat > 0 {
+			ws["heartbeatPeriod"] = s.WSHeartbeat
+		}
 		st["wsSettings"] = ws
+	case "kcp":
+		// Xray 26 moved the mKCP header and seed to finalmask
+		kcp := map[string]any{"congestion": s.KCPCongestion}
+		for k, v := range map[string]int{"mtu": s.KCPMTU, "tti": s.KCPTTI, "uplinkCapacity": s.KCPUplink, "downlinkCapacity": s.KCPDownlink,
+			"readBufferSize": s.KCPReadBuffer, "writeBufferSize": s.KCPWriteBuffer} {
+			if v > 0 {
+				kcp[k] = v
+			}
+		}
+		st["kcpSettings"] = kcp
 	case "httpupgrade":
 		st["httpupgradeSettings"] = map[string]any{"path": orDefault(s.Path, "/"), "host": s.Host}
 	case "xhttp":
-		st["xhttpSettings"] = map[string]any{"path": orDefault(s.Path, "/"), "host": s.Host, "mode": orDefault(s.XHTTPMode, "auto")}
+		x := map[string]any{"path": orDefault(s.Path, "/"), "host": s.Host, "mode": orDefault(s.XHTTPMode, "auto")}
+		extra := map[string]any{}
+		if s.XPaddingBytes != "" {
+			extra["xPaddingBytes"] = s.XPaddingBytes
+		}
+		if s.XNoSSEHeader {
+			extra["noSSEHeader"] = true
+		}
+		if s.XNoGRPCHeader {
+			extra["noGRPCHeader"] = true
+		}
+		if s.XScMaxEachPostBytes != "" {
+			extra["scMaxEachPostBytes"] = s.XScMaxEachPostBytes
+		}
+		if s.XScMaxBufferedPosts > 0 {
+			extra["scMaxBufferedPosts"] = s.XScMaxBufferedPosts
+		}
+		if s.XScStreamUpServerSec != "" {
+			extra["scStreamUpServerSecs"] = s.XScStreamUpServerSec
+		}
+		if len(extra) > 0 {
+			x["extra"] = extra
+		}
+		st["xhttpSettings"] = x
 	case "grpc":
 		st["grpcSettings"] = map[string]any{"serviceName": s.ServiceName}
 	case "tcp":
@@ -219,6 +299,14 @@ func xrayStream(s model.InboundSettings) map[string]any {
 		if len(s.ALPN) > 0 {
 			tls["alpn"] = s.ALPN
 		}
+		for k, v := range map[string]string{"minVersion": s.TLSMinVersion, "maxVersion": s.TLSMaxVersion, "cipherSuites": s.TLSCipherSuites} {
+			if v != "" {
+				tls[k] = v
+			}
+		}
+		if s.TLSRejectUnknownSNI {
+			tls["rejectUnknownSni"] = true
+		}
 		st["tlsSettings"] = tls
 	case "reality":
 		st["security"] = "reality"
@@ -226,12 +314,37 @@ func xrayStream(s model.InboundSettings) map[string]any {
 		if len(names) == 0 && s.SNI != "" {
 			names = []string{s.SNI}
 		}
-		st["realitySettings"] = map[string]any{
-			"show": false, "dest": s.RealityDest, "xver": 0, "serverNames": names,
+		r := map[string]any{
+			"show": s.RealityShow, "dest": s.RealityDest, "xver": s.RealityXver, "serverNames": names,
 			"privateKey": s.RealityPrivateKey, "shortIds": orDefaultSlice(s.RealityShortIDs, []string{""}),
 		}
+		for k, v := range map[string]string{"minClientVer": s.RealityMinClientVer, "maxClientVer": s.RealityMaxClientVer, "mldsa65Seed": s.RealityMldsa65Seed} {
+			if v != "" {
+				r[k] = v
+			}
+		}
+		if s.RealityMaxTimeDiff > 0 {
+			r["maxTimeDiff"] = s.RealityMaxTimeDiff
+		}
+		st["realitySettings"] = r
 	default:
 		st["security"] = "none"
+	}
+	sockopt := map[string]any{}
+	if s.AcceptProxyProtocol {
+		sockopt["acceptProxyProtocol"] = true
+	}
+	if s.TCPFastOpen {
+		sockopt["tcpFastOpen"] = true
+	}
+	if s.TCPCongestion != "" {
+		sockopt["tcpcongestion"] = s.TCPCongestion
+	}
+	if s.TCPKeepAliveInterval > 0 {
+		sockopt["tcpKeepAliveInterval"] = s.TCPKeepAliveInterval
+	}
+	if len(sockopt) > 0 {
+		st["sockopt"] = sockopt
 	}
 	return st
 }
@@ -246,6 +359,12 @@ func SingBox(inbounds []*model.Inbound, users []*model.User, groups model.Groups
 		s := in.Settings
 		us := usersFor(in, users, groups)
 		base := map[string]any{"tag": in.Tag, "listen": orDefault(in.Listen, "::"), "listen_port": in.Port}
+		if s.TCPFastOpen {
+			base["tcp_fast_open"] = true
+		}
+		if s.UDPTimeout != "" {
+			base["udp_timeout"] = s.UDPTimeout
+		}
 		certFile, keyFile := s.CertFile, s.KeyFile
 		if certFile == "" || keyFile == "" {
 			// the node agent creates this self-signed pair; clients skip verification
@@ -274,6 +393,12 @@ func SingBox(inbounds []*model.Inbound, users []*model.User, groups model.Groups
 			if s.DownMbps > 0 {
 				base["down_mbps"] = s.DownMbps
 			}
+			if s.IgnoreClientBandwidth {
+				base["ignore_client_bandwidth"] = true
+			}
+			if s.Masquerade != "" {
+				base["masquerade"] = s.Masquerade
+			}
 			sin = append(sin, base)
 		case model.ProtoTUIC:
 			list := []map[string]any{}
@@ -283,6 +408,15 @@ func SingBox(inbounds []*model.Inbound, users []*model.User, groups model.Groups
 			base["type"] = "tuic"
 			base["users"] = list
 			base["congestion_control"] = orDefault(s.CongestionCtrl, "bbr")
+			if s.ZeroRTT {
+				base["zero_rtt_handshake"] = true
+			}
+			if s.Heartbeat != "" {
+				base["heartbeat"] = s.Heartbeat
+			}
+			if s.AuthTimeout != "" {
+				base["auth_timeout"] = s.AuthTimeout
+			}
 			base["tls"] = withALPN(tls, s.ALPN, []string{"h3"})
 			sin = append(sin, base)
 		case model.ProtoWireGuard:

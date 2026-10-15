@@ -143,7 +143,8 @@ func headerType(s model.InboundSettings) string {
 }
 
 func pathOrService(s model.InboundSettings) string {
-	if network(s) == "grpc" {
+	switch network(s) {
+	case "grpc":
 		return s.ServiceName
 	}
 	return s.Path
@@ -171,6 +172,8 @@ func transportQuery(s model.InboundSettings) url.Values {
 	case "grpc":
 		setNonEmpty(q, "serviceName", s.ServiceName)
 		q.Set("mode", "gun")
+	case "kcp":
+		q.Set("headerType", "none")
 	case "tcp":
 		if s.HeaderType == "http" {
 			q.Set("headerType", "http")
@@ -198,6 +201,7 @@ func transportQuery(s model.InboundSettings) url.Values {
 		setNonEmpty(q, "sni", sni)
 		q.Set("fp", orDefault(s.Fingerprint, "chrome"))
 		setNonEmpty(q, "pbk", s.RealityPublicKey)
+		setNonEmpty(q, "pqv", s.RealityMldsa65Verify)
 		if len(s.RealityShortIDs) > 0 {
 			q.Set("sid", s.RealityShortIDs[0])
 		}

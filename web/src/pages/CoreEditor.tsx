@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronLeft, Code2, Copy, Pencil, Plus, Server, Shuffle, Trash2, Wand2 } from '../components/icons'
+import { ChevronDown, ChevronLeft, Code2, Copy, Pencil, Plus, Server, Shuffle, Trash2, Wand2 } from '../components/icons'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import { PROTOCOLS, type Core, type Group, type Inbound, type InboundSettings, type Node, type Protocol } from '../lib/types'
+import { PROTOCOLS, type Core, type Fallback, type Group, type Inbound, type InboundSettings, type Node, type Protocol, type Sniffing } from '../lib/types'
 import { Badge, Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Skeleton, Table, Td, Th, Toggle } from '../components/ui'
 import { CoreNameDialog } from './Cores'
 
@@ -447,7 +447,7 @@ function InboundForm({
           <Section title={t('inbounds.transport')}>
             <Field label="Network">
               <Select value={s.network || 'tcp'} onChange={(e) => setS({ network: e.target.value })}>
-                {['tcp', 'ws', 'grpc', 'xhttp', 'httpupgrade'].map((n) => (
+                {['tcp', 'ws', 'grpc', 'xhttp', 'httpupgrade', 'kcp'].map((n) => (
                   <option key={n}>{n}</option>
                 ))}
               </Select>
@@ -476,6 +476,58 @@ function InboundForm({
                 <Input value={s.service_name ?? ''} onChange={(e) => setS({ service_name: e.target.value })} />
               </Field>
             )}
+            {s.network === 'ws' && (
+              <Field label="Heartbeat period" hint={t('editor.seconds')}>
+                <Num value={s.ws_heartbeat_period} onChange={(v) => setS({ ws_heartbeat_period: v })} placeholder="0" />
+              </Field>
+            )}
+            {s.network === 'kcp' && (
+              <>
+                <Field label="MTU">
+                  <Num value={s.kcp_mtu} onChange={(v) => setS({ kcp_mtu: v })} placeholder="1350" />
+                </Field>
+                <Field label="TTI" hint="ms">
+                  <Num value={s.kcp_tti} onChange={(v) => setS({ kcp_tti: v })} placeholder="50" />
+                </Field>
+                <Field label="Uplink capacity" hint="MB/s">
+                  <Num value={s.kcp_uplink_capacity} onChange={(v) => setS({ kcp_uplink_capacity: v })} placeholder="5" />
+                </Field>
+                <Field label="Downlink capacity" hint="MB/s">
+                  <Num value={s.kcp_downlink_capacity} onChange={(v) => setS({ kcp_downlink_capacity: v })} placeholder="20" />
+                </Field>
+                <Field label="Read buffer" hint="MB">
+                  <Num value={s.kcp_read_buffer_size} onChange={(v) => setS({ kcp_read_buffer_size: v })} placeholder="2" />
+                </Field>
+                <Field label="Write buffer" hint="MB">
+                  <Num value={s.kcp_write_buffer_size} onChange={(v) => setS({ kcp_write_buffer_size: v })} placeholder="2" />
+                </Field>
+                <div className="flex items-end pb-2">
+                  <Toggle checked={!!s.kcp_congestion} onChange={(v) => setS({ kcp_congestion: v })} label="Congestion" />
+                </div>
+              </>
+            )}
+            {s.network === 'xhttp' && (
+              <More label={t('editor.advanced')}>
+                <Field label="xPaddingBytes">
+                  <Input value={s.xhttp_padding_bytes ?? ''} onChange={(e) => setS({ xhttp_padding_bytes: e.target.value })} placeholder="100-1000" />
+                </Field>
+                <Field label="scMaxEachPostBytes">
+                  <Input value={s.xhttp_sc_max_each_post_bytes ?? ''} onChange={(e) => setS({ xhttp_sc_max_each_post_bytes: e.target.value })} placeholder="1000000" />
+                </Field>
+                <Field label="scMaxBufferedPosts">
+                  <Num value={s.xhttp_sc_max_buffered_posts} onChange={(v) => setS({ xhttp_sc_max_buffered_posts: v })} placeholder="30" />
+                </Field>
+                <Field label="scStreamUpServerSecs">
+                  <Input value={s.xhttp_sc_stream_up_server_secs ?? ''} onChange={(e) => setS({ xhttp_sc_stream_up_server_secs: e.target.value })} placeholder="20-80" />
+                </Field>
+                <div className="flex items-end pb-2">
+                  <Toggle checked={!!s.xhttp_no_sse_header} onChange={(v) => setS({ xhttp_no_sse_header: v })} label="noSSEHeader" />
+                </div>
+                <div className="flex items-end pb-2">
+                  <Toggle checked={!!s.xhttp_no_grpc_header} onChange={(v) => setS({ xhttp_no_grpc_header: v })} label="noGRPCHeader" />
+                </div>
+              </More>
+            )}
             {ib.protocol === 'vless' && (s.network || 'tcp') === 'tcp' && (
               <Field label="Flow">
                 <Select value={s.flow ?? ''} onChange={(e) => setS({ flow: e.target.value })}>
@@ -497,9 +549,28 @@ function InboundForm({
               </Select>
             </Field>
             {s.security === 'tls' && (
-              <Field label="ALPN">
-                <Input value={list(s.alpn)} onChange={(e) => setS({ alpn: parseList(e.target.value) })} placeholder="h2, http/1.1" />
-              </Field>
+              <>
+                <Field label="Server name (SNI)">
+                  <Input value={s.sni ?? ''} onChange={(e) => setS({ sni: e.target.value })} placeholder="vpn.example.com" />
+                </Field>
+                <Field label="ALPN">
+                  <Input value={list(s.alpn)} onChange={(e) => setS({ alpn: parseList(e.target.value) })} placeholder="h2, http/1.1" />
+                </Field>
+                <More label={t('editor.advanced')}>
+                  <Field label="Min version">
+                    <TLSVersion value={s.tls_min_version} onChange={(v) => setS({ tls_min_version: v })} />
+                  </Field>
+                  <Field label="Max version">
+                    <TLSVersion value={s.tls_max_version} onChange={(v) => setS({ tls_max_version: v })} />
+                  </Field>
+                  <Field label="Cipher suites" className="sm:col-span-2">
+                    <Input value={s.tls_cipher_suites ?? ''} onChange={(e) => setS({ tls_cipher_suites: e.target.value })} placeholder="TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256:…" />
+                  </Field>
+                  <div className="flex items-end pb-2">
+                    <Toggle checked={!!s.tls_reject_unknown_sni} onChange={(v) => setS({ tls_reject_unknown_sni: v })} label="Reject unknown SNI" />
+                  </div>
+                </More>
+              </>
             )}
             {s.security === 'reality' && (
               <>
@@ -529,8 +600,46 @@ function InboundForm({
                     {t('common.generate')}
                   </Button>
                 </div>
+                <More label={t('editor.advanced')}>
+                  <Field label="SpiderX">
+                    <Input value={s.reality_spider_x ?? ''} onChange={(e) => setS({ reality_spider_x: e.target.value })} placeholder="/" />
+                  </Field>
+                  <Field label="Xver">
+                    <Select value={s.reality_xver ?? 0} onChange={(e) => setS({ reality_xver: Number(e.target.value) })}>
+                      {[0, 1, 2].map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Max time diff" hint="ms, 0 = off">
+                    <Num value={s.reality_max_time_diff} onChange={(v) => setS({ reality_max_time_diff: v })} placeholder="0" />
+                  </Field>
+                  <Field label="Min client version">
+                    <Input value={s.reality_min_client_ver ?? ''} onChange={(e) => setS({ reality_min_client_ver: e.target.value })} placeholder="25.9.11" />
+                  </Field>
+                  <Field label="Max client version">
+                    <Input value={s.reality_max_client_ver ?? ''} onChange={(e) => setS({ reality_max_client_ver: e.target.value })} />
+                  </Field>
+                  <div className="flex items-end pb-2">
+                    <Toggle checked={!!s.reality_show} onChange={(v) => setS({ reality_show: v })} label="Show (debug)" />
+                  </div>
+                  <Field label="ML-DSA-65 seed" className="sm:col-span-2">
+                    <Input value={s.reality_mldsa65_seed ?? ''} onChange={(e) => setS({ reality_mldsa65_seed: e.target.value })} className="font-mono text-xs" />
+                  </Field>
+                  <Field label="ML-DSA-65 verify" hint={t('editor.mldsaHint')}>
+                    <Input value={s.reality_mldsa65_verify ?? ''} onChange={(e) => setS({ reality_mldsa65_verify: e.target.value })} className="font-mono text-xs" />
+                  </Field>
+                </More>
               </>
             )}
+          </Section>
+        )}
+
+        {(ib.protocol === 'vless' || ib.protocol === 'trojan') && (s.network || 'tcp') === 'tcp' && s.security !== 'reality' && (
+          <Section title="Fallbacks">
+            <FallbacksEditor value={s.fallbacks ?? []} onChange={(v) => setS({ fallbacks: v })} />
           </Section>
         )}
 
@@ -540,6 +649,13 @@ function InboundForm({
               <Select value={s.ss_method || 'chacha20-ietf-poly1305'} onChange={(e) => setS({ ss_method: e.target.value })}>
                 {['chacha20-ietf-poly1305', 'aes-256-gcm', 'aes-128-gcm', '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305'].map((m) => (
                   <option key={m}>{m}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Network">
+              <Select value={s.ss_network || 'tcp,udp'} onChange={(e) => setS({ ss_network: e.target.value })}>
+                {['tcp,udp', 'tcp', 'udp'].map((n) => (
+                  <option key={n}>{n}</option>
                 ))}
               </Select>
             </Field>
@@ -577,12 +693,21 @@ function InboundForm({
                 </div>
               </Field>
             )}
-            <Field label="Up / Down Mbps">
+            <Field label="Up / Down Mbps" hint={t('editor.bandwidthHint')}>
               <div className="flex gap-2">
                 <Input type="number" min={0} value={s.up_mbps ?? 0} onChange={(e) => setS({ up_mbps: Number(e.target.value) })} />
                 <Input type="number" min={0} value={s.down_mbps ?? 0} onChange={(e) => setS({ down_mbps: Number(e.target.value) })} />
               </div>
             </Field>
+            <Field label="Masquerade" hint={t('editor.masqueradeHint')} className="sm:col-span-2">
+              <Input value={s.masquerade ?? ''} onChange={(e) => setS({ masquerade: e.target.value })} placeholder="https://www.bing.com" />
+            </Field>
+            <Field label="UDP timeout" hint={t('editor.durationHint')}>
+              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
+            </Field>
+            <div className="flex items-end pb-2 sm:col-span-2">
+              <Toggle checked={!!s.ignore_client_bandwidth} onChange={(v) => setS({ ignore_client_bandwidth: v })} label="Ignore client bandwidth" />
+            </div>
           </Section>
         )}
 
@@ -595,6 +720,18 @@ function InboundForm({
                 ))}
               </Select>
             </Field>
+            <Field label="Heartbeat" hint={t('editor.durationHint')}>
+              <Input value={s.heartbeat ?? ''} onChange={(e) => setS({ heartbeat: e.target.value })} placeholder="10s" />
+            </Field>
+            <Field label="Auth timeout" hint={t('editor.durationHint')}>
+              <Input value={s.auth_timeout ?? ''} onChange={(e) => setS({ auth_timeout: e.target.value })} placeholder="3s" />
+            </Field>
+            <Field label="UDP timeout" hint={t('editor.durationHint')}>
+              <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
+            </Field>
+            <div className="flex items-end pb-2">
+              <Toggle checked={!!s.zero_rtt_handshake} onChange={(v) => setS({ zero_rtt_handshake: v })} label="Zero-RTT handshake" />
+            </div>
           </Section>
         )}
 
@@ -644,10 +781,159 @@ function InboundForm({
           </Section>
         )}
 
+        {XRAY.includes(ib.protocol) && <SniffingSection value={s.sniffing} onChange={(v) => setS({ sniffing: v })} />}
+
+        {XRAY.includes(ib.protocol) && (
+          <Section title={t('editor.sockopt')}>
+            <Field label="TCP congestion">
+              <Select value={s.tcp_congestion ?? ''} onChange={(e) => setS({ tcp_congestion: e.target.value })}>
+                <option value="">{t('editor.default')}</option>
+                {['bbr', 'cubic', 'reno'].map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="TCP keep-alive" hint={t('editor.seconds')}>
+              <Num value={s.tcp_keepalive_interval} onChange={(v) => setS({ tcp_keepalive_interval: v })} placeholder="0" />
+            </Field>
+            <div className="flex items-end pb-2">
+              <Toggle checked={!!s.tcp_fast_open} onChange={(v) => setS({ tcp_fast_open: v })} label="TCP Fast Open" />
+            </div>
+            <div className="flex items-end pb-2 sm:col-span-3">
+              <Toggle checked={!!s.accept_proxy_protocol} onChange={(v) => setS({ accept_proxy_protocol: v })} label={t('editor.proxyProtocol')} />
+            </div>
+          </Section>
+        )}
+
         <Toggle checked={ib.enabled} onChange={(v) => set('enabled', v)} label={ib.enabled ? t('common.enabled') : t('common.disabled')} />
         {ib.node_id != null && <p className="hint">{t('core.pinnedHint', { node: nodes.find((n) => n.id === ib.node_id)?.name ?? '?' })}</p>}
       </form>
     </Modal>
+  )
+}
+
+// More folds advanced fields of a section, as PasarGuard's "Advanced".
+function More({ label, children }: { label: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="sm:col-span-3">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground">
+        <ChevronDown className={'h-3.5 w-3.5 transition-transform ' + (open ? 'rotate-180' : '')} />
+        {label}
+      </button>
+      {open && <div className="mt-3 grid gap-4 sm:grid-cols-3">{children}</div>}
+    </div>
+  )
+}
+
+// Num is an optional number field: empty means the core default.
+function Num({ value, onChange, placeholder }: { value?: number; onChange: (v: number | undefined) => void; placeholder?: string }) {
+  return <Input type="number" min={0} value={value || ''} onChange={(e) => onChange(Number(e.target.value) || undefined)} placeholder={placeholder} />
+}
+
+function TLSVersion({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
+  const { t } = useI18n()
+  return (
+    <Select value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{t('editor.default')}</option>
+      {['1.0', '1.1', '1.2', '1.3'].map((v) => (
+        <option key={v}>{v}</option>
+      ))}
+    </Select>
+  )
+}
+
+const SNIFF = ['http', 'tls', 'quic', 'fakedns']
+
+function SniffingSection({ value, onChange }: { value?: Sniffing; onChange: (v: Sniffing) => void }) {
+  const { t } = useI18n()
+  const v = value ?? { enabled: true, dest_override: ['http', 'tls', 'quic'] }
+  const dest = v.dest_override ?? ['http', 'tls', 'quic']
+  return (
+    <Section title={t('editor.sniffing')}>
+      <div className="flex items-end pb-2">
+        <Toggle checked={v.enabled} onChange={(on) => onChange({ ...v, enabled: on })} label={t('editor.sniffingOn')} />
+      </div>
+      {v.enabled && (
+        <>
+          <Field label="Dest override" className="sm:col-span-2">
+            <div className="flex flex-wrap gap-2">
+              {SNIFF.map((d) => {
+                const on = dest.includes(d)
+                return (
+                  <button
+                    type="button"
+                    key={d}
+                    aria-pressed={on}
+                    onClick={() => onChange({ ...v, dest_override: on ? dest.filter((x) => x !== d) : [...dest, d] })}
+                    className={
+                      'rounded-lg px-3 py-1.5 text-xs font-medium ring-1 ring-inset transition-colors ' +
+                      (on ? 'bg-primary text-primary-foreground ring-primary' : 'text-muted-foreground ring-border hover:bg-muted/60')
+                    }
+                  >
+                    {d}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+          <div className="flex items-end pb-2">
+            <Toggle checked={!!v.metadata_only} onChange={(on) => onChange({ ...v, metadata_only: on })} label="Metadata only" />
+          </div>
+          <div className="flex items-end pb-2">
+            <Toggle checked={!!v.route_only} onChange={(on) => onChange({ ...v, route_only: on })} label="Route only" />
+          </div>
+        </>
+      )}
+    </Section>
+  )
+}
+
+function FallbacksEditor({ value, onChange }: { value: Fallback[]; onChange: (v: Fallback[]) => void }) {
+  const { t } = useI18n()
+  const set = (i: number, patch: Partial<Fallback>) => onChange(value.map((f, j) => (j === i ? { ...f, ...patch } : f)))
+  return (
+    <div className="grid gap-3 sm:col-span-3">
+      <p className="hint">{t('editor.fallbacksHint')}</p>
+      {value.map((f, i) => (
+        <div key={i} className="grid items-end gap-2 rounded-lg p-3 ring-1 ring-inset ring-border sm:grid-cols-[1fr_1fr_1fr_1.2fr_70px_auto]">
+          <Field label="SNI (name)">
+            <Input value={f.name ?? ''} onChange={(e) => set(i, { name: e.target.value })} />
+          </Field>
+          <Field label="ALPN">
+            <Select value={f.alpn ?? ''} onChange={(e) => set(i, { alpn: e.target.value })}>
+              <option value="">{t('editor.any')}</option>
+              <option>h2</option>
+              <option>http/1.1</option>
+            </Select>
+          </Field>
+          <Field label="Path">
+            <Input value={f.path ?? ''} onChange={(e) => set(i, { path: e.target.value })} placeholder="/ws" />
+          </Field>
+          <Field label="Dest">
+            <Input value={f.dest} onChange={(e) => set(i, { dest: e.target.value })} placeholder="8080 / 127.0.0.1:80" required />
+          </Field>
+          <Field label="Xver">
+            <Select value={f.xver ?? 0} onChange={(e) => set(i, { xver: Number(e.target.value) })}>
+              {[0, 1, 2].map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <IconButton onClick={() => onChange(value.filter((_, j) => j !== i))} aria-label={t('common.delete')}>
+            <Trash2 className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ))}
+      <div>
+        <Button type="button" variant="secondary" size="sm" onClick={() => onChange([...value, { dest: '' }])}>
+          <Plus className="h-4 w-4" />
+          {t('editor.addFallback')}
+        </Button>
+      </div>
+    </div>
   )
 }
 

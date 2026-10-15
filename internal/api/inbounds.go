@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/core"
@@ -41,9 +42,12 @@ func validateInbound(in *model.Inbound) error {
 	}
 	s := &in.Settings
 	switch s.Network {
-	case "", "tcp", "ws", "grpc", "xhttp", "httpupgrade":
+	case "", "tcp", "ws", "grpc", "xhttp", "httpupgrade", "kcp":
 	default:
-		return errors.New("network must be tcp, ws, grpc, xhttp or httpupgrade")
+		return errors.New("network must be tcp, ws, grpc, xhttp, httpupgrade or kcp")
+	}
+	if err := validateExtras(s); err != nil {
+		return err
 	}
 	switch s.Security {
 	case "", "none", "tls", "reality":
@@ -429,4 +433,52 @@ func (s *Server) handleRandom(w http.ResponseWriter, r *http.Request) {
 		"hex":    auth.RandomHex(n),
 		"uuid":   auth.NewUUID(),
 	})
+}
+
+// validateExtras checks the advanced fields of the inbound editor.
+func validateExtras(s *model.InboundSettings) error {
+	oneOf := func(v string, allowed ...string) bool { return v == "" || slices.Contains(allowed, v) }
+	switch {
+	case !oneOf(s.TLSMinVersion, "1.0", "1.1", "1.2", "1.3") || !oneOf(s.TLSMaxVersion, "1.0", "1.1", "1.2", "1.3"):
+		return errors.New("TLS versions are 1.0, 1.1, 1.2 or 1.3")
+	case !oneOf(s.SSNetwork, "tcp,udp", "tcp", "udp"):
+		return errors.New("shadowsocks network is tcp,udp, tcp or udp")
+	case !oneOf(s.TCPCongestion, "bbr", "cubic", "reno"):
+		return errors.New("TCP congestion is bbr, cubic or reno")
+	case s.RealityXver < 0 || s.RealityXver > 2:
+		return errors.New("REALITY xver is 0, 1 or 2")
+	case s.RealityMaxTimeDiff < 0 || s.WSHeartbeat < 0 || s.TCPKeepAliveInterval < 0 || s.XScMaxBufferedPosts < 0 ||
+		s.KCPMTU < 0 || s.KCPTTI < 0 || s.KCPUplink < 0 || s.KCPDownlink < 0 || s.KCPReadBuffer < 0 || s.KCPWriteBuffer < 0:
+		return errors.New("numbers must not be negative")
+	case s.KCPMTU != 0 && (s.KCPMTU < 576 || s.KCPMTU > 1460):
+		return errors.New("mKCP MTU is 576..1460")
+	case s.KCPTTI != 0 && (s.KCPTTI < 10 || s.KCPTTI > 100):
+		return errors.New("mKCP TTI is 10..100 ms")
+	}
+	if s.Sniffing != nil {
+		for _, d := range s.Sniffing.DestOverride {
+			if !oneOf(d, "http", "tls", "quic", "fakedns") {
+				return errors.New("sniffing covers http, tls, quic, fakedns")
+			}
+		}
+	}
+	for _, f := range s.Fallbacks {
+		if strings.TrimSpace(f.Dest) == "" {
+			return errors.New("every fallback needs a destination (port or host:port)")
+		}
+		if f.Xver < 0 || f.Xver > 2 {
+			return errors.New("fallback xver is 0, 1 or 2")
+		}
+		if f.Path != "" && !strings.HasPrefix(f.Path, "/") {
+			return errors.New("fallback path must start with /")
+		}
+	}
+	for _, d := range []string{s.UDPTimeout, s.Heartbeat, s.AuthTimeout} {
+		if d != "" {
+			if _, err := time.ParseDuration(d); err != nil {
+				return errors.New("durations look like 10s or 5m: " + d)
+			}
+		}
+	}
+	return nil
 }

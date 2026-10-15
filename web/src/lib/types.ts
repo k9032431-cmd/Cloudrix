@@ -102,6 +102,61 @@ export interface InboundSettings {
   wg_network?: string
   wg_dns?: string
   mtu?: number
+
+  // advanced editor fields (as in PasarGuard); empty = core defaults
+  sniffing?: Sniffing
+  accept_proxy_protocol?: boolean
+  tcp_fast_open?: boolean
+  tcp_congestion?: string
+  tcp_keepalive_interval?: number
+  udp_timeout?: string
+  fallbacks?: Fallback[]
+  ss_network?: string
+  ws_heartbeat_period?: number
+  xhttp_padding_bytes?: string
+  xhttp_no_sse_header?: boolean
+  xhttp_no_grpc_header?: boolean
+  xhttp_sc_max_each_post_bytes?: string
+  xhttp_sc_max_buffered_posts?: number
+  xhttp_sc_stream_up_server_secs?: string
+  kcp_mtu?: number
+  kcp_tti?: number
+  kcp_uplink_capacity?: number
+  kcp_downlink_capacity?: number
+  kcp_congestion?: boolean
+  kcp_read_buffer_size?: number
+  kcp_write_buffer_size?: number
+  tls_min_version?: string
+  tls_max_version?: string
+  tls_cipher_suites?: string
+  tls_reject_unknown_sni?: boolean
+  reality_show?: boolean
+  reality_xver?: number
+  reality_min_client_ver?: string
+  reality_max_client_ver?: string
+  reality_max_time_diff?: number
+  reality_mldsa65_seed?: string
+  reality_mldsa65_verify?: string
+  masquerade?: string
+  ignore_client_bandwidth?: boolean
+  zero_rtt_handshake?: boolean
+  heartbeat?: string
+  auth_timeout?: string
+}
+
+export interface Sniffing {
+  enabled: boolean
+  dest_override?: string[]
+  metadata_only?: boolean
+  route_only?: boolean
+}
+
+export interface Fallback {
+  name?: string
+  alpn?: string
+  path?: string
+  dest: string
+  xver?: number
 }
 
 export interface Inbound {
