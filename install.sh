@@ -309,10 +309,13 @@ github_api() {
   curl -fsSL --max-time 15 -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO$1" 2>/dev/null
 }
 
-# resolve_branch выбирает ветку по умолчанию репозитория, если она не задана.
+# resolve_branch выбирает ветку, если она не задана: у основного репозитория
+# это main, у другого — его ветка по умолчанию.
 resolve_branch() {
   [[ -n $BRANCH ]] && return
-  BRANCH=$(github_api "" | sed -n 's/.*"default_branch": *"\([^"]*\)".*/\1/p' | head -n1 || true)
+  if [[ $REPO != "$DEFAULT_REPO" ]]; then
+    BRANCH=$(github_api "" | sed -n 's/.*"default_branch": *"\([^"]*\)".*/\1/p' | head -n1 || true)
+  fi
   [[ -n $BRANCH ]] || BRANCH=main
 }
 
