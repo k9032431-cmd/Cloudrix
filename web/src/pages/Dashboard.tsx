@@ -303,7 +303,8 @@ function monoPath(pts: [number, number][]) {
 // niceScale picks an axis maximum whose quarter steps are round numbers in the
 // value's own unit (KB, MB, GB...), e.g. 9.7 GB -> 10 GB in 2.5 GB steps.
 function niceScale(v: number, ticks = 4) {
-  if (!(v > 0)) return { max: 4 * 1024 ** 3, step: 1024 ** 3 }
+  // no traffic yet (or under a kilobyte): a plain 0–4 GB scale
+  if (!(v > 1024)) return { max: 4 * 1024 ** 3, step: 1024 ** 3 }
   const unit = 1024 ** Math.max(0, Math.floor(Math.log(v) / Math.log(1024)))
   const raw = v / unit / ticks
   const mag = Math.pow(10, Math.floor(Math.log10(raw)))

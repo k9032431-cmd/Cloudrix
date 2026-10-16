@@ -473,7 +473,7 @@ export default function Layout() {
                 <Bell />
                 {notifs.unread > 0 && <span className="bell-dot" />}
               </button>
-              <Popover open={menu === 'notifs'} onClose={closeMenu} label={t('nav.notifications')} className="right-0 top-[calc(100%+6px)] w-[min(380px,calc(100vw-16px))] origin-top-right">
+              <Popover open={menu === 'notifs'} onClose={closeMenu} label={t('nav.notifications')} className="pop-header right-0 top-[calc(100%+6px)] w-[min(380px,calc(100vw-16px))] origin-top-right">
                 <div className="flex items-center justify-between px-2.5 pb-1 pt-1.5">
                   <span className="text-[13.5px] font-semibold text-foreground">{t('nav.notifications')}</span>
                   {notifs.unread > 0 && (
@@ -515,7 +515,7 @@ export default function Layout() {
                 <Contrast />
                 <span className="lbl">{t(prefs.preset === 'slate' ? 'nav.preset.slate' : 'nav.preset.tangerine')}</span>
               </button>
-              <Popover open={menu === 'appearance'} onClose={closeMenu} label={t('nav.appearance')} className="right-0 top-[calc(100%+6px)] w-[264px] origin-top-right p-2">
+              <Popover open={menu === 'appearance'} onClose={closeMenu} label={t('nav.appearance')} className="pop-header right-0 top-[calc(100%+6px)] w-[264px] origin-top-right p-2">
                 <AppearanceMenu preset={prefs.preset} mode={prefs.mode} density={prefs.density} set={setPrefs} />
               </Popover>
             </div>

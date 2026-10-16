@@ -626,6 +626,10 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
   background: var(--popover); color: var(--popover-foreground);
   border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 4px;
 }
+/* header popovers on phones: across the screen with a gutter, never past its edges */
+@media (max-width: 640px) {
+  .pop.pop-header { position: fixed; left: 8px !important; right: 8px !important; top: calc(var(--header-h) + 6px) !important; width: auto !important; max-width: none; transform-origin: top center; }
+}
 .menu-label { padding: 7px 10px 5px; font-size: 12px; font-weight: 500; color: var(--faint-foreground); }
 .menu-sep { height: 1px; background: var(--border); margin: 4px -4px; }
 .menu-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 0 10px; border-radius: 6px; font-size: 13.5px; text-align: left; color: var(--foreground); }
