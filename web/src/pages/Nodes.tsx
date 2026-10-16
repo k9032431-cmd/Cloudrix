@@ -33,7 +33,13 @@ export default function Nodes() {
     return () => window.clearInterval(id)
   }, [reload])
 
-  const message = (n: Node) => (n.message === 'no contact from the node agent' ? t('nodes.offline') : n.message)
+  const message = (n: Node) => {
+    if (n.message === 'no contact from the node agent') return t('nodes.offline')
+    // a port another program on the server already holds stops the core
+    const busy = n.message.match(/listen (tcp|udp)\d? [^ ]*:(\d+): bind: address already in use/)
+    if (busy) return t('nodes.portBusy', { port: busy[2], proto: busy[1].toUpperCase() })
+    return n.message
+  }
 
   return (
     <>
@@ -97,9 +103,9 @@ export default function Nodes() {
                   <Td className="max-sm:[&_.badge]:whitespace-normal max-sm:[&_.badge]:text-left">
                     <NodeStatusBadge status={n.status} />
                     {n.message && (
-                      <div className="mt-1 flex max-w-[130px] items-center gap-1 truncate text-xs text-destructive sm:max-w-[260px]" title={n.message}>
-                        <CircleAlert className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{message(n)}</span>
+                      <div className="mt-1 flex max-w-[170px] items-start gap-1 text-xs text-destructive sm:max-w-[340px]" title={n.message}>
+                        <CircleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+                        <span className="line-clamp-3 whitespace-normal break-words">{message(n)}</span>
                       </div>
                     )}
                   </Td>
