@@ -103,10 +103,7 @@ export default function Nodes() {
                   <Td className="max-sm:[&_.badge]:whitespace-normal max-sm:[&_.badge]:text-left">
                     <NodeStatusBadge status={n.status} />
                     {n.message && (
-                      <div className="mt-1 flex max-w-[170px] items-start gap-1 text-xs text-destructive sm:max-w-[340px]" title={n.message}>
-                        <CircleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
-                        <span className="line-clamp-3 whitespace-normal break-words">{message(n)}</span>
-                      </div>
+                      <NodeError text={message(n)} raw={n.message} />
                     )}
                   </Td>
                   <Td className="hide-sm text-xs text-muted-foreground">{n.core_version || '—'}</Td>
@@ -298,5 +295,25 @@ function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () =
         </div>
       </form>
     </Modal>
+  )
+}
+
+// NodeError shows a node's problem in three lines; a tap shows all of it.
+function NodeError({ text, raw }: { text: string; raw: string }) {
+  const { t } = useI18n()
+  const [open, setOpen] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(!open)}
+      className="mt-1 flex max-w-[170px] items-start gap-1 text-left text-xs text-destructive sm:max-w-[340px]"
+      title={open ? t('nodes.errorLess') : t('nodes.errorMore')}
+    >
+      <CircleAlert className="mt-px h-3.5 w-3.5 shrink-0" />
+      <span className={(open ? '' : 'line-clamp-3 ') + 'whitespace-normal break-words'}>
+        {text}
+        {open && text !== raw && <span className="mt-1 block font-mono text-[11px] opacity-80">{raw}</span>}
+      </span>
+    </button>
   )
 }
