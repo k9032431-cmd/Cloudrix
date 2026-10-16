@@ -28,7 +28,7 @@ import (
 // proxy core itself: all client traffic goes through nodes.
 
 const (
-	nodePollWait   = 25 * time.Second // long-poll window for config changes
+	nodePollWait   = 15 * time.Second // long-poll window for config changes
 	nodeStaleAfter = 90 * time.Second // no call for this long = node offline
 )
 
@@ -187,6 +187,15 @@ func (s *Server) handleNodeSync(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.OnlineReported {
 		s.devices.report(id, req.Online)
+		var ids []int64
+		for email, ips := range req.Online {
+			if uid, ok := nodeproto.UserID(email); ok && len(ips) > 0 {
+				ids = append(ids, uid)
+			}
+		}
+		if err := s.store.TouchOnline(ctx, ids); err != nil {
+			s.log.Warn("online users", "node", node.Name, "err", err)
+		}
 		s.checkDevices(ctx)
 	}
 	msg := req.Error

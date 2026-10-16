@@ -43,6 +43,13 @@ func TestDeviceLimitKicksOldest(t *testing.T) {
 	if len(resp.Kicks) != 0 {
 		t.Fatalf("kicked within the limit: %v", resp.Kicks)
 	}
+	// a connection the node sees marks the key online before any traffic
+	var seen, idle model.User
+	e.do("GET", "/api/users/"+strconv.FormatInt(u.ID, 10), root, nil, &seen)
+	e.do("GET", "/api/users/"+strconv.FormatInt(other.ID, 10), root, nil, &idle)
+	if seen.OnlineAt == nil || time.Since(*seen.OnlineAt) > time.Minute || idle.OnlineAt != nil {
+		t.Fatalf("online: %v / %v", seen.OnlineAt, idle.OnlineAt)
+	}
 
 	// a third device connects: it works, the oldest (10.0.0.1) is cut off,
 	// and the unlimited user sharing a carrier IP is not touched

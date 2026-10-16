@@ -220,6 +220,20 @@ func (s *Store) MarkSubscriptionFetched(ctx context.Context, id int64, userAgent
 	return err
 }
 
+// TouchOnline marks users as online now: nodes see their connections even
+// when no traffic has been counted yet.
+func (s *Store) TouchOnline(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := []any{unix(time.Now())}
+	for _, id := range ids {
+		args = append(args, id)
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET online_at = ? WHERE id IN (?`+strings.Repeat(",?", len(ids)-1)+`)`, args...)
+	return err
+}
+
 func (s *Store) ClearOnline(ctx context.Context, id int64) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET online_at = NULL WHERE id = ?`, id)
 	return err

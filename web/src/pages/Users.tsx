@@ -50,6 +50,11 @@ export default function UsersPage() {
     return `/api/users?${p}`
   }, [q, status, sort, page])
   const { data, error, loading, reload } = useFetch<{ users: User[]; total: number }>(path)
+  // usage and presence change while keys are in use: keep the list fresh
+  useEffect(() => {
+    const id = window.setInterval(() => document.visibilityState === 'visible' && reload(), 15_000)
+    return () => window.clearInterval(id)
+  }, [reload])
   const users = data?.users ?? []
   const total = data?.total ?? 0
   const pages = Math.max(1, Math.ceil(total / PAGE))
