@@ -96,4 +96,3 @@ func TestKCPConnects(t *testing.T) {
 		})
 	}
 }
-
