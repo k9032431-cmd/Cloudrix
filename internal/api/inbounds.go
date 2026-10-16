@@ -164,7 +164,7 @@ func (s *Server) checkInboundNode(w http.ResponseWriter, r *http.Request, in *mo
 	}
 	if ex := in.Settings.ExitNodeID; ex != nil {
 		if in.Protocol.Core() != "xray" {
-			writeError(w, http.StatusBadRequest, "cascades work for vless, vmess, trojan and shadowsocks inbounds")
+			writeError(w, http.StatusBadRequest, "cascades work for vless, vmess, trojan, shadowsocks and hysteria2 inbounds")
 			return false
 		}
 		exit, err := s.store.GetNode(r.Context(), *ex)

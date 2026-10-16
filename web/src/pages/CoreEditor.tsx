@@ -9,7 +9,8 @@ import { Badge, Button, Card, Confirm, CopyButton, ErrorNote, Field, IconButton,
 import { CoreNameDialog } from './Cores'
 
 const XRAY: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
-const coreOf = (p: Protocol) => (XRAY.includes(p) ? 'xray' : 'sing-box')
+// hysteria2 runs on Xray too (its hysteria transport); tuic and wireguard on sing-box
+const coreOf = (p: Protocol) => (XRAY.includes(p) || p === 'hysteria2' ? 'xray' : 'sing-box')
 
 // Sensible starting points per protocol so a new inbound works with minimal edits.
 const PRESETS: Record<Protocol, Partial<Inbound>> = {
@@ -337,7 +338,8 @@ function InboundForm({
     { id: 'main', label: t('editor.tab.main') },
     ...(streamProto ? [{ id: 'transport' as const, label: t('inbounds.transport') }] : []),
     ...(streamProto || needsCert ? [{ id: 'security' as const, label: t('inbounds.security') }] : []),
-    ...(xray ? [{ id: 'sniffing' as const, label: t('editor.sniffing') }, { id: 'sockopt' as const, label: t('editor.tab.sockopt') }] : []),
+    ...(coreOf(ib.protocol) === 'xray' ? [{ id: 'sniffing' as const, label: t('editor.sniffing') }] : []),
+    ...(xray ? [{ id: 'sockopt' as const, label: t('editor.tab.sockopt') }] : []),
   ]
   const [tabState, setTab] = useState<EditorTab>('main')
   const tab = tabs.some((x) => x.id === tabState) ? tabState : 'main'
@@ -531,9 +533,6 @@ function InboundForm({
             <Field label="UDP timeout" hint={t('editor.durationHint')}>
               <Input value={s.udp_timeout ?? ''} onChange={(e) => setS({ udp_timeout: e.target.value })} placeholder="5m" />
             </Field>
-            <div className="flex items-end pb-2 sm:col-span-2">
-              <Toggle checked={!!s.ignore_client_bandwidth} onChange={(v) => setS({ ignore_client_bandwidth: v })} label="Ignore client bandwidth" />
-            </div>
           </Section>
         )}
 
@@ -844,7 +843,7 @@ function InboundForm({
         </div>
 
         <div data-tab="sniffing" className={tab === 'sniffing' ? 'space-y-5' : 'hidden'}>
-        {XRAY.includes(ib.protocol) && <SniffingSection value={s.sniffing} onChange={(v) => setS({ sniffing: v })} />}
+        {coreOf(ib.protocol) === 'xray' && <SniffingSection value={s.sniffing} onChange={(v) => setS({ sniffing: v })} />}
         </div>
 
         <div data-tab="sockopt" className={tab === 'sockopt' ? 'space-y-5' : 'hidden'}>

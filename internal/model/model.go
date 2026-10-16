@@ -198,9 +198,12 @@ func (p Protocol) Valid() bool {
 }
 
 // Core returns which proxy core serves the protocol.
+// Core names the core that serves the protocol. Hysteria2 runs on Xray
+// (its own hysteria transport), which counts traffic and online IPs per
+// user like the other Xray protocols.
 func (p Protocol) Core() string {
 	switch p {
-	case ProtoHysteria2, ProtoTUIC, ProtoWireGuard:
+	case ProtoTUIC, ProtoWireGuard:
 		return "sing-box"
 	default:
 		return "xray"

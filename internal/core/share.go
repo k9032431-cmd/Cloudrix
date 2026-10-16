@@ -31,7 +31,8 @@ func Hosted(a, b *model.Inbound) bool {
 // leaves it to such an inbound on the same port (see Xray), so it counts as
 // TCP here.
 func UDP(in *model.Inbound) bool {
-	return in.Protocol.Core() != "xray" || (in.Protocol != model.ProtoShadowsocks && in.Settings.Network == "kcp")
+	return in.Protocol.Core() != "xray" || in.Protocol == model.ProtoHysteria2 ||
+		(in.Protocol != model.ProtoShadowsocks && in.Settings.Network == "kcp")
 }
 
 // sharesTransport reports whether two inbounds would listen on the same kind
@@ -63,6 +64,7 @@ func AdoptServer(dst, src *model.Inbound) bool {
 	d.Security, d.ALPN, d.CertFile, d.KeyFile, d.AllowInsecure = s.Security, slices.Clone(s.ALPN), s.CertFile, s.KeyFile, s.AllowInsecure
 	d.RealityDest, d.RealityPrivateKey, d.RealityPublicKey = s.RealityDest, s.RealityPrivateKey, s.RealityPublicKey
 	d.Flow, d.SSMethod, d.SSServerKey = s.Flow, s.SSMethod, s.SSServerKey
+	d.Obfs, d.ObfsPassword, d.UpMbps, d.DownMbps, d.Masquerade, d.UDPTimeout = s.Obfs, s.ObfsPassword, s.UpMbps, s.DownMbps, s.Masquerade, s.UDPTimeout
 	d.ExitNodeID = nil
 	if s.ExitNodeID != nil {
 		v := *s.ExitNodeID

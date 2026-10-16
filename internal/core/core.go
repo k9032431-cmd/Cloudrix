@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 	"github.com/k9032431-cmd/cloudrix/internal/sub"
@@ -169,19 +170,68 @@ func xrayInbound(in *model.Inbound, users []*model.User) (map[string]any, error)
 			settings["method"] = method
 			settings["password"] = s.SSServerKey
 		}
+	case model.ProtoHysteria2:
+		for _, u := range users {
+			clients = append(clients, map[string]any{"auth": u.Credentials.Password, "email": Email(u)})
+		}
+		settings["version"] = 2
+		settings["clients"] = clients
 	default:
 		return nil, fmt.Errorf("protocol %s is not served by xray", in.Protocol)
 	}
 
+	stream := xrayStream(s)
+	protocol := string(in.Protocol)
+	if in.Protocol == model.ProtoHysteria2 {
+		stream, protocol = hysteriaStream(s), "hysteria"
+	}
 	return map[string]any{
 		"tag":            in.Tag,
 		"listen":         orDefault(in.Listen, "0.0.0.0"),
 		"port":           in.Port,
-		"protocol":       string(in.Protocol),
+		"protocol":       protocol,
 		"settings":       settings,
-		"streamSettings": xrayStream(s),
+		"streamSettings": stream,
 		"sniffing":       sniffing(s.Sniffing),
 	}, nil
+}
+
+// hysteriaStream is the Xray stream of a Hysteria2 inbound: QUIC with TLS
+// (the node's self-signed certificate unless one is set), optional Brutal
+// speeds, masquerade and salamander obfuscation.
+func hysteriaStream(s model.InboundSettings) map[string]any {
+	hy := map[string]any{"version": 2}
+	if s.UpMbps > 0 {
+		hy["up"] = fmt.Sprintf("%d mbps", s.UpMbps)
+	}
+	if s.DownMbps > 0 {
+		hy["down"] = fmt.Sprintf("%d mbps", s.DownMbps)
+	}
+	if d, err := time.ParseDuration(s.UDPTimeout); err == nil && d > 0 {
+		hy["udpIdleTimeout"] = int(d.Seconds())
+	}
+	if m := s.Masquerade; m != "" {
+		if dir, ok := strings.CutPrefix(m, "file://"); ok {
+			hy["masquerade"] = map[string]any{"type": "file", "dir": dir}
+		} else {
+			hy["masquerade"] = map[string]any{"type": "proxy", "url": m, "rewriteHost": true}
+		}
+	}
+	certFile, keyFile := s.CertFile, s.KeyFile
+	if certFile == "" || keyFile == "" {
+		certFile, keyFile = SelfSignedCert, SelfSignedKey
+	}
+	st := map[string]any{
+		"network": "hysteria", "hysteriaSettings": hy, "security": "tls",
+		"tlsSettings": map[string]any{
+			"certificates": []map[string]any{{"certificateFile": certFile, "keyFile": keyFile}},
+			"alpn":         orDefaultSlice(s.ALPN, []string{"h3"}),
+		},
+	}
+	if s.Obfs == "salamander" && s.ObfsPassword != "" {
+		st["finalmask"] = map[string]any{"udp": []map[string]any{{"type": "salamander", "settings": map[string]any{"password": s.ObfsPassword}}}}
+	}
+	return st
 }
 
 func sniffing(sn *model.Sniffing) map[string]any {

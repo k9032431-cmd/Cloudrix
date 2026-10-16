@@ -45,7 +45,7 @@ func TestHysteriaFromInstaller(t *testing.T) {
 	}
 
 	resp := setup("hy.example.com", 443)
-	if resp == nil || !resp.Changed || !strings.Contains(string(resp.SingBox), "/var/lib/cloudrix-node/tls/hysteria/fullchain.pem") {
+	if resp == nil || !resp.Changed || !strings.Contains(string(resp.Xray), "/var/lib/cloudrix-node/tls/hysteria/fullchain.pem") {
 		t.Fatalf("node did not get the hysteria2 config")
 	}
 	got := link()

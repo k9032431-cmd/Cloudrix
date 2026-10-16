@@ -30,7 +30,7 @@ func TestEditorExtras(t *testing.T) {
 		{ID: 6, Tag: "ss", Protocol: model.ProtoShadowsocks, Port: 2003, Enabled: true, Settings: model.InboundSettings{SSMethod: "aes-256-gcm", SSNetwork: "tcp", Sniffing: &model.Sniffing{}}},
 		{ID: 7, Tag: "hy2", Protocol: model.ProtoHysteria2, Port: 2004, Enabled: true, Settings: model.InboundSettings{
 			Obfs: "salamander", ObfsPassword: "p", Masquerade: "https://www.bing.com", IgnoreClientBandwidth: true, UDPTimeout: "5m"}},
-		{ID: 8, Tag: "tuic", Protocol: model.ProtoTUIC, Port: 2005, Enabled: true, Settings: model.InboundSettings{ZeroRTT: true, Heartbeat: "10s", AuthTimeout: "3s"}},
+		{ID: 8, Tag: "tuic", Protocol: model.ProtoTUIC, Port: 2005, Enabled: true, Settings: model.InboundSettings{ZeroRTT: true, Heartbeat: "10s", AuthTimeout: "3s", UDPTimeout: "2m"}},
 	}
 	users := []*model.User{{ID: 1, Username: "a", Status: model.StatusActive, Credentials: model.Credentials{UUID: "11111111-1111-1111-1111-111111111111", Password: "p"}}}
 	x, err := Xray(inbounds, users, nil, Cascade{})
@@ -46,7 +46,13 @@ func TestEditorExtras(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"masquerade"`, `"ignore_client_bandwidth"`, `"zero_rtt_handshake"`, `"udp_timeout"`} {
+	// hysteria2 runs on Xray now
+	for _, want := range []string{`"protocol": "hysteria"`, `"masquerade"`, `"udpIdleTimeout": 300`, `"salamander"`} {
+		if !strings.Contains(string(x), want) {
+			t.Errorf("xray config lacks %s", want)
+		}
+	}
+	for _, want := range []string{`"zero_rtt_handshake"`, `"udp_timeout"`} {
 		if !strings.Contains(string(sb), want) {
 			t.Errorf("sing-box config lacks %s", want)
 		}

@@ -270,11 +270,13 @@ func (a *Agent) apply(ctx context.Context, resp *nodeproto.SyncResponse) {
 	if err != nil {
 		problems = append(problems, "certificates: "+err.Error())
 	}
-	if err := a.applyXray(ctx, resp.Xray); err != nil {
-		problems = append(problems, "xray: "+err.Error())
-	}
+	// sing-box first: an inbound moving to Xray (hysteria2) frees its port
+	// before Xray binds it
 	if err := a.applyCore(a.singbox, "sing-box.json", resp.SingBox, []string{"check", "-c"}); err != nil {
 		problems = append(problems, "sing-box: "+err.Error())
+	}
+	if err := a.applyXray(ctx, resp.Xray); err != nil {
+		problems = append(problems, "xray: "+err.Error())
 	}
 	// a renewed certificate with the same config: reload the cores using it
 	if filesChanged {
