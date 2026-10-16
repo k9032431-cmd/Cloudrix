@@ -144,6 +144,9 @@ const ru = {
   'dash.version': 'Версия',
 
   'users.new': 'Новый пользователь',
+  'users.copyLink': 'Скопировать ссылку подписки',
+  'users.gdriveMissing': 'Ссылки Google Drive ещё нет: создайте её в карточке ключа',
+  'users.copyFailed': 'Не удалось скопировать: откройте ключ и скопируйте ссылку там',
   'users.username': 'Имя пользователя',
   'users.status': 'Статус',
   'users.usage': 'Трафик',
@@ -659,6 +662,9 @@ const en: Record<Key, string> = {
   'dash.version': 'Version',
 
   'users.new': 'New user',
+  'users.copyLink': 'Copy the subscription link',
+  'users.gdriveMissing': 'No Google Drive link yet: create it in the key card',
+  'users.copyFailed': 'Could not copy: open the key and copy the link there',
   'users.username': 'Username',
   'users.status': 'Status',
   'users.usage': 'Usage',

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Plus, QrCode, RefreshCw, Search } from '../components/icons'
+import { ChevronLeft, ChevronRight, CloudUpload, Link, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from '../components/icons'
+import { ActionsMenu } from '../components/ActionsMenu'
 import { useSearchParams } from 'react-router-dom'
-import { get, post } from '../lib/api'
+import { del, get, post } from '../lib/api'
 import { useToast } from '../components/toast'
 import { useDebounced, useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { useAuth } from '../lib/auth'
-import { daysLeft, formatBytes, relativeTime } from '../lib/format'
+import { copyText, daysLeft, formatBytes, relativeTime } from '../lib/format'
 import type { User, UserStatus } from '../lib/types'
 import { Button, Card, Confirm, Empty, ErrorNote, IconButton, Input, PageHeader, ProgressBar, Select, Table, Td, Th, cx } from '../components/ui'
 import { UserPresenceBadge, isOnline } from '../components/StatusBadge'
@@ -38,6 +39,7 @@ export default function UsersPage() {
     if (params.get('new') || open) setParams({}, { replace: true })
   }, [params, setParams])
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [deleting, setDeleting] = useState<User | null>(null)
   const [bulkError, setBulkError] = useState<string | null>(null)
   const q = useDebounced(search)
 
@@ -168,10 +170,10 @@ export default function UsersPage() {
                 </Th>
                 <Th>{sortHeader('username', t('users.username'))}</Th>
                 <Th className="hide-sm">{t('users.status')}</Th>
-                <Th className="min-w-[110px] sm:min-w-[180px]">{sortHeader('used_traffic', t('users.usage'))}</Th>
+                <Th className="hide-sm min-w-[180px]">{sortHeader('used_traffic', t('users.usage'))}</Th>
                 <Th className="hide-sm">{sortHeader('expire_at', t('users.expire'))}</Th>
                 <Th className="hide-sm">{sortHeader('online_at', t('users.online'))}</Th>
-                <Th className="hide-sm w-12" />
+                <Th className="hide-sm w-[120px]" />
               </tr>
             </thead>
             <tbody>
@@ -195,7 +197,7 @@ export default function UsersPage() {
                     <Td>
                       <div className="flex items-center gap-2.5">
                         <StatusDot user={u} />
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex-1">
                           <div className="truncate font-medium text-foreground">{u.username}</div>
                           {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
                           {u.admin_name && (
@@ -211,20 +213,30 @@ export default function UsersPage() {
                             </div>
                           </div>
                         </div>
+                        <div className="show-sm shrink-0">
+                          <RowActions user={u} onEdit={() => setEditing(u)} onDelete={() => setDeleting(u)} />
+                        </div>
+                      </div>
+                      {/* phones: usage under the name, the bar across the whole row */}
+                      <div className="show-sm">
+                        <div className="mb-1.5 mt-2.5 flex justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+                          <span>
+                            {formatBytes(u.used_traffic)} / {u.data_limit ? formatBytes(u.data_limit) : '∞'}
+                          </span>
+                          <span>{left === null ? '∞' : left < 0 ? <span className="text-destructive">{t('users.expiredAgo')}</span> : t('users.daysLeft', { n: left })}</span>
+                        </div>
+                        <ProgressBar value={u.used_traffic} max={u.data_limit} />
                       </div>
                     </Td>
                     <Td className="hide-sm">
                       <UserPresenceBadge user={u} />
                     </Td>
-                    <Td>
+                    <Td className="hide-sm">
                       <div className="mb-1.5 flex justify-between gap-2 text-xs tabular-nums text-muted-foreground">
                         <span>{formatBytes(u.used_traffic)}</span>
                         <span>{u.data_limit ? formatBytes(u.data_limit) : '∞'}</span>
                       </div>
                       <ProgressBar value={u.used_traffic} max={u.data_limit} />
-                      <div className="mt-1 text-xs text-muted-foreground show-sm">
-                        {left === null ? '∞' : left < 0 ? <span className="text-destructive">{t('users.expiredAgo')}</span> : t('users.daysLeft', { n: left })}
-                      </div>
                     </Td>
                     <Td className="hide-sm whitespace-nowrap text-muted-foreground">
                       {u.status === 'on_hold' ? (
@@ -242,15 +254,7 @@ export default function UsersPage() {
                       {isOnline(u.online_at) ? t('presence.now') : relativeTime(u.online_at, lang)}
                     </Td>
                     <Td className="hide-sm">
-                      <IconButton
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setViewing(u)
-                        }}
-                        aria-label="subscription"
-                      >
-                        <QrCode className="h-4 w-4" />
-                      </IconButton>
+                      <RowActions user={u} onEdit={() => setEditing(u)} onDelete={() => setDeleting(u)} />
                     </Td>
                   </motion.tr>
                 )
@@ -306,6 +310,17 @@ export default function UsersPage() {
         />
       )}
       <Confirm
+        open={!!deleting}
+        onClose={() => setDeleting(null)}
+        title={t('common.delete')}
+        message={t('common.confirmDelete', { name: deleting?.username ?? '' })}
+        onConfirm={async () => {
+          await del(`/api/users/${deleting!.id}`)
+          reload()
+          toast(t('toast.deleted'))
+        }}
+      />
+      <Confirm
         open={confirmBulkDelete}
         onClose={() => setConfirmBulkDelete(false)}
         onConfirm={() => bulk('delete')}
@@ -313,6 +328,51 @@ export default function UsersPage() {
         message={t('users.bulk.confirmDelete', { n: selected.size })}
       />
     </>
+  )
+}
+
+// RowActions are the quick buttons of a user row: edit, copy one of the three
+// subscription links, delete.
+function RowActions({ user, onEdit, onDelete }: { user: User; onEdit: () => void; onDelete: () => void }) {
+  const { t } = useI18n()
+  const toast = useToast()
+  const copy = async (kind: 'direct' | 'gdrive' | 'happ') => {
+    try {
+      let url = ''
+      if (kind === 'happ') {
+        url = (await get<{ link: string }>(`/api/users/${user.id}/happ-link?kind=direct`)).link
+      } else {
+        const sub = await get<{ url: string; gdrive: { url?: string } }>(`/api/users/${user.id}/subscription?v=${user.sub_token}`)
+        url = kind === 'gdrive' ? sub.gdrive.url ?? '' : sub.url
+      }
+      if (!url) {
+        toast(t('users.gdriveMissing'), 'error')
+        return
+      }
+      if (await copyText(url)) toast(t('common.copied'))
+      else toast(t('users.copyFailed'), 'error')
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
+  return (
+    <div className="flex items-center justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+      <IconButton onClick={onEdit} aria-label={t('common.edit')}>
+        <Pencil className="h-4 w-4" />
+      </IconButton>
+      <ActionsMenu
+        label={t('users.copyLink')}
+        icon={Link}
+        actions={[
+          { label: t('sub.kind.direct'), icon: Link, onClick: () => copy('direct') },
+          { label: t('sub.kind.gdrive'), icon: CloudUpload, onClick: () => copy('gdrive') },
+          { label: t('sub.kind.happ'), icon: ShieldCheck, onClick: () => copy('happ') },
+        ]}
+      />
+      <IconButton onClick={onDelete} aria-label={t('common.delete')} className="hover:text-destructive">
+        <Trash2 className="h-4 w-4" />
+      </IconButton>
+    </div>
   )
 }
 

@@ -77,6 +77,7 @@ const ICONS = [
   ['Search', 'search'],
   ['RefreshCw', 'refresh-cw'],
   ['ExternalLink', 'external-link'],
+  ['Link', 'link'],
   ['MoreHorizontal', 'ellipsis'],
   ['Loader2', 'loader-circle'],
   ['PanelLeft', 'panel-left'],

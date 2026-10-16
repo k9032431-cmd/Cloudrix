@@ -12,7 +12,7 @@ export interface Action {
 
 // ActionsMenu is the "⋯" button with a small menu of row actions (edit,
 // duplicate, delete…), as on the PasarGuard cards.
-export function ActionsMenu({ actions, label, children }: { actions: Action[]; label: string; children?: ReactNode }) {
+export function ActionsMenu({ actions, label, icon: Trigger = MoreHorizontal, children }: { actions: Action[]; label: string; icon?: Icon; children?: ReactNode }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -35,7 +35,7 @@ export function ActionsMenu({ actions, label, children }: { actions: Action[]; l
     <div ref={ref} className="relative" onClick={(e) => e.stopPropagation()}>
       {children}
       <IconButton onClick={() => setOpen((v) => !v)} aria-label={label} aria-haspopup="menu" aria-expanded={open}>
-        <MoreHorizontal className="h-4 w-4" />
+        <Trigger className="h-4 w-4" />
       </IconButton>
       {open && (
         <div role="menu" className="pop right-0 top-full mt-1 !min-w-[180px]">
