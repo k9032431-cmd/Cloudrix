@@ -116,11 +116,13 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		{"protocol": []string{"bittorrent"}, "outboundTag": "block"},
 	}
 	cascade.apply(&xin, &outbounds, &rules)
+	// No per-inbound counters: with them Xray's hysteria inbound loses the
+	// user of a connection and counts no per-user traffic or online.
 	cfg := map[string]any{
 		"log":       map[string]any{"loglevel": "warning", "access": "none"},
 		"api":       map[string]any{"tag": "api", "services": []string{"HandlerService", "StatsService", "LoggerService", "RoutingService"}},
 		"stats":     map[string]any{},
-		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
+		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true}}},
 		"inbounds":  xin,
 		"outbounds": outbounds,
 		"routing":   map[string]any{"rules": rules},
