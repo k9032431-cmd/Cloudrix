@@ -23,7 +23,7 @@ func TestEditorExtras(t *testing.T) {
 			Security: "reality", RealityDest: "www.microsoft.com:443", RealityServerNames: []string{"www.microsoft.com"},
 			RealityPrivateKey: "SMR3hYd5-3QCzkUUkrHqHmBHO6ZWuQuDH7LlBybV8EU", RealityXver: 1, RealityMinClientVer: "25.1.1", RealityMaxTimeDiff: 60000, RealityShow: true}},
 		{ID: 3, Tag: "kcp", Protocol: model.ProtoVMess, Port: 2000, Enabled: true, Settings: model.InboundSettings{
-			Network: "kcp", KCPMTU: 1350, KCPTTI: 20, KCPUplink: 5, KCPDownlink: 20, KCPCongestion: true}},
+			Network: "kcp", KCPMTU: 1350, KCPTTI: 20, KCPUplink: 5, KCPDownlink: 20, KCPCongestion: true, KCPHeader: "wechat", KCPSeed: "s3cret"}},
 		{ID: 4, Tag: "xhttp", Protocol: model.ProtoVLESS, Port: 2001, Enabled: true, Settings: model.InboundSettings{
 			Network: "xhttp", Path: "/x", XPaddingBytes: "100-1000", XNoSSEHeader: true, XScMaxEachPostBytes: "1000000", XScMaxBufferedPosts: 30, XScStreamUpServerSec: "20-80"}},
 		{ID: 5, Tag: "ws", Protocol: model.ProtoTrojan, Port: 2002, Enabled: true, Settings: model.InboundSettings{Network: "ws", Path: "/ws", WSHeartbeat: 30}},
@@ -37,7 +37,7 @@ func TestEditorExtras(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"fallbacks"`, `"rejectUnknownSni": true`, `"minClientVer"`, `"kcpSettings"`, `"xPaddingBytes"`, `"heartbeatPeriod": 30`, `"acceptProxyProtocol": true`, `"routeOnly": true`, `"network": "tcp"`} {
+	for _, want := range []string{`"fallbacks"`, `"rejectUnknownSni": true`, `"minClientVer"`, `"kcpSettings"`, `"mkcp-aes128gcm"`, `"header-wechat"`, `"xPaddingBytes"`, `"heartbeatPeriod": 30`, `"acceptProxyProtocol": true`, `"routeOnly": true`, `"network": "tcp"`} {
 		if !strings.Contains(string(x), want) {
 			t.Errorf("xray config lacks %s", want)
 		}

@@ -126,6 +126,9 @@ export interface InboundSettings {
   kcp_congestion?: boolean
   kcp_read_buffer_size?: number
   kcp_write_buffer_size?: number
+  kcp_header?: string
+  kcp_header_domain?: string
+  kcp_seed?: string
   tls_min_version?: string
   tls_max_version?: string
   tls_cipher_suites?: string

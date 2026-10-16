@@ -23,22 +23,28 @@ func sameListen(a, b string) bool {
 
 // Hosted reports whether two inbounds of one node share a listener.
 func Hosted(a, b *model.Inbound) bool {
-	return a.Port == b.Port && a.Protocol == b.Protocol && a.Protocol.Core() == "xray" && sameListen(a.Listen, b.Listen)
+	return a.Port == b.Port && a.Protocol == b.Protocol && a.Protocol.Core() == "xray" && UDP(a) == UDP(b) && sameListen(a.Listen, b.Listen)
 }
 
-// sharesTransport reports whether two protocols would listen on the same
-// kind of socket: Xray ones on TCP, sing-box ones (hysteria2, tuic,
-// wireguard) on UDP. Shadowsocks also takes UDP, but leaves it to a sing-box
-// inbound on the same port (see Xray), so it never clashes there.
-func sharesTransport(a, b model.Protocol) bool {
-	return (a.Core() == "xray") == (b.Core() == "xray")
+// UDP reports whether the inbound's main socket is UDP: sing-box protocols
+// (hysteria2, tuic, wireguard) and Xray mKCP. Shadowsocks also takes UDP but
+// leaves it to such an inbound on the same port (see Xray), so it counts as
+// TCP here.
+func UDP(in *model.Inbound) bool {
+	return in.Protocol.Core() != "xray" || (in.Protocol != model.ProtoShadowsocks && in.Settings.Network == "kcp")
+}
+
+// sharesTransport reports whether two inbounds would listen on the same kind
+// of socket (TCP or UDP).
+func sharesTransport(a, b *model.Inbound) bool {
+	return UDP(a) == UDP(b)
 }
 
 // PortClash reports whether two inbounds of one node cannot both run: the
 // same port and kind of socket on overlapping addresses, not as hosts of one
 // listener.
 func PortClash(a, b *model.Inbound) bool {
-	if a.Port != b.Port || !sharesTransport(a.Protocol, b.Protocol) {
+	if a.Port != b.Port || !sharesTransport(a, b) {
 		return false
 	}
 	if a.Listen != b.Listen && !wildcard(a.Listen) && !wildcard(b.Listen) {

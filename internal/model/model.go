@@ -284,6 +284,12 @@ type InboundSettings struct {
 	KCPCongestion        bool   `json:"kcp_congestion,omitempty"`
 	KCPReadBuffer        int    `json:"kcp_read_buffer_size,omitempty"`
 	KCPWriteBuffer       int    `json:"kcp_write_buffer_size,omitempty"`
+	// mKCP masking (Xray 26 finalmask): a header that makes packets look
+	// like another protocol, and the mKCP layer, plain or AES-128-GCM with a
+	// password both sides share
+	KCPHeader       string `json:"kcp_header,omitempty"`        // wechat, dtls, srtp, utp, wireguard, dns
+	KCPHeaderDomain string `json:"kcp_header_domain,omitempty"` // for the dns header
+	KCPSeed         string `json:"kcp_seed,omitempty"`          // password: mkcp-aes128gcm; empty = mkcp-original
 
 	// TLS extras
 	TLSMinVersion       string `json:"tls_min_version,omitempty"` // 1.0 … 1.3

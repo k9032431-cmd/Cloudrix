@@ -441,6 +441,10 @@ func validateExtras(s *model.InboundSettings) error {
 	switch {
 	case !oneOf(s.TLSMinVersion, "1.0", "1.1", "1.2", "1.3") || !oneOf(s.TLSMaxVersion, "1.0", "1.1", "1.2", "1.3"):
 		return errors.New("TLS versions are 1.0, 1.1, 1.2 or 1.3")
+	case !oneOf(s.KCPHeader, "wechat", "dtls", "srtp", "utp", "wireguard", "dns"):
+		return errors.New("mKCP header is wechat, dtls, srtp, utp, wireguard or dns")
+	case s.KCPHeaderDomain != "" && !hostRe.MatchString(s.KCPHeaderDomain):
+		return errors.New("mKCP dns header needs a domain name")
 	case !oneOf(s.SSNetwork, "tcp,udp", "tcp", "udp"):
 		return errors.New("shadowsocks network is tcp,udp, tcp or udp")
 	case !oneOf(s.TCPCongestion, "bbr", "cubic", "reno"):

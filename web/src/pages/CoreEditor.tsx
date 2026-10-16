@@ -30,12 +30,15 @@ const PRESETS: Record<Protocol, Partial<Inbound>> = {
 const TCP: Protocol[] = ['vless', 'vmess', 'trojan', 'shadowsocks']
 // Xray protocols listen on TCP, sing-box ones on UDP; shadowsocks leaves
 // UDP to a sing-box inbound on its port, so they never clash
-const sharesTransport = (a: Protocol, b: Protocol) => TCP.includes(a) === TCP.includes(b)
+// mKCP and the sing-box protocols listen on UDP, the rest of Xray on TCP;
+// shadowsocks leaves UDP to such an inbound on its port (mirrors core.UDP)
+const udp = (ib: Inbound) => !TCP.includes(ib.protocol) || (ib.protocol !== 'shadowsocks' && ib.settings.network === 'kcp')
+const sharesTransport = (a: Inbound, b: Inbound) => udp(a) === udp(b)
 const wildcard = (l: string) => !l || l === '0.0.0.0' || l === '::'
 const hosted = (a: Inbound, b: Inbound) =>
-  a.port === b.port && a.protocol === b.protocol && TCP.includes(a.protocol) && (a.listen === b.listen || (wildcard(a.listen) && wildcard(b.listen)))
+  a.port === b.port && a.protocol === b.protocol && TCP.includes(a.protocol) && udp(a) === udp(b) && (a.listen === b.listen || (wildcard(a.listen) && wildcard(b.listen)))
 function clashes(a: Inbound, b: Inbound): boolean {
-  if (a.port !== b.port || !sharesTransport(a.protocol, b.protocol)) return false
+  if (a.port !== b.port || !sharesTransport(a, b)) return false
   if (a.listen !== b.listen && !wildcard(a.listen) && !wildcard(b.listen)) return false
   return !hosted(a, b)
 }
@@ -650,6 +653,34 @@ function InboundForm({
                 <div className="flex items-end pb-2">
                   <Toggle checked={!!s.kcp_congestion} onChange={(v) => setS({ kcp_congestion: v })} label="Congestion" />
                 </div>
+                <Field label={t('editor.kcpHeader')} hint={t('editor.kcpHeaderHint')}>
+                  <Select value={s.kcp_header ?? ''} onChange={(e) => setS({ kcp_header: e.target.value })}>
+                    <option value="">none</option>
+                    {['wechat', 'dtls', 'srtp', 'utp', 'wireguard', 'dns'].map((h) => (
+                      <option key={h} value={h}>
+                        {h === 'wechat' ? 'wechat-video' : h}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                {s.kcp_header === 'dns' && (
+                  <Field label="DNS domain">
+                    <Input value={s.kcp_header_domain ?? ''} onChange={(e) => setS({ kcp_header_domain: e.target.value })} placeholder="www.google.com" />
+                  </Field>
+                )}
+                <Field label={t('editor.kcpSeed')} hint={t('editor.kcpSeedHint')}>
+                  <div className="flex gap-2">
+                    <Input value={s.kcp_seed ?? ''} onChange={(e) => setS({ kcp_seed: e.target.value })} className="font-mono text-xs" />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={async () => setS({ kcp_seed: (await post<{ hex: string }>('/api/tools/random?bytes=12')).hex })}
+                      aria-label={t('common.generate')}
+                    >
+                      <Wand2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </Field>
               </>
             )}
             {s.network === 'xhttp' && (

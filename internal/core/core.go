@@ -70,7 +70,7 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 	// such a port listens on TCP only, so both run on one port number
 	udpTaken := map[int]bool{}
 	for _, in := range inbounds {
-		if in.Protocol.Core() != "xray" {
+		if UDP(in) {
 			udpTaken[in.Port] = true
 		}
 	}
@@ -91,7 +91,7 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		if wildcard(listen) {
 			listen = "*"
 		}
-		key := fmt.Sprint(in.Protocol, "|", listen, "|", in.Port)
+		key := fmt.Sprint(in.Protocol, "|", listen, "|", in.Port, "|", UDP(in))
 		if i, ok := listener[key]; ok {
 			mergeXray(xin[i], x)
 			alias[in.Tag] = xin[i]["tag"].(string)
@@ -248,6 +248,7 @@ func xrayStream(s model.InboundSettings) map[string]any {
 			}
 		}
 		st["kcpSettings"] = kcp
+		st["finalmask"] = sub.KCPMask(s)
 	case "httpupgrade":
 		st["httpupgradeSettings"] = map[string]any{"path": orDefault(s.Path, "/"), "host": s.Host}
 	case "xhttp":

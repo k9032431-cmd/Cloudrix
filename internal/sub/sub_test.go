@@ -203,3 +203,18 @@ func TestCleanNameKeepsFlagFirst(t *testing.T) {
 		}
 	}
 }
+
+func TestKCPLinkCarriesMask(t *testing.T) {
+	in := &model.Inbound{Tag: "kcp", Protocol: model.ProtoVLESS, Port: 2000, CoreID: 1, Enabled: true,
+		Settings: model.InboundSettings{Network: "kcp", KCPHeader: "wechat", KCPSeed: "s3cret"}}
+	eps := Resolve(testUser(), []*model.Inbound{in}, nil, oneNode(), "h")
+	l := Link(testUser(), eps[0])
+	u, err := url.Parse(l)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fm := u.Query().Get("fm")
+	if u.Query().Get("type") != "kcp" || !strings.Contains(fm, "header-wechat") || !strings.Contains(fm, `"password":"s3cret"`) {
+		t.Fatalf("kcp link: %s", l)
+	}
+}

@@ -174,6 +174,10 @@ func transportQuery(s model.InboundSettings) url.Values {
 		q.Set("mode", "gun")
 	case "kcp":
 		q.Set("headerType", "none")
+		// Xray 26 clients take the mKCP masking from "fm"
+		if fm, err := json.Marshal(KCPMask(s)); err == nil {
+			q.Set("fm", string(fm))
+		}
 	case "tcp":
 		if s.HeaderType == "http" {
 			q.Set("headerType", "http")
@@ -228,4 +232,23 @@ func orDefaultSlice(v, def []string) []string {
 		return def
 	}
 	return v
+}
+
+// KCPMask is the Xray 26 finalmask of an mKCP inbound; clients use the same
+// one (links carry it in "fm").
+func KCPMask(s model.InboundSettings) map[string]any {
+	var udp []map[string]any
+	switch s.KCPHeader {
+	case "":
+	case "dns":
+		udp = append(udp, map[string]any{"type": "header-dns", "settings": map[string]any{"domain": orDefault(s.KCPHeaderDomain, "www.google.com")}})
+	default:
+		udp = append(udp, map[string]any{"type": "header-" + s.KCPHeader})
+	}
+	if s.KCPSeed != "" {
+		udp = append(udp, map[string]any{"type": "mkcp-aes128gcm", "settings": map[string]any{"password": s.KCPSeed}})
+	} else {
+		udp = append(udp, map[string]any{"type": "mkcp-original"})
+	}
+	return map[string]any{"udp": udp}
 }

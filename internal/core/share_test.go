@@ -117,3 +117,27 @@ func TestShadowsocksNextToHysteria(t *testing.T) {
 		t.Fatal("shadowsocks alone lost UDP")
 	}
 }
+
+func TestKCPIsUDP(t *testing.T) {
+	kcp := &model.Inbound{Protocol: model.ProtoVLESS, Port: 443, Settings: model.InboundSettings{Network: "kcp"}}
+	if PortClash(kcp, &model.Inbound{Protocol: model.ProtoTrojan, Port: 443}) {
+		t.Fatal("mKCP (UDP) clashes with trojan (TCP)")
+	}
+	if !PortClash(kcp, &model.Inbound{Protocol: model.ProtoHysteria2, Port: 443}) {
+		t.Fatal("mKCP and hysteria2 on one UDP port do not clash")
+	}
+}
+
+func TestKCPAndTCPOfOneProtocolStayApart(t *testing.T) {
+	users := []*model.User{{ID: 1, Username: "a", Status: model.StatusActive, Credentials: model.Credentials{UUID: "11111111-1111-1111-1111-111111111111"}}}
+	b, err := Xray([]*model.Inbound{
+		{ID: 1, Tag: "tcp", Protocol: model.ProtoVLESS, Port: 443, Enabled: true},
+		{ID: 2, Tag: "kcp", Protocol: model.ProtoVLESS, Port: 443, Enabled: true, Settings: model.InboundSettings{Network: "kcp"}},
+	}, users, nil, Cascade{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"tag": "kcp"`) || !strings.Contains(string(b), `"tag": "tcp"`) {
+		t.Fatalf("one listener for tcp and kcp:\n%s", b)
+	}
+}
