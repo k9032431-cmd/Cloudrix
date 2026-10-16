@@ -37,7 +37,17 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   const token = getToken()
   if (token) headers.Authorization = `Bearer ${token}`
   if (body !== undefined) headers['Content-Type'] = 'application/json'
-  const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) })
+  // a stalled network (switching Wi-Fi/VPN) must not hang a page forever
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 20_000)
+  let res: Response
+  try {
+    res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: ctrl.signal })
+  } catch {
+    throw new ApiError(0, 'network error: the panel did not answer, check the connection and try again')
+  } finally {
+    clearTimeout(timer)
+  }
   if (res.status === 401 && path !== '/api/auth/login') {
     setToken(null)
     unauthorizedListeners.forEach((fn) => fn())

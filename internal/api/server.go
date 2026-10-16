@@ -203,6 +203,11 @@ func (s *Server) serveSPA(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if strings.HasPrefix(p, "assets/") {
+		// a file of another build: fail fast so the page reloads itself
+		http.NotFound(w, r)
+		return
+	}
 	index, err := fs.ReadFile(s.web, "index.html")
 	if err != nil {
 		http.Error(w, "web UI is not built; run `make web`", http.StatusNotFound)

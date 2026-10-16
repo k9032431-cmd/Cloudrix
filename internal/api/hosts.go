@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
+	"github.com/k9032431-cmd/cloudrix/internal/sub"
 )
 
 var fingerprints = []string{"", "chrome", "firefox", "safari", "ios", "android", "edge", "360", "qq", "random", "randomized"}
@@ -24,7 +25,7 @@ func cleanList(v []string) []string {
 
 func validateHost(h *model.Host) error {
 	s := &h.HostSettings
-	s.Remark = strings.TrimSpace(s.Remark)
+	s.Remark = sub.CleanName(s.Remark)
 	s.Address, s.SNI, s.Host = cleanList(s.Address), cleanList(s.SNI), cleanList(s.Host)
 	s.Path = strings.TrimSpace(s.Path)
 	switch {

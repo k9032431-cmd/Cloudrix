@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 )
@@ -167,11 +168,28 @@ func withHost(in *model.Inbound, h model.HostSettings) *model.Inbound {
 
 // RenderRemark expands template variables in an inbound remark (see RenderTemplate).
 func RenderRemark(in *model.Inbound, u *model.User) string {
-	remark := in.Remark
+	remark := CleanName(in.Remark)
 	if remark == "" {
 		remark = in.Tag
 	}
 	return strings.ReplaceAll(RenderTemplate(remark, u), "{PROTOCOL}", string(in.Protocol))
+}
+
+// invisible marks that sneak in with copied text or phone keyboards; before
+// a flag they stop apps (Happ, v2rayNG…) from showing it as the server icon
+var invisible = strings.NewReplacer(
+	"\u200b", "", "\u200c", "", "\u200e", "", "\u200f", "", "\u202a", "", "\u202b", "", "\u202c", "",
+	"\u202d", "", "\u202e", "", "\u2060", "", "\u2066", "", "\u2067", "", "\u2068", "", "\u2069", "",
+	"\ufeff", "", "\u00ad", "",
+)
+
+// CleanName drops invisible characters and outer spaces from a link name,
+// so a leading flag emoji is the very first character.
+func CleanName(s string) string {
+	s = invisible.Replace(s)
+	// a stray variation selector or joiner before the first visible character
+	s = strings.TrimLeftFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '\ufe0f' || r == '\ufe0e' || r == '\u200d' })
+	return strings.TrimRightFunc(s, unicode.IsSpace)
 }
 
 // RenderTemplate fills user variables into admin-written text:
