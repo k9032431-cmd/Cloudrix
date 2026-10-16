@@ -139,6 +139,10 @@ export default function Nodes() {
         <NodeForm
           node={editing === 'new' ? null : editing}
           onClose={() => setEditing(null)}
+          onDelete={(n) => {
+            setEditing(null)
+            setDeleting(n)
+          }}
           onSaved={(saved, created) => {
             setEditing(null)
             reload()
@@ -220,7 +224,17 @@ function Step({ n, children }: { n: number; children: React.ReactNode }) {
   )
 }
 
-function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () => void; onSaved: (n: Node, created: boolean) => void }) {
+function NodeForm({
+  node,
+  onClose,
+  onDelete,
+  onSaved,
+}: {
+  node: Node | null
+  onClose: () => void
+  onDelete: (n: Node) => void
+  onSaved: (n: Node, created: boolean) => void
+}) {
   const { t } = useI18n()
   const { data: cores } = useFetch<Core[]>('/api/cores')
   const [form, setForm] = useState({
@@ -256,6 +270,12 @@ function NodeForm({ node, onClose, onSaved }: { node: Node | null; onClose: () =
       title={node ? `${t('common.edit')}: ${node.name}` : t('nodes.new')}
       footer={
         <>
+          {node && (
+            <Button variant="danger" className="mr-auto" onClick={() => onDelete(node)}>
+              <Trash2 />
+              {t('common.delete')}
+            </Button>
+          )}
           <Button variant="secondary" onClick={onClose}>
             {t('common.cancel')}
           </Button>
