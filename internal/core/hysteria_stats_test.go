@@ -49,17 +49,7 @@ func TestHysteriaCountsUsers(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the test web server is on loopback, which the config sends to block
-	var cfg map[string]any
-	_ = json.Unmarshal(srvCfg, &cfg)
-	routing := cfg["routing"].(map[string]any)
-	var rules []any
-	for _, r := range routing["rules"].([]any) {
-		if _, ok := r.(map[string]any)["ip"]; !ok {
-			rules = append(rules, r)
-		}
-	}
-	routing["rules"] = rules
-	srvCfg, _ = json.Marshal(cfg)
+	srvCfg = reachLoopback(srvCfg)
 	socks := freeTCP(t)
 	cliCfg, _ := json.Marshal(map[string]any{
 		"inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": socks, "protocol": "socks"}},

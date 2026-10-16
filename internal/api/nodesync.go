@@ -106,6 +106,9 @@ func (s *Server) nodeConfigs(ctx context.Context, id int64) (xray, singbox []byt
 		if xray, err = core.Xray(xin, users, groups, cascade); err != nil {
 			return nil, nil, nil, "", err
 		}
+		if core.XrayBefore(node.CoreVersion, 26, 6) {
+			xray = core.LegacyKCPMasks(xray)
+		}
 	}
 	if len(sin) > 0 {
 		if singbox, err = core.SingBox(sin, users, groups); err != nil {

@@ -88,7 +88,7 @@ func TestSharedPort(t *testing.T) {
 		t.Skip("set XRAY_BIN to check with xray run -test")
 	}
 	p := filepath.Join(t.TempDir(), "x.json")
-	_ = os.WriteFile(p, b, 0o600)
+	_ = os.WriteFile(p, forXray(t, xray, b), 0o600)
 	if out, err := exec.Command(xray, "run", "-test", "-c", p).CombinedOutput(); err != nil {
 		t.Fatalf("xray: %v\n%s", err, out)
 	}

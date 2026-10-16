@@ -237,18 +237,21 @@ func orDefaultSlice(v, def []string) []string {
 // KCPMask is the Xray 26 finalmask of an mKCP inbound; clients use the same
 // one (links carry it in "fm").
 func KCPMask(s model.InboundSettings) map[string]any {
+	// one mkcp-legacy mask per layer, as Xray 26.6+ names them: the header
+	// disguise, then the password (none of them = the plain XOR mask)
 	var udp []map[string]any
-	switch s.KCPHeader {
-	case "":
-	case "dns":
-		udp = append(udp, map[string]any{"type": "header-dns", "settings": map[string]any{"domain": orDefault(s.KCPHeaderDomain, "www.google.com")}})
-	default:
-		udp = append(udp, map[string]any{"type": "header-" + s.KCPHeader})
+	if s.KCPHeader != "" {
+		h := map[string]any{"header": s.KCPHeader}
+		if s.KCPHeader == "dns" {
+			h["value"] = orDefault(s.KCPHeaderDomain, "www.google.com")
+		}
+		udp = append(udp, map[string]any{"type": "mkcp-legacy", "settings": h})
 	}
 	if s.KCPSeed != "" {
-		udp = append(udp, map[string]any{"type": "mkcp-aes128gcm", "settings": map[string]any{"password": s.KCPSeed}})
-	} else {
-		udp = append(udp, map[string]any{"type": "mkcp-original"})
+		udp = append(udp, map[string]any{"type": "mkcp-legacy", "settings": map[string]any{"value": s.KCPSeed}})
+	}
+	if len(udp) == 0 {
+		udp = append(udp, map[string]any{"type": "mkcp-legacy"})
 	}
 	return map[string]any{"udp": udp}
 }

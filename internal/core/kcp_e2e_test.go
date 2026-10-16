@@ -18,11 +18,16 @@ import (
 )
 
 // TestKCPConnects runs a vless mKCP inbound from the generated config on a
-// real Xray (XRAY_BIN) and connects with the masking the share link carries.
+// real Xray (XRAY_BIN) and connects with the masking the share link carries,
+// from the same Xray or another version (XRAY_CLIENT_BIN), as a phone does.
 func TestKCPConnects(t *testing.T) {
 	bin := os.Getenv("XRAY_BIN")
 	if bin == "" {
 		t.Skip("set XRAY_BIN to run a real xray")
+	}
+	clientBin := os.Getenv("XRAY_CLIENT_BIN")
+	if clientBin == "" {
+		clientBin = bin
 	}
 	for _, tc := range []struct{ name, header, seed string }{{"plain", "", ""}, {"seed", "", "s3cret"}, {"wechat+seed", "wechat", "s3cret"}, {"dns", "dns", ""}} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -40,29 +45,23 @@ func TestKCPConnects(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var cfg map[string]any
-			_ = json.Unmarshal(srvCfg, &cfg)
-			routing := cfg["routing"].(map[string]any)
-			var rules []any
-			for _, r := range routing["rules"].([]any) {
-				if _, ok := r.(map[string]any)["ip"]; !ok {
-					rules = append(rules, r)
-				}
-			}
-			routing["rules"] = rules
-			srvCfg, _ = json.Marshal(cfg)
+			srvCfg = reachLoopback(srvCfg)
 
 			socks := freeTCP(t)
 			cliCfg, _ := json.Marshal(map[string]any{
 				"inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": socks, "protocol": "socks"}},
 				"outbounds": []any{map[string]any{"protocol": "vless", "settings": map[string]any{"vnext": []any{map[string]any{"address": "127.0.0.1", "port": port,
 					"users": []any{map[string]any{"id": "11111111-1111-1111-1111-111111111111", "encryption": "none"}}}}},
-					"streamSettings": map[string]any{"network": "kcp", "finalmask": sub.KCPMask(s)}}},
+					"streamSettings": clientKCP(t, clientBin, s)}},
 			})
 			run := func(name string, c []byte) {
 				p := filepath.Join(dir, name)
 				_ = os.WriteFile(p, c, 0o600)
-				cmd := exec.Command(bin, "run", "-c", p)
+				b := bin
+				if name == "client.json" {
+					b = clientBin
+				}
+				cmd := exec.Command(b, "run", "-c", p)
 				out, _ := os.Create(p + ".log")
 				cmd.Stdout, cmd.Stderr = out, out
 				if err := cmd.Start(); err != nil {
@@ -70,7 +69,7 @@ func TestKCPConnects(t *testing.T) {
 				}
 				t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
 			}
-			run("server.json", srvCfg)
+			run("server.json", forXray(t, bin, srvCfg))
 			run("client.json", cliCfg)
 
 			web := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write(make([]byte, 100000)) })}
@@ -95,4 +94,17 @@ func TestKCPConnects(t *testing.T) {
 			}
 		})
 	}
+}
+
+// clientKCP is the client side of the share link: the "fm" masks, in the
+// names the client's core knows.
+func clientKCP(t *testing.T, bin string, s model.InboundSettings) map[string]any {
+	wrap, _ := json.Marshal(map[string]any{"inbounds": []any{map[string]any{"streamSettings": map[string]any{"finalmask": sub.KCPMask(s)}}}})
+	var c struct {
+		Inbounds []struct {
+			StreamSettings map[string]any `json:"streamSettings"`
+		} `json:"inbounds"`
+	}
+	_ = json.Unmarshal(forXray(t, bin, wrap), &c)
+	return map[string]any{"network": "kcp", "finalmask": c.Inbounds[0].StreamSettings["finalmask"]}
 }

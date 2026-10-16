@@ -214,7 +214,8 @@ func TestKCPLinkCarriesMask(t *testing.T) {
 		t.Fatal(err)
 	}
 	fm := u.Query().Get("fm")
-	if u.Query().Get("type") != "kcp" || !strings.Contains(fm, "header-wechat") || !strings.Contains(fm, `"password":"s3cret"`) {
+	if u.Query().Get("type") != "kcp" || u.Query().Has("headerType") || !strings.Contains(fm, `"mkcp-legacy"`) ||
+		!strings.Contains(fm, `"header":"wechat"`) || !strings.Contains(fm, `"value":"s3cret"`) {
 		t.Fatalf("kcp link: %s", l)
 	}
 }

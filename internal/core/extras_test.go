@@ -37,7 +37,7 @@ func TestEditorExtras(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`"fallbacks"`, `"rejectUnknownSni": true`, `"minClientVer"`, `"kcpSettings"`, `"mkcp-aes128gcm"`, `"header-wechat"`, `"xPaddingBytes"`, `"heartbeatPeriod": 30`, `"acceptProxyProtocol": true`, `"routeOnly": true`, `"network": "tcp"`} {
+	for _, want := range []string{`"fallbacks"`, `"rejectUnknownSni": true`, `"minClientVer"`, `"kcpSettings"`, `"mkcp-legacy"`, `"header": "wechat"`, `"xPaddingBytes"`, `"heartbeatPeriod": 30`, `"acceptProxyProtocol": true`, `"routeOnly": true`, `"network": "tcp"`} {
 		if !strings.Contains(string(x), want) {
 			t.Errorf("xray config lacks %s", want)
 		}
@@ -67,6 +67,9 @@ func TestEditorExtras(t *testing.T) {
 		if out, err := exec.Command(bin, args(p)...).CombinedOutput(); err != nil {
 			t.Errorf("%s rejects the config: %v\n%s", env, err, out)
 		}
+	}
+	if bin := os.Getenv("XRAY_BIN"); bin != "" {
+		x = forXray(t, bin, x)
 	}
 	check("XRAY_BIN", func(p string) []string { return []string{"run", "-test", "-c", p} }, x)
 	check("SINGBOX_BIN", func(p string) []string { return []string{"check", "-c", p} }, sb)

@@ -401,6 +401,9 @@ func (s *Server) handleCoreConfig(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Query().Get("core") {
 	case "", "xray":
 		body, err = core.Xray(selected, users, groups, cascade)
+		if err == nil && node != nil && core.XrayBefore(node.CoreVersion, 26, 6) {
+			body = core.LegacyKCPMasks(body) // as the node gets it
+		}
 	case "sing-box":
 		body, err = core.SingBox(selected, users, groups)
 	default:

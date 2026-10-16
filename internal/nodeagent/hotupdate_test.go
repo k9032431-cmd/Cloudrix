@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -83,9 +84,16 @@ func TestHotUpdateHysteria(t *testing.T) {
 	if !a.hotUpdate(ctx, start, cfg(hy1, vl2)) {
 		t.Fatal("a new vless user should be added without a restart")
 	}
+	// Xray before 26.6 cannot add hysteria users through the API (and still
+	// exits 0): then the update must ask for a restart, never claim success
 	hy2 := append(hy1, map[string]any{"auth": "d", "email": "4.d"})
-	if a.hotUpdate(ctx, cfg(hy1, vl2), cfg(hy2, vl2)) {
-		t.Fatal("a new hysteria user cannot be added through the API: restart needed")
+	hot := a.hotUpdate(ctx, cfg(hy1, vl2), cfg(hy2, vl2))
+	out, err := a.xrayAPI(ctx, "inbounduser", "-tag=hy")
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	if added := strings.Contains(string(out), "4.d"); hot != added {
+		t.Fatalf("hot update said %v, user added: %v\n%s", hot, added, out)
 	}
 }
 
