@@ -114,3 +114,22 @@ func affected(res sql.Result, err error) error {
 	}
 	return nil
 }
+
+// AdminNames maps admin ids to usernames.
+func (s *Store) AdminNames(ctx context.Context) (map[int64]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, username FROM admins`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]string{}
+	for rows.Next() {
+		var id int64
+		var name string
+		if err := rows.Scan(&id, &name); err != nil {
+			return nil, err
+		}
+		out[id] = name
+	}
+	return out, rows.Err()
+}

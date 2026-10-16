@@ -103,6 +103,7 @@ type User struct {
 	Inbounds       []string      `json:"inbounds"`     // legacy, without groups: inbound tags, empty = all enabled
 	Note           string        `json:"note"`
 	AdminID        int64         `json:"admin_id"`
+	AdminName      string        `json:"admin_name,omitempty"` // who created the user (filled by the API)
 	Credentials    Credentials   `json:"credentials"`
 	CreatedAt      time.Time     `json:"created_at"`
 	OnlineAt       *time.Time    `json:"online_at"`

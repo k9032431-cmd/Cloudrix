@@ -109,6 +109,7 @@ export default function UserDetails({
           {user.sub_user_agent && <div className="truncate text-xs text-faint">{user.sub_user_agent}</div>}
         </Info>
         <Info label={t('users.created')}>{formatDate(user.created_at, lang)}</Info>
+        {user.admin_name && <Info label={t('users.createdBy')}>{user.admin_name}</Info>}
       </div>
 
       {traffic && traffic.length > 0 && (

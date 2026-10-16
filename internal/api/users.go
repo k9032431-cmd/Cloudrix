@@ -144,8 +144,10 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	names, _ := s.store.AdminNames(r.Context())
 	for _, u := range users {
 		s.decorateUser(u)
+		u.AdminName = names[u.AdminID]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users, "total": total})
 }
@@ -195,6 +197,9 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
 	if u, ok := s.ownedUser(w, r); ok {
 		s.decorateUser(u)
+		if names, err := s.store.AdminNames(r.Context()); err == nil {
+			u.AdminName = names[u.AdminID]
+		}
 		writeJSON(w, http.StatusOK, u)
 	}
 }

@@ -34,6 +34,7 @@ export interface User {
   group_ids: number[]
   note: string
   admin_id: number
+  admin_name?: string // who created the user
   created_at: string
   online_at: string | null
   sub_updated_at: string | null

@@ -195,7 +195,12 @@ export default function UsersPage() {
                         <div className="min-w-0">
                           <div className="truncate font-medium text-foreground">{u.username}</div>
                           {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
-                          <div className="mt-1 show-sm">
+                          {u.admin_name && (
+                            <div className="max-w-[220px] truncate text-xs text-faint" title={t('users.createdBy')}>
+                              {t('users.by', { admin: u.admin_name })}
+                            </div>
+                          )}
+                          <div className="mt-1.5 show-sm">
                             <UserPresenceBadge user={u} />
                           </div>
                         </div>

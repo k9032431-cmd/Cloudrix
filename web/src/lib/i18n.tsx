@@ -184,6 +184,8 @@ const ru = {
   'users.lastSub': 'Обновлял подписку',
   'users.lifetime': 'За всё время',
   'users.created': 'Создан',
+  'users.createdBy': 'Кто создал',
+  'users.by': 'создал: {admin}',
   'users.total': 'Всего: {n}',
 
   'inbounds.new': 'Добавить входящий',
@@ -694,6 +696,8 @@ const en: Record<Key, string> = {
   'users.lastSub': 'Last subscription update',
   'users.lifetime': 'Lifetime',
   'users.created': 'Created',
+  'users.createdBy': 'Created by',
+  'users.by': 'by {admin}',
   'users.total': 'Total: {n}',
 
   'inbounds.new': 'Add inbound',

@@ -754,6 +754,10 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
   .page-head { padding: 10px 0 16px; align-items: stretch; }
   .page-actions { width: 100%; }
   .page-actions .seg { flex: 1; }
+  /* the main action fills the row next to icon buttons */
+  .page-actions > .btn-primary { flex: 1; }
+  /* rows that wrap onto several lines get air above and below */
+  .dt td { height: auto; min-height: var(--row-h); padding-top: 10px; padding-bottom: 10px; }
   .grid12 { gap: 12px; }
   .grid12 > .col-3 { grid-column: span 6; }
   .kpi { padding: 14px 14px 0; }
