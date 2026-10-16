@@ -912,6 +912,15 @@ self_update() {
   rm -f "$tmp"
 }
 
+# set_env_var NAME VALUE задаёт переменную в $ENV_FILE, заменяя старое значение.
+set_env_var() {
+  if grep -q "^$1=" "$ENV_FILE"; then
+    sed -i "s|^$1=.*|$1=$2|" "$ENV_FILE"
+  else
+    printf '%s=%s\n' "$1" "$2" >>"$ENV_FILE"
+  fi
+}
+
 cmd_update() {
   require_root
   detect_os
@@ -951,9 +960,10 @@ cmd_update() {
 
   cp -p "$BIN" "$BIN.prev"
   install_binary
-  # Старые установки не знали, откуда ставить ноды: дописываем.
-  grep -q '^CLOUDRIX_REPO=' "$ENV_FILE" || printf 'CLOUDRIX_REPO=%s\n' "$REPO" >>"$ENV_FILE"
-  grep -q '^CLOUDRIX_BRANCH=' "$ENV_FILE" || printf 'CLOUDRIX_BRANCH=%s\n' "${BRANCH:-main}" >>"$ENV_FILE"
+  # Откуда ставить ноды: тот же репозиторий и ветка, что и у панели
+  # (после перехода на другую ветку команды нод тоже берут новую).
+  set_env_var CLOUDRIX_REPO "$REPO"
+  set_env_var CLOUDRIX_BRANCH "${BRANCH:-main}"
   systemctl restart "$SERVICE"
   PANEL_PORT=$(panel_port) TLS=$(panel_tls)
   if ! wait_healthy; then
