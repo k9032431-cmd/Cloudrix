@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,7 +132,8 @@ func (a *Agent) hotUpdate(ctx context.Context, oldCfg, newCfg []byte) bool {
 		}
 		out, err := a.xrayAPI(ctx, "adu", file)
 		_ = os.Remove(file)
-		if err != nil {
+		if err != nil || addedUsers(out) != len(add) {
+			// adu exits 0 even for inbounds it cannot add users to (hysteria)
 			a.log.Warn("xray adu failed, restarting instead", "err", err, "out", string(out))
 			return false
 		}
@@ -139,6 +141,21 @@ func (a *Agent) hotUpdate(ctx context.Context, oldCfg, newCfg []byte) bool {
 	a.log.Info("xray users updated without restart")
 	return true
 }
+
+// addedUsers reads how many users "xray api adu" says it added, or -1.
+func addedUsers(out []byte) int {
+	m := addedRe.FindSubmatch(out)
+	if m == nil {
+		return -1
+	}
+	n, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		return -1
+	}
+	return n
+}
+
+var addedRe = regexp.MustCompile(`Added (\d+) user`)
 
 // splitClients returns clients by inbound tag and email, plus the config
 // with every client list emptied (to compare everything else).
