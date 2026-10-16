@@ -227,7 +227,7 @@ export default function CoreEditor() {
                   </Td>
                   <Td className="hide-md text-muted-foreground">
                     {XRAY.includes(ib.protocol) && ib.protocol !== 'shadowsocks'
-                      ? `${ib.settings.network || 'tcp'} / ${ib.settings.security || 'none'}`
+                      ? `${ib.settings.network === 'kcp' ? 'mKCP' : ib.settings.network || 'tcp'} / ${ib.settings.security || 'none'}`
                       : ib.protocol === 'shadowsocks'
                         ? ib.settings.ss_method
                         : 'udp'}
@@ -603,7 +603,9 @@ function InboundForm({
                 }}
               >
                 {['tcp', 'ws', 'grpc', 'xhttp', 'httpupgrade', 'kcp'].map((n) => (
-                  <option key={n}>{n}</option>
+                  <option key={n} value={n}>
+                    {n === 'kcp' ? 'mKCP' : n}
+                  </option>
                 ))}
               </Select>
             </Field>
