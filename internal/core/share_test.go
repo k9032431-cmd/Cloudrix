@@ -141,3 +141,17 @@ func TestKCPAndTCPOfOneProtocolStayApart(t *testing.T) {
 		t.Fatalf("one listener for tcp and kcp:\n%s", b)
 	}
 }
+
+func TestRealityOverKCPIsLeftOut(t *testing.T) {
+	users := []*model.User{{ID: 1, Username: "a", Status: model.StatusActive, Credentials: model.Credentials{UUID: "11111111-1111-1111-1111-111111111111"}}}
+	b, err := Xray([]*model.Inbound{
+		{ID: 1, Tag: "ok", Protocol: model.ProtoVLESS, Port: 443, Enabled: true},
+		{ID: 2, Tag: "bad", Protocol: model.ProtoVLESS, Port: 2000, Enabled: true, Settings: model.InboundSettings{Network: "kcp", Security: "reality"}},
+	}, users, nil, Cascade{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), `"tag": "bad"`) || !strings.Contains(string(b), `"tag": "ok"`) {
+		t.Fatalf("reality over kcp must be left out, the rest kept:\n%s", b)
+	}
+}

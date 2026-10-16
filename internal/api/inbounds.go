@@ -58,6 +58,9 @@ func validateInbound(in *model.Inbound) error {
 		if in.Protocol != model.ProtoVLESS && in.Protocol != model.ProtoTrojan {
 			return errors.New("reality is supported for vless and trojan only")
 		}
+		if !core.RealityTransport(s.Network) {
+			return errors.New("REALITY works only over tcp, xhttp and grpc: pick one of them, or security none/tls for " + s.Network)
+		}
 		if s.RealityPrivateKey == "" || s.RealityPublicKey == "" || s.RealityDest == "" {
 			return errors.New("reality requires reality_dest and a key pair")
 		}

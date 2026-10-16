@@ -594,7 +594,14 @@ function InboundForm({
         {streamProto && (
           <Section title={t('inbounds.transport')}>
             <Field label="Network">
-              <Select value={s.network || 'tcp'} onChange={(e) => setS({ network: e.target.value })}>
+              <Select
+                value={s.network || 'tcp'}
+                onChange={(e) => {
+                  const network = e.target.value
+                  // REALITY runs only over tcp, xhttp and grpc
+                  setS(s.security === 'reality' && !['tcp', 'xhttp', 'grpc'].includes(network) ? { network, security: 'none' } : { network })
+                }}
+              >
                 {['tcp', 'ws', 'grpc', 'xhttp', 'httpupgrade', 'kcp'].map((n) => (
                   <option key={n}>{n}</option>
                 ))}
@@ -723,7 +730,7 @@ function InboundForm({
               <Select value={s.security || 'none'} onChange={(e) => setS({ security: e.target.value })}>
                 <option>none</option>
                 <option>tls</option>
-                {ib.protocol !== 'vmess' && <option>reality</option>}
+                {ib.protocol !== 'vmess' && ['tcp', 'xhttp', 'grpc'].includes(s.network || 'tcp') && <option>reality</option>}
               </Select>
             </Field>
             {s.security === 'tls' && (

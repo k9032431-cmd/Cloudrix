@@ -79,6 +79,10 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		if in.Protocol.Core() != "xray" {
 			continue
 		}
+		if in.Settings.Security == "reality" && !RealityTransport(in.Settings.Network) {
+			// Xray would refuse the node's whole config for this one inbound
+			continue
+		}
 		x, err := xrayInbound(in, usersFor(in, users, groups))
 		if err != nil {
 			return nil, fmt.Errorf("inbound %s: %w", in.Tag, err)
@@ -531,4 +535,13 @@ func orDefaultSlice(v, def []string) []string {
 		return def
 	}
 	return v
+}
+
+// RealityTransport reports whether Xray accepts REALITY over the transport.
+func RealityTransport(network string) bool {
+	switch network {
+	case "", "tcp", "xhttp", "grpc":
+		return true
+	}
+	return false
 }
