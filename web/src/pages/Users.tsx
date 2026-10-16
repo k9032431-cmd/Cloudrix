@@ -194,9 +194,7 @@ export default function UsersPage() {
                     </Td>
                     <Td>
                       <div className="flex items-center gap-2.5">
-                        <span className="av av-md">
-                          {u.username.slice(0, 2)}
-                        </span>
+                        <StatusDot user={u} />
                         <div className="min-w-0">
                           <div className="truncate font-medium text-foreground">{u.username}</div>
                           {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
@@ -208,7 +206,7 @@ export default function UsersPage() {
                           {/* phones: status and creator in one small line */}
                           <div className="mt-0.5 show-sm">
                             <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                              <PresenceDot user={u} />
+                              <PresenceText user={u} />
                               {u.admin_name && <span className="truncate text-faint">· {u.admin_name}</span>}
                             </div>
                           </div>
@@ -323,21 +321,34 @@ function OnlineDot({ iso }: { iso: string | null }) {
   return <span className={cx('mr-2 inline-block h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-border-strong')} />
 }
 
-// PresenceDot is the compact status for phone rows: a coloured dot and a word.
-function PresenceDot({ user }: { user: User }) {
+// StatusDot stands in for the avatar: green while the key is in use, grey
+// when it is not, the status colour for keys that cannot be used.
+function StatusDot({ user }: { user: User }) {
   const { t } = useI18n()
   const online = user.status === 'active' && isOnline(user.online_at)
   const color =
     user.status === 'active'
       ? online
         ? 'bg-success'
-        : 'bg-faint'
-      : { expired: 'bg-destructive', limited: 'bg-warning', on_hold: 'bg-violet', disabled: 'bg-faint' }[user.status as string] ?? 'bg-faint'
-  const label = user.status === 'active' ? t(online ? 'presence.online' : 'presence.offline') : t(`status.${user.status}`)
+        : 'bg-border-strong'
+      : { expired: 'bg-destructive', limited: 'bg-warning', on_hold: 'bg-violet', disabled: 'bg-border-strong' }[user.status as string] ?? 'bg-border-strong'
   return (
-    <span className="inline-flex shrink-0 items-center gap-1">
-      <span className={'h-1.5 w-1.5 rounded-full ' + color} aria-hidden />
-      {label}
+    <span className="relative flex h-3 w-3 shrink-0" title={t(online ? 'presence.online' : 'presence.offline')}>
+      {online && <span className={'absolute inset-0 animate-ping rounded-full opacity-60 ' + color} aria-hidden />}
+      <span className={'relative h-3 w-3 rounded-full ' + color} aria-hidden />
     </span>
   )
+}
+
+// PresenceText is the status line of phone rows: "Online", "Online 5 minutes
+// ago" for an idle key, or the status of a key that cannot be used.
+function PresenceText({ user }: { user: User }) {
+  const { t, lang } = useI18n()
+  if (user.status !== 'active') {
+    const color = { expired: 'text-destructive', limited: 'text-warning', on_hold: 'text-violet' }[user.status as string] ?? ''
+    return <span className={'shrink-0 ' + color}>{t(`status.${user.status}`)}</span>
+  }
+  if (isOnline(user.online_at)) return <span className="shrink-0 text-success">{t('presence.online')}</span>
+  if (!user.online_at) return <span className="shrink-0">{t('presence.never')}</span>
+  return <span className="shrink-0">{t('presence.ago', { when: relativeTime(user.online_at, lang) })}</span>
 }
