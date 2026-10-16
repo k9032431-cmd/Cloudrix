@@ -173,8 +173,8 @@ func transportQuery(s model.InboundSettings) url.Values {
 		setNonEmpty(q, "serviceName", s.ServiceName)
 		q.Set("mode", "gun")
 	case "kcp":
-		q.Set("headerType", "none")
-		// Xray 26 clients take the mKCP masking from "fm"
+		// Xray 26 clients take the mKCP masking from "fm"; no headerType or
+		// seed: Xray 26 refuses a config that still carries them
 		if fm, err := json.Marshal(KCPMask(s)); err == nil {
 			q.Set("fm", string(fm))
 		}
