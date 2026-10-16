@@ -196,6 +196,7 @@ func TestCleanNameKeepsFlagFirst(t *testing.T) {
 		"\u200e" + fr + " France\u200b":          fr + " France",
 		"\ufe0f" + fr + " France":                fr + " France",
 		"\U0001F3F3\ufe0f\u200d\U0001F308 Pride": "\U0001F3F3\ufe0f\u200d\U0001F308 Pride", // joiners inside an emoji stay
+		"\U0001F1E8\U0001F1F5 SHADOWSOCKS":       fr + " SHADOWSOCKS",                      // Clipperton looks like France
 	} {
 		if got := CleanName(in); got != want {
 			t.Errorf("CleanName(%q) = %q, want %q", in, got, want)

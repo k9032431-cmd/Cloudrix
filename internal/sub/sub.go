@@ -183,10 +183,25 @@ var invisible = strings.NewReplacer(
 	"\ufeff", "", "\u00ad", "",
 )
 
+// flagTwins maps territory flags that look like a country's flag to that
+// country's: phone keyboards often offer 🇨🇵 (Clipperton) for France, and
+// apps do not know those codes, so they show no flag icon.
+var flagTwins = func() *strings.Replacer {
+	flag := func(code string) string {
+		return string([]rune{0x1F1E6 + rune(code[0]-'A'), 0x1F1E6 + rune(code[1]-'A')})
+	}
+	var pairs []string
+	for twin, real := range map[string]string{"CP": "FR", "MF": "FR", "BV": "NO", "SJ": "NO", "UM": "US", "EA": "ES", "HM": "AU"} {
+		pairs = append(pairs, flag(twin), flag(real))
+	}
+	return strings.NewReplacer(pairs...)
+}()
+
 // CleanName drops invisible characters and outer spaces from a link name,
-// so a leading flag emoji is the very first character.
+// so a leading flag emoji is the very first character, and turns look-alike
+// territory flags into the country's flag.
 func CleanName(s string) string {
-	s = invisible.Replace(s)
+	s = flagTwins.Replace(invisible.Replace(s))
 	// a stray variation selector or joiner before the first visible character
 	s = strings.TrimLeftFunc(s, func(r rune) bool { return unicode.IsSpace(r) || r == '\ufe0f' || r == '\ufe0e' || r == '\u200d' })
 	return strings.TrimRightFunc(s, unicode.IsSpace)
