@@ -758,6 +758,7 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
   .page-actions > .btn-primary { flex: 1; }
   /* rows that wrap onto several lines get air above and below */
   .dt td { height: auto; min-height: var(--row-h); padding-top: 10px; padding-bottom: 10px; }
+  .dt .av-md { --s: 28px; font-size: 11px; }
   .grid12 { gap: 12px; }
   .grid12 > .col-3 { grid-column: span 6; }
   .kpi { padding: 14px 14px 0; }

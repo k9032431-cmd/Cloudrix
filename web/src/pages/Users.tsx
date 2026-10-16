@@ -196,12 +196,16 @@ export default function UsersPage() {
                           <div className="truncate font-medium text-foreground">{u.username}</div>
                           {u.note && <div className="max-w-[220px] truncate text-xs text-faint">{u.note}</div>}
                           {u.admin_name && (
-                            <div className="max-w-[220px] truncate text-xs text-faint" title={t('users.createdBy')}>
+                            <div className="hide-sm max-w-[220px] truncate text-xs text-faint" title={t('users.createdBy')}>
                               {t('users.by', { admin: u.admin_name })}
                             </div>
                           )}
-                          <div className="mt-1.5 show-sm">
-                            <UserPresenceBadge user={u} />
+                          {/* phones: status and creator in one small line */}
+                          <div className="mt-0.5 show-sm">
+                            <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                              <PresenceDot user={u} />
+                              {u.admin_name && <span className="truncate text-faint">· {u.admin_name}</span>}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -312,4 +316,23 @@ export default function UsersPage() {
 function OnlineDot({ iso }: { iso: string | null }) {
   const online = isOnline(iso)
   return <span className={cx('mr-2 inline-block h-2 w-2 rounded-full', online ? 'bg-success' : 'bg-border-strong')} />
+}
+
+// PresenceDot is the compact status for phone rows: a coloured dot and a word.
+function PresenceDot({ user }: { user: User }) {
+  const { t } = useI18n()
+  const online = user.status === 'active' && isOnline(user.online_at)
+  const color =
+    user.status === 'active'
+      ? online
+        ? 'bg-success'
+        : 'bg-faint'
+      : { expired: 'bg-destructive', limited: 'bg-warning', on_hold: 'bg-violet', disabled: 'bg-faint' }[user.status as string] ?? 'bg-faint'
+  const label = user.status === 'active' ? t(online ? 'presence.online' : 'presence.offline') : t(`status.${user.status}`)
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1">
+      <span className={'h-1.5 w-1.5 rounded-full ' + color} aria-hidden />
+      {label}
+    </span>
+  )
 }
