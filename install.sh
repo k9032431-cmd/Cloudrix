@@ -566,13 +566,17 @@ issue_certificate() {
   fi
   info "Получаю сертификат Let's Encrypt для $domain (порт 80 должен быть открыт)"
   open_firewall 80
-  local rc=0
-  "$acme" --issue -d "$domain" --standalone --keylength ec-256 >"$WORK/acme.log" 2>&1 || rc=$?
+  # журнал во временный файл: функцию зовут и при установке, и из меню
+  local rc=0 log
+  log=$(mktemp)
+  "$acme" --issue -d "$domain" --standalone --keylength ec-256 >"$log" 2>&1 || rc=$?
   # 2 = сертификат уже есть и ещё не пора продлевать
   if ((rc != 0 && rc != 2)); then
-    tail -n 15 "$WORK/acme.log" >&2
+    tail -n 15 "$log" >&2
+    rm -f "$log"
     return 1
   fi
+  rm -f "$log"
 
   mkdir -p "$CERT_DIR"
   "$acme" --install-cert -d "$domain" --ecc \
@@ -1671,6 +1675,8 @@ cmd_cert() {
   ask email "Email для Let's Encrypt" "admin@$domain"
   ensure_deps
   systemctl stop "$SERVICE" || true
+  # панель остановлена ради порта 80: при любой ошибке запускаем её обратно
+  trap 'systemctl start "$SERVICE" >/dev/null 2>&1 || true' EXIT
   if ! issue_certificate "$domain" "$email"; then
     systemctl start "$SERVICE"
     die "Не удалось получить сертификат. Проверьте, что домен указывает на сервер и порт 80 открыт."
