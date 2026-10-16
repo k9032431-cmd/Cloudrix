@@ -145,6 +145,7 @@ const ru = {
 
   'users.new': 'Новый пользователь',
   'users.copyLink': 'Скопировать ссылку подписки',
+  'users.range': '{from}–{to} из {total}',
   'users.gdriveMissing': 'Ссылки Google Drive ещё нет: создайте её в карточке ключа',
   'users.copyFailed': 'Не удалось скопировать: откройте ключ и скопируйте ссылку там',
   'users.username': 'Имя пользователя',
@@ -663,6 +664,7 @@ const en: Record<Key, string> = {
 
   'users.new': 'New user',
   'users.copyLink': 'Copy the subscription link',
+  'users.range': '{from}–{to} of {total}',
   'users.gdriveMissing': 'No Google Drive link yet: create it in the key card',
   'users.copyFailed': 'Could not copy: open the key and copy the link there',
   'users.username': 'Username',

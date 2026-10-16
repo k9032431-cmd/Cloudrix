@@ -263,21 +263,7 @@ export default function UsersPage() {
           </Table>
         )}
 
-        {pages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 text-sm text-muted-foreground">
-            <span>
-              {page + 1} / {pages}
-            </span>
-            <div className="flex gap-1">
-              <IconButton disabled={page === 0} onClick={() => setPage(page - 1)} aria-label={t('common.prev')}>
-                <ChevronLeft className="h-4 w-4" />
-              </IconButton>
-              <IconButton disabled={page + 1 >= pages} onClick={() => setPage(page + 1)} aria-label={t('common.next')}>
-                <ChevronRight className="h-4 w-4" />
-              </IconButton>
-            </div>
-          </div>
-        )}
+        {pages > 1 && <Pager page={page} pages={pages} total={total} onChange={setPage} />}
       </Card>
 
       {editing && (
@@ -372,6 +358,56 @@ function RowActions({ user, onEdit, onDelete }: { user: User; onEdit: () => void
       <IconButton onClick={onDelete} aria-label={t('common.delete')} className="hover:text-destructive">
         <Trash2 className="h-4 w-4" />
       </IconButton>
+    </div>
+  )
+}
+
+// pageList is the page buttons to show: the first, the last and the ones
+// around the current page, with null for the gaps.
+function pageList(page: number, pages: number): (number | null)[] {
+  const out: (number | null)[] = []
+  for (let i = 0; i < pages; i++) {
+    if (i === 0 || i === pages - 1 || Math.abs(i - page) <= 1) out.push(i)
+    else if (out[out.length - 1] !== null) out.push(null)
+  }
+  return out
+}
+
+function Pager({ page, pages, total, onChange }: { page: number; pages: number; total: number; onChange: (p: number) => void }) {
+  const { t } = useI18n()
+  const from = page * PAGE + 1
+  const to = Math.min(total, (page + 1) * PAGE)
+  return (
+    <div className="flex flex-col items-center gap-3 border-t border-border px-4 py-3 sm:flex-row sm:justify-between">
+      <span className="text-xs tabular-nums text-muted-foreground">{t('users.range', { from, to, total })}</span>
+      <nav className="flex items-center gap-1" aria-label="pagination">
+        <IconButton disabled={page === 0} onClick={() => onChange(page - 1)} aria-label={t('common.prev')}>
+          <ChevronLeft className="h-4 w-4" />
+        </IconButton>
+        {pageList(page, pages).map((p, i) =>
+          p === null ? (
+            <span key={`gap${i}`} className="w-6 text-center text-sm text-faint">
+              …
+            </span>
+          ) : (
+            <button
+              key={p}
+              type="button"
+              onClick={() => onChange(p)}
+              aria-current={p === page ? 'page' : undefined}
+              className={cx(
+                'h-8 min-w-8 rounded-md px-2 text-sm tabular-nums transition-colors',
+                p === page ? 'bg-primary font-medium text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+              )}
+            >
+              {p + 1}
+            </button>
+          ),
+        )}
+        <IconButton disabled={page + 1 >= pages} onClick={() => onChange(page + 1)} aria-label={t('common.next')}>
+          <ChevronRight className="h-4 w-4" />
+        </IconButton>
+      </nav>
     </div>
   )
 }
