@@ -119,7 +119,7 @@ export function NodesOverview({ period, onOpen }: { period: StatsPeriod; onOpen:
                     type="button"
                     key={n.id}
                     onClick={() => onOpen(n)}
-                    className="r -mx-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/60"
+                    className="r -mx-2 rounded-md px-2 py-2 text-left transition-colors hover:bg-muted/60 max-sm:mx-0 max-sm:px-0"
                     style={{ display: 'block' }}
                     title={t('nodes.stats.open')}
                   >

@@ -775,6 +775,10 @@ html.dark .layer-scrim { background: oklch(0 0 0 / 0.55); }
   .dt th:first-child, .dt td:first-child { padding-left: 14px; }
   .dt th:last-child, .dt td:last-child { padding-right: 14px; }
   .dt td, .dt th { padding-left: 8px; padding-right: 8px; }
+  /* phones: a table is never wider than the screen; long text wraps or is
+     cut with an ellipsis instead of pushing the page sideways */
+  .dt { table-layout: fixed; }
+  .dt td { overflow-wrap: anywhere; }
   .palette { top: 10px; }
   .toasts { right: 12px; left: 12px; width: auto; bottom: 12px; }
 }

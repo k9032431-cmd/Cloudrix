@@ -341,9 +341,9 @@ export type Tone = keyof typeof badgeTones
 
 export function Badge({ tone = 'gray', children, dot }: { tone?: Tone; children: ReactNode; dot?: boolean; pulse?: boolean }) {
   return (
-    <span className={cx('badge', badgeTones[tone])}>
+    <span className={cx('badge max-w-full', badgeTones[tone])}>
       {dot && <span className="dot" />}
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
     </span>
   )
 }

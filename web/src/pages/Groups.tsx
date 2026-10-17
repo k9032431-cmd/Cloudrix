@@ -62,8 +62,8 @@ export default function Groups() {
               {data?.map((g) => (
                 <tr key={g.id}>
                   <Td>
-                    <div className="ent-name flex items-center gap-2">
-                      {g.name}
+                    <div className="ent-name flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="min-w-0 truncate">{g.name}</span>
                       {g.disabled && <Badge tone="gray">{t('common.disabled')}</Badge>}
                     </div>
                   </Td>

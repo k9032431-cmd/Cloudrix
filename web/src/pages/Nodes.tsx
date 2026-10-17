@@ -76,11 +76,11 @@ export default function Nodes() {
             <thead>
               <tr>
                 <Th>{t('nodes.name')}</Th>
-                <Th>{t('nodes.status')}</Th>
+                <Th className="hide-sm">{t('nodes.status')}</Th>
                 <Th className="hide-sm">{t('nodes.cores')}</Th>
                 <Th className="hide-md r">{t('nodes.traffic')}</Th>
                 <Th className="hide-sm">{t('nodes.lastSeen')}</Th>
-                <Th className="sm:w-36" />
+                <Th className="w-[132px] sm:w-36" />
               </tr>
             </thead>
             <tbody>
@@ -99,8 +99,13 @@ export default function Nodes() {
                     <div className="ent-sub">
                       {t('nodes.core')}: {cores?.find((c) => c.id === n.core_id)?.name ?? '—'}
                     </div>
+                    {/* phones: the status under the name instead of its own column */}
+                    <div className="show-sm mt-1.5">
+                      <NodeStatusBadge status={n.status} />
+                      {n.message && <NodeError text={message(n)} raw={n.message} />}
+                    </div>
                   </Td>
-                  <Td className="max-sm:[&_.badge]:whitespace-normal max-sm:[&_.badge]:text-left">
+                  <Td className="hide-sm">
                     <NodeStatusBadge status={n.status} />
                     {n.message && (
                       <NodeError text={message(n)} raw={n.message} />
