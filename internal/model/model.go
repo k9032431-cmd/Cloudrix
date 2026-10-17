@@ -390,6 +390,7 @@ type Core struct {
 	CreatedAt time.Time `json:"created_at"`
 	Inbounds  int       `json:"inbounds"` // how many inbounds it has
 	Nodes     int       `json:"nodes"`    // how many nodes run it
+	Default   bool      `json:"default"`  // nodes without a choice run it
 }
 
 // Runs reports whether the inbound is served by the node.

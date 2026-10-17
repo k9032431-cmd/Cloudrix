@@ -11,7 +11,7 @@ import (
 )
 
 const nodeCols = `id, name, address, api_port, usage_coefficient, status, message, core_version, last_seen,
-	upload_bytes, download_bytes, created_at, cert_sha256, bridge, COALESCE(core_id, (SELECT MIN(id) FROM cores), 0)`
+	upload_bytes, download_bytes, created_at, cert_sha256, bridge, COALESCE(core_id, `+defaultCoreSQL+`, 0)`
 
 func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 	var n model.Node

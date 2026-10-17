@@ -5,22 +5,28 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/k9032431-cmd/cloudrix/internal/model"
 )
 
-// ErrDefaultCore refuses removing the default (first) core.
+// ErrDefaultCore refuses removing the default core.
 var ErrDefaultCore = errors.New("the default core cannot be deleted")
+
+// defaultCoreSQL is the default core: the one chosen in the settings, or the
+// first core while none is chosen. Nodes without a core of their own run it.
+const defaultCoreSQL = `COALESCE((SELECT dc.id FROM cores dc JOIN settings ds ON ds.key = 'default_core' AND dc.id = CAST(ds.value AS INTEGER)), (SELECT MIN(id) FROM cores))`
 
 const coreCols = `c.id, c.name, c.created_at,
 	(SELECT COUNT(*) FROM inbounds i WHERE i.core_id = c.id),
-	(SELECT COUNT(*) FROM nodes n WHERE COALESCE(n.core_id, (SELECT MIN(id) FROM cores)) = c.id)`
+	(SELECT COUNT(*) FROM nodes n WHERE COALESCE(n.core_id, ` + defaultCoreSQL + `) = c.id),
+	c.id = ` + defaultCoreSQL
 
 func scanCore(row interface{ Scan(...any) error }) (*model.Core, error) {
 	var c model.Core
 	var created int64
-	err := row.Scan(&c.ID, &c.Name, &created, &c.Inbounds, &c.Nodes)
+	err := row.Scan(&c.ID, &c.Name, &created, &c.Inbounds, &c.Nodes, &c.Default)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -52,14 +58,22 @@ func (s *Store) GetCore(ctx context.Context, id int64) (*model.Core, error) {
 	return scanCore(s.db.QueryRowContext(ctx, `SELECT `+coreCols+` FROM cores c WHERE c.id = ?`, id))
 }
 
-// DefaultCore is the first core: nodes without a choice run it.
+// DefaultCore is the core nodes without a choice run.
 func (s *Store) DefaultCore(ctx context.Context) (int64, error) {
 	var id sql.NullInt64
-	err := s.db.QueryRowContext(ctx, `SELECT MIN(id) FROM cores`).Scan(&id)
+	err := s.db.QueryRowContext(ctx, `SELECT `+defaultCoreSQL).Scan(&id)
 	if err == nil && !id.Valid {
 		return 0, ErrNotFound
 	}
 	return id.Int64, err
+}
+
+// SetDefaultCore makes a core the default one.
+func (s *Store) SetDefaultCore(ctx context.Context, id int64) error {
+	if _, err := s.GetCore(ctx, id); err != nil {
+		return err
+	}
+	return s.SetSetting(ctx, "default_core", strconv.FormatInt(id, 10))
 }
 
 func (s *Store) CreateCore(ctx context.Context, c *model.Core) error {

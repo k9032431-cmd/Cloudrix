@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, Cpu, Download, Export, Pencil, Plus, RefreshCw, Search, Trash2 } from '../components/icons'
+import { Copy, Cpu, Download, Export, Pencil, Plus, RefreshCw, Search, Sparkle as Star, Trash2 } from '../components/icons'
 import { ExportDialog, ImportDialog } from './core/Template'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
@@ -26,8 +26,18 @@ export default function Cores() {
   const [importing, setImporting] = useState(false)
   const { data: inbounds, reload: reloadInbounds } = useFetch<Inbound[]>('/api/inbounds')
   const { data: groups } = useFetch<Group[]>('/api/groups')
-  const defaultID = data?.[0]?.id
+  const defaultID = data?.find((c) => c.default)?.id ?? data?.[0]?.id
   const shown = (data ?? []).filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()))
+
+  const makeDefault = async (c: Core) => {
+    try {
+      await post(`/api/cores/${c.id}/default`)
+      reload()
+      toast(t('cores.isDefaultNow', { name: c.name }))
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+  }
 
   const duplicate = async (c: Core) => {
     try {
@@ -95,6 +105,7 @@ export default function Cores() {
                 actions={[
                   { label: t('common.edit'), icon: Pencil, onClick: () => navigate(`/cores/${c.id}`) },
                   { label: t('cores.rename'), icon: Cpu, onClick: () => setRenaming(c) },
+                  { label: t('cores.makeDefault'), icon: Star, hidden: c.id === defaultID, onClick: () => makeDefault(c) },
                   { label: t('cores.duplicate'), icon: Copy, onClick: () => duplicate(c) },
                   { label: t('tpl.exportCore'), icon: Export, hidden: !c.inbounds, onClick: () => setExporting(c) },
                   { label: t('common.delete'), icon: Trash2, danger: true, hidden: c.id === defaultID, onClick: () => setDeleting(c) },

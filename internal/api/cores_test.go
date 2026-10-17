@@ -94,3 +94,36 @@ func TestCores(t *testing.T) {
 		t.Fatalf("copied inbounds left: %d", len(list))
 	}
 }
+
+// Another core can become the default; then the old one can be deleted and
+// its nodes move to the new default.
+func TestDefaultCore(t *testing.T) {
+	e := newEnv(t)
+	root := e.login("root", "supersecret")
+	var cores []model.Core
+	e.do("GET", "/api/cores", root, nil, &cores)
+	old := cores[0]
+	if !old.Default || old.Nodes != 1 {
+		t.Fatalf("first core: %+v", old)
+	}
+	var mine model.Core
+	e.do("POST", "/api/cores", root, map[string]string{"name": "Mine"}, &mine)
+	if r := e.do("DELETE", fmt.Sprintf("/api/cores/%d", old.ID), root, nil, nil); r.StatusCode != 400 {
+		t.Fatalf("deleted the default core: %d", r.StatusCode)
+	}
+	if r := e.do("POST", fmt.Sprintf("/api/cores/%d/default", mine.ID), root, nil, nil); r.StatusCode != 204 {
+		t.Fatalf("make default: %d", r.StatusCode)
+	}
+	if r := e.do("DELETE", fmt.Sprintf("/api/cores/%d", old.ID), root, nil, nil); r.StatusCode != 204 {
+		t.Fatalf("delete the old default: %d", r.StatusCode)
+	}
+	e.do("GET", "/api/cores", root, nil, &cores)
+	if len(cores) != 1 || cores[0].ID != mine.ID || !cores[0].Default || cores[0].Nodes != 1 {
+		t.Fatalf("after the switch: %+v", cores)
+	}
+	var nodes []model.Node
+	e.do("GET", "/api/nodes", root, nil, &nodes)
+	if len(nodes) != 1 || nodes[0].CoreID != mine.ID {
+		t.Fatalf("node did not move to the new default: %+v", nodes)
+	}
+}

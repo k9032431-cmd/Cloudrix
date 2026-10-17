@@ -187,6 +187,7 @@ export interface Core {
   created_at: string
   inbounds: number
   nodes: number
+  default: boolean
 }
 
 // Host is one client link of an inbound (address, name, SNI…), as in

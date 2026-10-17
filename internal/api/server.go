@@ -125,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 				r.Put("/cores/{id}", s.handleUpdateCore)
 				r.Delete("/cores/{id}", s.handleDeleteCore)
 				r.Post("/cores/{id}/duplicate", s.handleDuplicateCore)
+				r.Post("/cores/{id}/default", s.handleDefaultCore)
 
 				r.Get("/hosts", s.handleListHosts)
 				r.Post("/hosts", s.handleCreateHost)

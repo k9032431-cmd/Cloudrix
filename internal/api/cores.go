@@ -84,7 +84,7 @@ func (s *Server) handleDeleteCore(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.store.DeleteCore(r.Context(), id); err != nil {
 		if errors.Is(err, store.ErrDefaultCore) {
-			writeError(w, http.StatusBadRequest, "the default (first) core cannot be deleted")
+			writeError(w, http.StatusBadRequest, "the default core cannot be deleted: make another core the default first")
 			return
 		}
 		s.writeStoreError(w, err)
@@ -107,4 +107,25 @@ func (s *Server) handleDuplicateCore(w http.ResponseWriter, r *http.Request) {
 	}
 	s.audit(r, "core.create", c.Name, "copy")
 	writeJSON(w, http.StatusCreated, c)
+}
+
+// handleDefaultCore makes a core the default: nodes without a core of their
+// own move to it.
+func (s *Server) handleDefaultCore(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r)
+	if !ok {
+		return
+	}
+	c, err := s.store.GetCore(r.Context(), id)
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	if err := s.store.SetDefaultCore(r.Context(), id); err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	s.audit(r, "core.default", c.Name, "")
+	s.usersChanged()
+	w.WriteHeader(http.StatusNoContent)
 }
