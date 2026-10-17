@@ -135,7 +135,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, adminFrom(r.Context()))
+	me := *adminFrom(r.Context())
+	// admins see their own limits at the bottom of the menu
+	if n, err := s.store.CountUsersByAdmin(r.Context(), me.ID); err == nil {
+		me.UsersCount = n
+	}
+	writeJSON(w, http.StatusOK, me)
 }
 
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {

@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Languages, Moon, Sun } from '../components/icons'
 import { useAuth } from '../lib/auth'
+import { SIGNED_OUT_KEY } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { useTheme } from '../lib/hooks'
 import { Button, ErrorNote, Field, IconButton, Input } from '../components/ui'
@@ -14,7 +15,15 @@ export default function Login() {
   const { dark, toggle } = useTheme()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(() => {
+    try {
+      const why = sessionStorage.getItem(SIGNED_OUT_KEY)
+      sessionStorage.removeItem(SIGNED_OUT_KEY)
+      return why
+    } catch {
+      return null
+    }
+  })
   const [busy, setBusy] = useState(false)
 
   if (admin) return <Navigate to="/" replace />
@@ -54,7 +63,7 @@ export default function Login() {
           <Logo />
         </motion.div>
         <h1 className="mb-6 text-center text-lg font-semibold text-foreground">{t('login.title')}</h1>
-        <ErrorNote error={error} />
+        <ErrorNote error={suspendedText(error, t('login.expired'), t('login.dataLimit'))} />
         <div className="space-y-4">
           <Field label={t('login.username')}>
             <Input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required />
@@ -80,4 +89,12 @@ export function AuroraBackground() {
       style={{ backgroundImage: 'radial-gradient(var(--border-strong) 1px, transparent 1px)' }}
     />
   )
+}
+
+// suspendedText says in the panel's language why an admin cannot get in.
+function suspendedText(msg: string | null, expired: string, dataLimit: string): string | null {
+  if (!msg?.startsWith('admin account')) return msg
+  if (msg.includes('expired')) return expired
+  if (msg.includes('data limit')) return dataLimit
+  return msg
 }

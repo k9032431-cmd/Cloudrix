@@ -12,6 +12,7 @@ export interface Admin {
   used_traffic: number
   max_user_data: number
   max_user_devices: number
+  users_count: number
 }
 
 export type UserStatus = 'active' | 'disabled' | 'limited' | 'expired' | 'on_hold'

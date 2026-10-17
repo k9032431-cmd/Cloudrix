@@ -39,6 +39,20 @@ func TestAdminLimits(t *testing.T) {
 	if r := e.do("POST", "/api/users", shop, userInput{Username: "client", DataLimit: 5 * gb, DeviceLimit: 2}, &u); r.StatusCode != 201 {
 		t.Fatalf("user within caps: %d", r.StatusCode)
 	}
+	// the main admin sees how many users it made; the reseller sees its own plan
+	var list []model.Admin
+	e.do("GET", "/api/admins", root, nil, &list)
+	for _, a := range list {
+		if a.Username == "shop" && a.UsersCount != 1 {
+			t.Fatalf("users of the reseller in the list: %d", a.UsersCount)
+		}
+	}
+	var me model.Admin
+	e.do("GET", "/api/auth/me", shop, nil, &me)
+	if me.UsersCount != 1 || me.UserLimit != 5 || me.DataLimit != 100*gb {
+		t.Fatalf("reseller's own plan: %+v", me)
+	}
+
 	links := func() string {
 		req, _ := http.NewRequest("GET", e.srv.URL+"/sub/"+u.SubToken+"?format=links", nil)
 		req.Header.Set("x-hwid", "phone-1") // the user has a device limit
@@ -77,5 +91,12 @@ func TestAdminLimits(t *testing.T) {
 	e.do("PUT", fmt.Sprintf("/api/admins/%d", res.ID), root, in, nil)
 	if strings.Contains(links(), "trojan://") {
 		t.Fatal("keys served after the reseller's term ended")
+	}
+	// a session that is already open ends with the term, saying why
+	var e2 struct {
+		Error string `json:"error"`
+	}
+	if r := e.do("GET", "/api/auth/me", shop, nil, &e2); r.StatusCode != 401 || !strings.Contains(e2.Error, "expired") {
+		t.Fatalf("open session after the term: %d %q", r.StatusCode, e2.Error)
 	}
 }

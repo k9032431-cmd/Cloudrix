@@ -205,6 +205,25 @@ func (s *Store) AllUsers(ctx context.Context) ([]*model.User, error) {
 	return out, rows.Err()
 }
 
+// UserCountsByAdmin counts the users of every admin.
+func (s *Store) UserCountsByAdmin(ctx context.Context) (map[int64]int, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT admin_id, COUNT(*) FROM users WHERE admin_id IS NOT NULL GROUP BY admin_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[int64]int{}
+	for rows.Next() {
+		var id int64
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		out[id] = n
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) CountUsersByAdmin(ctx context.Context, adminID int64) (int, error) {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE admin_id = ?`, adminID).Scan(&n)

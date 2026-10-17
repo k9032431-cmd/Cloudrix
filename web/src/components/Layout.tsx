@@ -35,8 +35,8 @@ import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { useFetch, useTheme, type Density, type Mode, type Preset } from '../lib/hooks'
 import { get, post } from '../lib/api'
-import { formatBytes, formatDuration, relativeTime } from '../lib/format'
-import type { Node, Stats, User } from '../lib/types'
+import { daysLeft, formatBytes, formatDate, formatDuration, relativeTime } from '../lib/format'
+import type { Admin, Node, Stats, User } from '../lib/types'
 import { Button, ErrorNote, Field, Input, Modal, cx, useFocusTrap } from './ui'
 
 // BrandMark is the Cloudrix cloud on a primary tile (follows theme and preset).
@@ -206,6 +206,8 @@ export default function Layout() {
   const navigate = useNavigate()
   const sudo = admin?.role === 'sudo'
   const { data: stats, reload } = useFetch<Stats>('/api/system/stats?days=1')
+  // admins and resellers see their own plan at the bottom of the menu
+  const { data: me, reload: reloadMe } = useFetch<Admin>(admin && !sudo ? '/api/auth/me' : null)
   const notifs = useNotifications(sudo, tick)
   const sideRef = useRef<HTMLElement>(null)
   const mainRef = useRef<HTMLElement>(null)
@@ -215,10 +217,11 @@ export default function Layout() {
   useEffect(() => {
     const id = setInterval(() => {
       reload()
+      reloadMe()
       setTick((n) => n + 1)
     }, 60_000)
     return () => clearInterval(id)
-  }, [reload])
+  }, [reload, reloadMe])
 
   // data-sidebar on <html> drives the rail (desktop/tablet) and the drawer (phones)
   useEffect(() => {
@@ -388,7 +391,8 @@ export default function Layout() {
         </nav>
 
         <div className="sb-foot" data-popover-root>
-          {u && u.total > 0 && (
+          {me && <PlanCard me={me} />}
+          {sudo && u && u.total > 0 && (
             <Link to="/users" className="target-card" aria-label={t('nav.usersCard')}>
               <div className="target-row">
                 <span className="target-label">{t('nav.activeUsers')}</span>
@@ -648,5 +652,46 @@ function PasswordModal({ open, onClose }: { open: boolean; onClose: () => void }
         </Field>
       </div>
     </Modal>
+  )
+}
+
+// PlanCard shows an admin or reseller their own limits: users, traffic and
+// how long the access lasts.
+function PlanCard({ me }: { me: Admin }) {
+  const { t, lang } = useI18n()
+  const left = daysLeft(me.expire_at)
+  const level = (used: number, max: number) => (max > 0 && used >= max ? 'bad' : max > 0 && used / max >= 0.85 ? 'warn' : '')
+  return (
+    <div className="target-card">
+      <div className="target-row">
+        <span className="target-label">{t('plan.title')}</span>
+        <span className={cx('target-pct', left !== null && left <= 3 && 'text-warning', left !== null && left <= 0 && 'text-destructive')}>
+          {left === null ? '∞' : left <= 0 ? t('users.expiredAgo') : t('users.daysLeft', { n: left })}
+        </span>
+      </div>
+      <div className="mt-2 flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">{t('plan.users')}</span>
+        <span className="font-medium tabular-nums text-foreground">
+          {me.users_count} / {me.user_limit || '∞'}
+        </span>
+      </div>
+      {me.user_limit > 0 && (
+        <div className={cx('meter !mt-1.5', level(me.users_count, me.user_limit))} aria-hidden>
+          <i style={{ '--v': Math.min(1, me.users_count / me.user_limit) } as CSSProperties} />
+        </div>
+      )}
+      <div className="mt-2 flex items-baseline justify-between gap-2 text-xs">
+        <span className="text-muted-foreground">{t('plan.traffic')}</span>
+        <span className="font-medium tabular-nums text-foreground">
+          {formatBytes(me.used_traffic)} / {me.data_limit ? formatBytes(me.data_limit) : '∞'}
+        </span>
+      </div>
+      {me.data_limit > 0 && (
+        <div className={cx('meter !mt-1.5', level(me.used_traffic, me.data_limit))} aria-hidden>
+          <i style={{ '--v': Math.min(1, me.used_traffic / me.data_limit) } as CSSProperties} />
+        </div>
+      )}
+      <div className="target-foot">{me.expire_at ? t('plan.until', { date: formatDate(me.expire_at, lang) }) : t('plan.forever')}</div>
+    </div>
   )
 }

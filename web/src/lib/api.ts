@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'cloudrix_token'
+export const SIGNED_OUT_KEY = 'cloudrix_signed_out'
 
 export function getToken(): string | null {
   try {
@@ -48,16 +49,22 @@ export async function api<T = unknown>(method: string, path: string, body?: unkn
   } finally {
     clearTimeout(timer)
   }
-  if (res.status === 401 && path !== '/api/auth/login') {
-    setToken(null)
-    unauthorizedListeners.forEach((fn) => fn())
-  }
   if (!res.ok) {
     let msg = res.statusText
     try {
       msg = (await res.json()).error ?? msg
     } catch {
       /* non-JSON error body */
+    }
+    if (res.status === 401 && path !== '/api/auth/login') {
+      // the login page tells an admin whose term or traffic ran out why
+      try {
+        if (msg.startsWith('admin account')) sessionStorage.setItem(SIGNED_OUT_KEY, msg)
+      } catch {
+        /* storage unavailable */
+      }
+      setToken(null)
+      unauthorizedListeners.forEach((fn) => fn())
     }
     throw new ApiError(res.status, msg)
   }

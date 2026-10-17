@@ -48,6 +48,14 @@ func (s *Server) handleListAdmins(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	counts, err := s.store.UserCountsByAdmin(r.Context())
+	if err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	for _, a := range admins {
+		a.UsersCount = counts[a.ID]
+	}
 	writeJSON(w, http.StatusOK, admins)
 }
 

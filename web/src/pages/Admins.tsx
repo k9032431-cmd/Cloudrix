@@ -1,12 +1,12 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type FormEvent, type ReactNode } from 'react'
 import { Pencil, Plus, Trash2 } from '../components/icons'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
 import { useAuth } from '../lib/auth'
-import { GB, formatBytes, formatDate, fromLocalInput, toLocalInput } from '../lib/format'
+import { GB, daysLeft, formatBytes, formatDate, fromLocalInput, toLocalInput } from '../lib/format'
 import type { Admin, Role } from '../lib/types'
-import { Badge, Button, Card, Confirm, ErrorNote, Field, IconButton, Input, Modal, PageHeader, ProgressBar, Select, Table, Td, Th, Toggle } from '../components/ui'
+import { Badge, Button, Card, Confirm, ErrorNote, Field, IconButton, Input, Modal, PageHeader, ProgressBar, Select, Table, Td, Th, Toggle, cx } from '../components/ui'
 
 const roleTone = { sudo: 'violet', admin: 'blue', reseller: 'gray' } as const
 
@@ -35,52 +35,94 @@ export default function Admins() {
           <thead>
             <tr>
               <Th>{t('login.username')}</Th>
-              <Th>{t('admins.role')}</Th>
-              <Th className="hide-sm">{t('admins.userLimit')}</Th>
+              <Th className="hide-sm">{t('admins.role')}</Th>
+              <Th className="hide-sm">{t('admins.users')}</Th>
               <Th className="hide-md">{t('admins.traffic')}</Th>
-              <Th className="hide-md">{t('admins.until')}</Th>
-              <Th>{t('users.status')}</Th>
-              <Th className="w-24" />
+              <Th className="hide-sm">{t('admins.left')}</Th>
+              <Th className="hide-sm">{t('users.status')}</Th>
+              <Th className="w-20" />
             </tr>
           </thead>
           <tbody>
-            {data?.map((a) => (
-              <tr key={a.id}>
-                <Td className="font-medium text-foreground">{a.username}</Td>
-                <Td>
-                  <Badge tone={roleTone[a.role]}>{t(`admins.role.${a.role}`)}</Badge>
-                </Td>
-                <Td className="hide-sm tabular-nums">{a.role === 'sudo' ? '—' : a.user_limit || '∞'}</Td>
-                <Td className="hide-md min-w-[140px]">
-                  {a.role === 'sudo' ? (
-                    <span className="text-muted-foreground">—</span>
-                  ) : (
-                    <>
-                      <div className="mb-1 text-xs tabular-nums text-muted-foreground">
-                        {formatBytes(a.used_traffic)} / {a.data_limit ? formatBytes(a.data_limit) : '∞'}
+            {data?.map((a) => {
+              const sudo = a.role === 'sudo'
+              return (
+                <tr key={a.id}>
+                  <Td>
+                    <div className="flex items-center gap-2">
+                      <span className="truncate font-medium text-foreground">{a.username}</span>
+                      <span className="show-sm">
+                        <Badge tone={roleTone[a.role]}>{t(`admins.role.${a.role}`)}</Badge>
+                      </span>
+                    </div>
+                    {/* phones: the whole tariff under the name */}
+                    {!sudo && (
+                      <div className="show-sm mt-2 min-w-0">
+                        <div className="grid grid-cols-[auto_auto_minmax(0,1fr)] gap-x-4 text-xs">
+                          <Stat label={t('admins.users')} value={`${a.users_count} / ${a.user_limit || '∞'}`} />
+                          <Stat label={t('admins.left')} value={<DaysLeft iso={a.expire_at} />} />
+                          <Stat wrap label={t('admins.traffic')} value={`${formatBytes(a.used_traffic)} / ${a.data_limit ? formatBytes(a.data_limit) : '∞'}`} />
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <ProgressBar value={a.used_traffic} max={a.data_limit} />
+                          </div>
+                          <AdminStatus a={a} />
+                        </div>
                       </div>
-                      <ProgressBar value={a.used_traffic} max={a.data_limit} />
-                    </>
-                  )}
-                </Td>
-                <Td className="hide-md whitespace-nowrap text-muted-foreground">{a.role !== 'sudo' && a.expire_at ? formatDate(a.expire_at, lang) : '∞'}</Td>
-                <Td>
-                  <AdminStatus a={a} />
-                </Td>
-                <Td>
-                  <div className="flex justify-end gap-1">
-                    <IconButton onClick={() => setEditing(a)} aria-label={t('common.edit')}>
-                      <Pencil className="h-4 w-4" />
-                    </IconButton>
-                    {a.id !== me?.id && (
-                      <IconButton onClick={() => setDeleting(a)} aria-label={t('common.delete')}>
-                        <Trash2 className="h-4 w-4" />
-                      </IconButton>
                     )}
-                  </div>
-                </Td>
-              </tr>
-            ))}
+                  </Td>
+                  <Td className="hide-sm">
+                    <Badge tone={roleTone[a.role]}>{t(`admins.role.${a.role}`)}</Badge>
+                  </Td>
+                  <Td className="hide-sm min-w-[110px]">
+                    <div className="mb-1 text-xs tabular-nums text-muted-foreground">
+                      {a.users_count} / {sudo ? '∞' : a.user_limit || '∞'}
+                    </div>
+                    {!sudo && a.user_limit > 0 && <ProgressBar value={a.users_count} max={a.user_limit} />}
+                  </Td>
+                  <Td className="hide-md min-w-[140px]">
+                    {sudo ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      <>
+                        <div className="mb-1 text-xs tabular-nums text-muted-foreground">
+                          {formatBytes(a.used_traffic)} / {a.data_limit ? formatBytes(a.data_limit) : '∞'}
+                        </div>
+                        <ProgressBar value={a.used_traffic} max={a.data_limit} />
+                      </>
+                    )}
+                  </Td>
+                  <Td className="hide-sm whitespace-nowrap">
+                    {sudo ? (
+                      <span className="text-muted-foreground">∞</span>
+                    ) : (
+                      <>
+                        <div className="text-sm">
+                          <DaysLeft iso={a.expire_at} />
+                        </div>
+                        {a.expire_at && <div className="text-xs text-muted-foreground">{formatDate(a.expire_at, lang)}</div>}
+                      </>
+                    )}
+                  </Td>
+                  <Td className="hide-sm">
+                    <AdminStatus a={a} />
+                  </Td>
+                  <Td>
+                    <div className="flex justify-end gap-1">
+                      <IconButton onClick={() => setEditing(a)} aria-label={t('common.edit')}>
+                        <Pencil className="h-4 w-4" />
+                      </IconButton>
+                      {a.id !== me?.id && (
+                        <IconButton onClick={() => setDeleting(a)} aria-label={t('common.delete')}>
+                          <Trash2 className="h-4 w-4" />
+                        </IconButton>
+                      )}
+                    </div>
+                  </Td>
+                </tr>
+              )
+            })}
           </tbody>
         </Table>
       </Card>
@@ -111,6 +153,25 @@ export default function Admins() {
       />
     </>
   )
+}
+
+function Stat({ label, value, wrap }: { label: string; value: ReactNode; wrap?: boolean }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-faint">{label}</div>
+      <div className={cx('font-medium tabular-nums text-foreground', wrap ? 'break-words' : 'truncate')}>{value}</div>
+    </div>
+  )
+}
+
+// DaysLeft is an admin's remaining term: "12 d", amber in the last 3 days,
+// red once it is over.
+export function DaysLeft({ iso }: { iso: string | null }) {
+  const { t } = useI18n()
+  const left = daysLeft(iso)
+  if (left === null) return <>∞</>
+  if (left <= 0) return <span className="text-destructive">{t('users.expiredAgo')}</span>
+  return <span className={cx(left <= 3 && 'text-warning')}>{t('users.daysLeft', { n: left })}</span>
 }
 
 function AdminStatus({ a }: { a: Admin }) {

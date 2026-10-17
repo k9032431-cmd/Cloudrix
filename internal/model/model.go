@@ -35,6 +35,8 @@ type Admin struct {
 	UsedTraffic    int64      `json:"used_traffic"`     // bytes its users used (kept when users are deleted)
 	MaxUserData    int64      `json:"max_user_data"`    // cap on each user's data limit, 0 = none
 	MaxUserDevices int        `json:"max_user_devices"` // cap on each user's device limit, 0 = none
+
+	UsersCount int `json:"users_count"` // users the admin owns (filled by the API, not stored)
 }
 
 // Suspended reports why a non-sudo admin's access and users are on hold.
