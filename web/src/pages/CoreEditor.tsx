@@ -1,6 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ChevronDown, ChevronLeft, Code2, Copy, Pencil, Plus, Server, Shuffle, Trash2, Wand2 } from '../components/icons'
+import { ChevronDown, ChevronLeft, Code2, Copy, Download, Export, Pencil, Plus, Server, Shuffle, Trash2, Wand2 } from '../components/icons'
+import { ActionsMenu } from '../components/ActionsMenu'
+import { ExportDialog, ImportDialog } from './core/Template'
 import { del, get, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -109,6 +111,7 @@ export default function CoreEditor() {
   const [deleting, setDeleting] = useState<Inbound | null>(null)
   const [preview, setPreview] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [sharing, setSharing] = useState<'export' | 'import' | null>(null)
   const core = cores?.find((c) => c.id === id)
   const data = all?.filter((ib) => ib.core_id === id)
   const clash = portClashes(all ?? [])
@@ -137,6 +140,13 @@ export default function CoreEditor() {
               <Plus className="h-4 w-4" />
               {t('core.addInbound')}
             </Button>
+            <ActionsMenu
+              label={t('tpl.menu')}
+              actions={[
+                { label: t('tpl.export'), icon: Export, onClick: () => setSharing('export'), hidden: !data?.length },
+                { label: t('tpl.import'), icon: Download, onClick: () => setSharing('import'), hidden: !core },
+              ]}
+            />
           </>
         }
       />
@@ -268,6 +278,8 @@ export default function CoreEditor() {
         />
       )}
       {preview && <CorePreview nodes={running} onClose={() => setPreview(false)} />}
+      {sharing === 'export' && data && core && <ExportDialog inbounds={data} coreName={core.name} onClose={() => setSharing(null)} />}
+      {sharing === 'import' && <ImportDialog coreID={id} existing={all ?? []} groups={groups ?? []} onClose={() => setSharing(null)} onDone={() => (reload(), reloadGroups())} />}
       {renaming && core && (
         <CoreNameDialog
           core={core}
