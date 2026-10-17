@@ -279,7 +279,7 @@ export default function CoreEditor() {
       )}
       {preview && <CorePreview nodes={running} onClose={() => setPreview(false)} />}
       {sharing === 'export' && data && core && <ExportDialog inbounds={data} coreName={core.name} onClose={() => setSharing(null)} />}
-      {sharing === 'import' && <ImportDialog coreID={id} existing={all ?? []} groups={groups ?? []} onClose={() => setSharing(null)} onDone={() => (reload(), reloadGroups())} />}
+      {sharing === 'import' && <ImportDialog coreID={id} existing={all ?? []} groups={groups ?? []} onClose={() => setSharing(null)} onDone={() => (reload(), reloadGroups(), reloadCores())} />}
       {renaming && core && (
         <CoreNameDialog
           core={core}

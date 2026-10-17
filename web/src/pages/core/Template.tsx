@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, CircleAlert, Download } from '../../components/icons'
 import { post } from '../../lib/api'
 import { useI18n } from '../../lib/i18n'
-import type { Group, Inbound, InboundSettings } from '../../lib/types'
+import type { Core, Group, Inbound, InboundSettings } from '../../lib/types'
 import { Button, CopyButton, ErrorNote, Modal } from '../../components/ui'
 
 // An inbound template carries a core's inbounds to another panel: every
@@ -38,13 +38,15 @@ interface TemplateInbound {
 interface Template {
   cloudrix: 'inbounds'
   version: 1
+  name?: string // the core the inbounds came from
   inbounds: TemplateInbound[]
 }
 
-export function makeTemplate(inbounds: Inbound[]): string {
+export function makeTemplate(inbounds: Inbound[], name?: string): string {
   const tpl: Template = {
     cloudrix: 'inbounds',
     version: 1,
+    name,
     inbounds: inbounds.map((ib) => {
       const s: Record<string, unknown> = { ...ib.settings }
       for (const k of SECRETS) if (s[k]) s[k] = GENERATE
@@ -99,7 +101,7 @@ async function fresh(s: InboundSettings): Promise<InboundSettings> {
 
 export function ExportDialog({ inbounds, coreName, onClose }: { inbounds: Inbound[]; coreName: string; onClose: () => void }) {
   const { t } = useI18n()
-  const text = makeTemplate(inbounds)
+  const text = makeTemplate(inbounds, coreName)
   const download = () => {
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' }))
@@ -112,7 +114,7 @@ export function ExportDialog({ inbounds, coreName, onClose }: { inbounds: Inboun
       open
       onClose={onClose}
       wide
-      title={t('tpl.exportTitle')}
+      title={t('tpl.exportTitle', { name: coreName })}
       footer={
         <>
           <Button variant="secondary" onClick={download}>
@@ -134,12 +136,27 @@ interface Result {
   error?: string
 }
 
-export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { coreID: number; existing: Inbound[]; groups: Group[]; onClose: () => void; onDone: () => void }) {
+// ImportDialog adds a template's inbounds to a core, or to a new core named
+// as in the template when coreID is null (Cores → Import core).
+export function ImportDialog({
+  coreID,
+  existing,
+  groups,
+  onClose,
+  onDone,
+}: {
+  coreID: number | null
+  existing: Inbound[]
+  groups: Group[]
+  onClose: () => void
+  onDone: (coreID: number) => void
+}) {
   const { t } = useI18n()
   const [text, setText] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState<Result[] | null>(null)
+  const [created, setCreated] = useState<string | null>(null) // name of the new core
 
   const run = async () => {
     setError(null)
@@ -151,6 +168,24 @@ export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { co
       return
     }
     setBusy(true)
+    let target = coreID
+    if (target === null) {
+      const base = tpl.name?.trim() || 'Imported'
+      for (let i = 1; target === null && i <= 20; i++) {
+        try {
+          const c = await post<Core>('/api/cores', { name: i === 1 ? base : `${base} ${i}` })
+          target = c.id
+          setCreated(c.name)
+        } catch (e) {
+          if (i === 20) {
+            setError((e as Error).message)
+            setBusy(false)
+            return
+          }
+        }
+      }
+    }
+    const core = target as number
     const taken = new Set(existing.map((ib) => ib.tag))
     const out: Result[] = []
     // new inbounds go to the first group, as the editor does
@@ -168,7 +203,7 @@ export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { co
           enabled: ib.enabled !== false,
           remark: ib.remark ?? '',
           address: '',
-          core_id: coreID,
+          core_id: core,
           node_id: null,
           settings,
         })
@@ -180,7 +215,7 @@ export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { co
     }
     setResults(out)
     setBusy(false)
-    if (out.some((r) => !r.error)) onDone()
+    onDone(core)
   }
 
   return (
@@ -188,7 +223,7 @@ export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { co
       open
       onClose={onClose}
       wide
-      title={t('tpl.importTitle')}
+      title={t(coreID === null ? 'tpl.importCoreTitle' : 'tpl.importTitle')}
       footer={
         results ? (
           <Button onClick={onClose}>{t('common.close')}</Button>
@@ -215,6 +250,7 @@ export function ImportDialog({ coreID, existing, groups, onClose, onDone }: { co
               </div>
             </li>
           ))}
+          {created && <li className="mt-1 text-xs font-medium text-foreground">{t('tpl.importCoreAfter', { name: created })}</li>}
           <li className="mt-1 text-xs text-muted-foreground">{t('tpl.importAfter')}</li>
         </ul>
       ) : (

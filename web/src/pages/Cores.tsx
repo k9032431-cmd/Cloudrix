@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Copy, Cpu, Pencil, Plus, RefreshCw, Search, Trash2 } from '../components/icons'
+import { Copy, Cpu, Download, Export, Pencil, Plus, RefreshCw, Search, Trash2 } from '../components/icons'
+import { ExportDialog, ImportDialog } from './core/Template'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import type { Core } from '../lib/types'
+import type { Core, Group, Inbound } from '../lib/types'
 import { Badge, Button, Card, Confirm, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Skeleton } from '../components/ui'
 import { ActionsMenu } from '../components/ActionsMenu'
 import { NodesTabs } from '../components/NodesTabs'
@@ -21,6 +22,10 @@ export default function Cores() {
   const [renaming, setRenaming] = useState<Core | null>(null)
   const [deleting, setDeleting] = useState<Core | null>(null)
   const [q, setQ] = useState('')
+  const [exporting, setExporting] = useState<Core | null>(null)
+  const [importing, setImporting] = useState(false)
+  const { data: inbounds, reload: reloadInbounds } = useFetch<Inbound[]>('/api/inbounds')
+  const { data: groups } = useFetch<Group[]>('/api/groups')
   const defaultID = data?.[0]?.id
   const shown = (data ?? []).filter((c) => c.name.toLowerCase().includes(q.trim().toLowerCase()))
 
@@ -40,10 +45,16 @@ export default function Cores() {
         title={t('nav.cores')}
         subtitle={t('cores.subtitle')}
         actions={
-          <Button onClick={() => setCreating(true)}>
-            <Plus />
-            {t('cores.new')}
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setImporting(true)}>
+              <Download />
+              {t('tpl.importCore')}
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus />
+              {t('cores.new')}
+            </Button>
+          </>
         }
       />
       <ErrorNote error={error} />
@@ -85,12 +96,28 @@ export default function Cores() {
                   { label: t('common.edit'), icon: Pencil, onClick: () => navigate(`/cores/${c.id}`) },
                   { label: t('cores.rename'), icon: Cpu, onClick: () => setRenaming(c) },
                   { label: t('cores.duplicate'), icon: Copy, onClick: () => duplicate(c) },
+                  { label: t('tpl.exportCore'), icon: Export, hidden: !c.inbounds, onClick: () => setExporting(c) },
                   { label: t('common.delete'), icon: Trash2, danger: true, hidden: c.id === defaultID, onClick: () => setDeleting(c) },
                 ]}
               />
             </div>
           ))}
         </div>
+      )}
+      {exporting && (
+        <ExportDialog inbounds={(inbounds ?? []).filter((ib) => ib.core_id === exporting.id)} coreName={exporting.name} onClose={() => setExporting(null)} />
+      )}
+      {importing && (
+        <ImportDialog
+          coreID={null}
+          existing={inbounds ?? []}
+          groups={groups ?? []}
+          onClose={() => setImporting(false)}
+          onDone={() => {
+            reload()
+            reloadInbounds()
+          }}
+        />
       )}
       {creating && (
         <CoreNameDialog
