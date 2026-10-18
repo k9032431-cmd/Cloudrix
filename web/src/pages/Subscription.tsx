@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { CloudUpload, Download, Languages, MessageCircle, Moon, Sun } from '../components/icons'
+import { CloudUpload, Download, MessageCircle, Moon, Sun } from '../components/icons'
 import { useFetch, useTheme } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
+import { LangMenu } from '../components/LangMenu'
 import { daysLeft, formatBytes, formatDate } from '../lib/format'
 import type { SubscriptionInfo } from '../lib/types'
 import { Button, Card, CopyButton, IconButton, ProgressBar, QR, Segmented } from '../components/ui'
@@ -22,7 +23,7 @@ const APPS: { name: string; link: (url: string) => string }[] = [
 
 export default function Subscription() {
   const { token } = useParams()
-  const { t, lang, setLang } = useI18n()
+  const { t, lang } = useI18n()
   const { dark, toggle } = useTheme()
   const { data, error, loading } = useFetch<SubscriptionInfo>(`/sub/${encodeURIComponent(token ?? '')}/info`)
   const left = data ? daysLeft(data.expire_at) : null
@@ -41,9 +42,7 @@ export default function Subscription() {
             <IconButton onClick={toggle} aria-label="toggle theme">
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </IconButton>
-            <IconButton onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')} aria-label="toggle language">
-              <Languages className="h-4 w-4" />
-            </IconButton>
+            <LangMenu />
           </div>
         </div>
 

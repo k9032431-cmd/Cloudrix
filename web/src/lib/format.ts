@@ -38,7 +38,7 @@ export function formatDuration(seconds: number, lang: Lang): string {
   const d = Math.floor(seconds / 86400)
   const h = Math.floor((seconds % 86400) / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  const u = lang === 'ru' ? ['д', 'ч', 'м'] : ['d', 'h', 'm']
+  const u = { ru: ['д', 'ч', 'м'], en: ['d', 'h', 'm'], tk: ['g', 's', 'm'] }[lang]
   return [d && `${d}${u[0]}`, h && `${h}${u[1]}`, `${m}${u[2]}`].filter(Boolean).join(' ')
 }
 

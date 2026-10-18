@@ -32,7 +32,7 @@ import {
 } from './icons'
 import CommandPalette, { openPalette, shortcut, type Command } from './CommandPalette'
 import { useAuth } from '../lib/auth'
-import { useI18n } from '../lib/i18n'
+import { LANGS, useI18n } from '../lib/i18n'
 import { useFetch, useTheme, type Density, type Mode, type Preset } from '../lib/hooks'
 import { get, post } from '../lib/api'
 import { daysLeft, formatBytes, formatDate, formatDuration, relativeTime } from '../lib/format'
@@ -309,7 +309,7 @@ export default function Layout() {
   const nav = groups.flatMap((g) => g.items.map((i) => ({ ...i, group: g })))
   const current = nav.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)))
 
-  const switchLang = () => setLang(lang === 'ru' ? 'en' : 'ru')
+  const switchLang = () => setLang(LANGS[(LANGS.findIndex((l) => l.code === lang) + 1) % LANGS.length].code)
   const commands: Command[] = [
     ...nav.map((n) => ({ id: `page-${n.to}`, label: n.label, group: t('cmd.pages'), icon: n.icon, run: () => navigate(n.to) })),
     { id: 'new-user', label: t('users.new'), group: t('cmd.actions'), icon: Plus, run: () => navigate('/users?new=1') },
@@ -433,9 +433,16 @@ export default function Layout() {
             >
               {t('nav.password')}
             </MenuItem>
-            <MenuItem icon={Languages} onClick={switchLang}>
+            <div className="menu-sep" />
+            <div className="menu-label flex items-center gap-1.5">
+              <Languages className="h-3.5 w-3.5" />
               {t('cmd.lang')}
-            </MenuItem>
+            </div>
+            {LANGS.map((l) => (
+              <MenuItem key={l.code} onClick={() => setLang(l.code)} checked={lang === l.code}>
+                {l.label}
+              </MenuItem>
+            ))}
             <div className="menu-sep" />
             <MenuItem icon={LogOut} onClick={logout} danger>
               {t('nav.logout')}

@@ -1,17 +1,18 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Languages, Moon, Sun } from '../components/icons'
+import { Moon, Sun } from '../components/icons'
 import { useAuth } from '../lib/auth'
 import { SIGNED_OUT_KEY } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { LangMenu } from '../components/LangMenu'
 import { useTheme } from '../lib/hooks'
 import { Button, ErrorNote, Field, IconButton, Input } from '../components/ui'
 import { Logo } from '../components/Layout'
 
 export default function Login() {
   const { admin, login } = useAuth()
-  const { t, lang, setLang } = useI18n()
+  const { t } = useI18n()
   const { dark, toggle } = useTheme()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -48,9 +49,7 @@ export default function Login() {
         <IconButton onClick={toggle} aria-label="toggle theme">
           {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </IconButton>
-        <IconButton onClick={() => setLang(lang === 'ru' ? 'en' : 'ru')} aria-label="toggle language">
-          <Languages className="h-4 w-4" />
-        </IconButton>
+            <LangMenu />
       </div>
       <motion.form
         onSubmit={submit}
