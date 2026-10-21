@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"math/rand/v2"
 	"mime/multipart"
@@ -94,6 +95,7 @@ func (e *APIError) Error() string {
 			}
 		}
 	}
+	msg = html.UnescapeString(msg) // Google escapes quotes: &#39;TVs and …&#39;
 	if len(msg) > 300 {
 		msg = msg[:300]
 	}
