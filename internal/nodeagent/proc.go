@@ -20,6 +20,7 @@ type proc struct {
 	env   []string
 	log   *slog.Logger
 	onErr func(string)
+	onOK  func(string) // the core has run fine for a while after the given crash
 
 	mu   sync.Mutex
 	want bool
@@ -28,6 +29,10 @@ type proc struct {
 	last string // last output line
 	runs int    // starts so far; routing set through the API is lost on each
 }
+
+// stableAfter is how long a restarted core must run before its crash
+// stops being reported.
+var stableAfter = 2 * time.Minute
 
 func newProc(name, bin string, args, env []string, log *slog.Logger, onErr func(string)) *proc {
 	return &proc{name: name, bin: bin, args: args, env: env, log: log, onErr: onErr}
@@ -90,7 +95,18 @@ func (p *proc) spawnLocked() error {
 			if p.want && p.cmd == nil {
 				if err := p.spawnLocked(); err != nil {
 					p.onErr(p.name + ": " + err.Error())
+					return
 				}
+				// once it keeps running, the old crash is no longer news
+				again := p.cmd
+				time.AfterFunc(stableAfter, func() {
+					p.mu.Lock()
+					ok := p.cmd == again && p.onOK != nil
+					p.mu.Unlock()
+					if ok {
+						p.onOK(msg)
+					}
+				})
 			}
 		})
 	}()

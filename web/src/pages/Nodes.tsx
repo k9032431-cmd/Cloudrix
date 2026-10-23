@@ -35,6 +35,9 @@ export default function Nodes() {
 
   const message = (n: Node) => {
     if (n.message === 'no contact from the node agent') return t('nodes.offline')
+    // SIGKILL from outside the agent: the system ran out of memory
+    const killed = n.message.match(/^(xray|sing-box) exited \(signal: killed\)/)
+    if (killed) return t('nodes.killed', { core: killed[1] === 'xray' ? 'Xray' : 'sing-box' })
     // a port another program on the server already holds stops the core
     const busy = n.message.match(/listen (tcp|udp)\d? [^ ]*:(\d+): bind: address already in use/)
     if (busy) return t('nodes.portBusy', { port: busy[2], proto: busy[1].toUpperCase() })

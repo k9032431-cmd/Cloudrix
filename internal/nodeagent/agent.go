@@ -95,6 +95,7 @@ func New(cfg Config) *Agent {
 	env := append(os.Environ(), "XRAY_LOCATION_ASSET="+cfg.XrayAssets)
 	a.xray = newProc("xray", cfg.XrayBin, []string{"run", "-config", a.path("xray.json")}, env, cfg.Log, a.setErr)
 	a.singbox = newProc("sing-box", cfg.SingBoxBin, []string{"run", "-c", a.path("sing-box.json")}, env, cfg.Log, a.setErr)
+	a.xray.onOK, a.singbox.onOK = a.clearErr, a.clearErr
 	return a
 }
 
@@ -103,6 +104,15 @@ func (a *Agent) path(name string) string { return filepath.Join(a.cfg.Dir, name)
 func (a *Agent) setErr(msg string) {
 	a.mu.Lock()
 	a.lastErr = msg
+	a.mu.Unlock()
+}
+
+// clearErr drops msg once it is no longer true (a crashed core came back).
+func (a *Agent) clearErr(msg string) {
+	a.mu.Lock()
+	if a.lastErr == msg {
+		a.lastErr = ""
+	}
 	a.mu.Unlock()
 }
 
