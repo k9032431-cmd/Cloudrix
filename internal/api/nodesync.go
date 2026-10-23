@@ -303,7 +303,7 @@ func (s *Server) applyNodeStats(ctx context.Context, node *model.Node, stats []n
 func (s *Server) watchNodes(ctx context.Context) {
 	t := time.NewTicker(30 * time.Second)
 	defer t.Stop()
-	var pruned time.Time
+	var pruned, checkpointed time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -315,11 +315,31 @@ func (s *Server) watchNodes(ctx context.Context) {
 					s.log.Warn("prune node statistics", "err", err)
 				}
 			}
+			if time.Since(checkpointed) > 10*time.Minute {
+				checkpointed = time.Now()
+				s.checkpoint(ctx)
+			}
 			if _, err := s.store.MarkStaleNodes(ctx, time.Now().Add(-nodeStaleAfter), "no contact from the node agent"); err != nil {
 				s.log.Warn("node watch", "err", err)
 			}
 			s.checkAdmins(ctx) // admin terms end on time
 		}
+	}
+}
+
+// checkpoint keeps the database's write-ahead log from growing: SQLite only
+// empties it when no other process holds an old read snapshot, and a stuck
+// one once let it fill the whole disk.
+func (s *Server) checkpoint(ctx context.Context) {
+	if s.cfg.DatabasePath == "" {
+		return
+	}
+	busy, size, err := s.store.Checkpoint(ctx, s.cfg.DatabasePath)
+	switch {
+	case err != nil:
+		s.log.Warn("database checkpoint", "err", err)
+	case busy && size > 256<<20:
+		s.log.Warn("database log cannot be emptied: another process keeps the database open (check: fuser -v "+s.cfg.DatabasePath+")", "wal_mb", size>>20)
 	}
 }
 

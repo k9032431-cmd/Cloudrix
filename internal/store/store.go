@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -22,7 +23,7 @@ type Store struct {
 }
 
 func Open(path string) (*Store, error) {
-	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)", path)
+	dsn := fmt.Sprintf("file:%s?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=journal_size_limit(67108864)", path)
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -293,4 +294,18 @@ func isForeignKey(err error) bool {
 func (s *Store) Backup(ctx context.Context, path string) error {
 	_, err := s.db.ExecContext(ctx, `VACUUM INTO ?`, path)
 	return err
+}
+
+// Checkpoint copies the write-ahead log into the database and truncates it.
+// busy is true when another process holds an old read snapshot and the log
+// could not be emptied; walBytes is the log size afterwards.
+func (s *Store) Checkpoint(ctx context.Context, path string) (busy bool, walBytes int64, err error) {
+	var b, logFrames, done int
+	if err := s.db.QueryRowContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`).Scan(&b, &logFrames, &done); err != nil {
+		return false, 0, err
+	}
+	if fi, err := os.Stat(path + "-wal"); err == nil {
+		walBytes = fi.Size()
+	}
+	return b != 0 || done < logFrames, walBytes, nil
 }
