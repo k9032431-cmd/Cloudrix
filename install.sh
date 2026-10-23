@@ -217,6 +217,36 @@ wait_apt_lock() {
   return 0
 }
 
+# use_official_apt_mirrors переводит источники пакетов самой системы с зеркала
+# хостера на официальные Ubuntu/Debian (копии старых файлов — *.cloudrix.bak).
+# Трогает только строки с кодовым именем этой системы: сторонние репозитории
+# (zabbix и т.п.) остаются как есть — apt пропускает недоступные с
+# предупреждением. APT_ROOT — для тестов.
+use_official_apt_mirrors() {
+  local root=${APT_ROOT-} f code ubuntu=http://archive.ubuntu.com/ubuntu
+  code=$(. "$root"/etc/os-release 2>/dev/null && echo "${VERSION_CODENAME-}")
+  [[ -n $code ]] || return 0
+  [[ $(uname -m) == aarch64 || $(uname -m) == arm64 ]] && ubuntu=http://ports.ubuntu.com/ubuntu-ports
+  local rewrite=(
+    -e "s#https?://[^ /]+/ubuntu(-ports)?/?( |\$)#${ubuntu}\2#g"
+    -e 's#https?://[^ /]+/debian-security/?( |$)#http://deb.debian.org/debian-security\1#g'
+    -e 's#https?://[^ /]+/debian/?( |$)#http://deb.debian.org/debian\1#g'
+  )
+  for f in "$root"/etc/apt/sources.list "$root"/etc/apt/sources.list.d/*.list "$root"/etc/apt/sources.list.d/*.sources; do
+    [[ -f $f ]] || continue
+    if [[ $f == *.sources ]]; then
+      # deb822: адреса в строках URIs:, версия системы — в Suites:
+      grep -qE "^Suites:.*[[:space:]]${code}([[:space:]]|-|\$)" "$f" || continue
+      [[ -f $f.cloudrix.bak ]] || cp -p "$f" "$f.cloudrix.bak"
+      sed -i -E "/^URIs:/ { ${rewrite[1]#-e }; ${rewrite[3]#-e }; ${rewrite[5]#-e } }" "$f"
+    else
+      grep -qE "^[[:space:]]*deb.*[[:space:]]${code}(-[a-z]+)?[[:space:]]" "$f" || continue
+      [[ -f $f.cloudrix.bak ]] || cp -p "$f" "$f.cloudrix.bak"
+      sed -i -E "/^[[:space:]]*deb.*[[:space:]]${code}(-[a-z]+)?[[:space:]]/ { ${rewrite[1]#-e }; ${rewrite[3]#-e }; ${rewrite[5]#-e } }" "$f"
+    fi
+  done
+}
+
 install_packages() {
   local pkgs=("$@")
   case $PKG in
@@ -225,12 +255,17 @@ install_packages() {
       export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1
       wait_apt_lock
       apt-get -o DPkg::Lock::Timeout=600 update -qq || true
+      apt-get -o DPkg::Lock::Timeout=600 install -y -qq "${pkgs[@]}" >/dev/null 2>&1 && return 0
+      # Чаще всего недоступно зеркало пакетов хостера (например mirror.timeweb.ru):
+      # переключаемся на официальное зеркало Ubuntu/Debian и пробуем ещё раз.
+      warn "Зеркало пакетов хостинга не отвечает — переключаюсь на официальное зеркало"
+      use_official_apt_mirrors
+      apt-get -o DPkg::Lock::Timeout=600 update -qq || true
       if ! apt-get -o DPkg::Lock::Timeout=600 install -y -qq "${pkgs[@]}" >/dev/null; then
-        # чаще всего недоступно зеркало пакетов хостера (например mirror.timeweb.ru)
-        warn "Не удалось установить пакеты: ${pkgs[*]}. Похоже, недоступно зеркало пакетов хостинга."
-        warn "Переключите на официальное: sed -i 's#http://[^ ]*/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; apt-get update"
+        warn "Не удалось установить пакеты: ${pkgs[*]} — у сервера нет доступа к репозиториям Ubuntu/Debian."
         return 1
       fi
+      ok "Пакеты установлены с официального зеркала"
       ;;
     dnf) dnf install -y -q "${pkgs[@]}" >/dev/null ;;
     yum) yum install -y -q "${pkgs[@]}" >/dev/null ;;
