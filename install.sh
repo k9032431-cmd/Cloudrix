@@ -917,6 +917,37 @@ panel_tls() { [[ -n ${CLOUDRIX_TLS_CERT-} ]] && echo 1 || echo 0; }
 # make_backup [метка] [бинарник] — согласованная копия базы без остановки
 # панели. Если бинарник не умеет `backup` (старые версии), база копируется
 # при остановленной панели.
+# free_disk_space чистит то, что можно удалить без вреда, когда на диске
+# мало места: старые журналы systemd, кэш apt, забытые временные файлы
+# сборки и лишние резервные копии (оставляет 3 последние).
+free_disk_space() {
+  local need_mb=${1:-500} free_mb dir=$DATA_DIR
+  [[ -d $dir ]] || dir=/
+  free_mb=$(df -Pm "$dir" 2>/dev/null | awk 'NR==2 {print $4}')
+  [[ $free_mb =~ ^[0-9]+$ ]] || return 0
+  ((free_mb >= need_mb)) && return 0
+  warn "На диске свободно всего ${free_mb} МБ — освобождаю место"
+  journalctl --vacuum-size=50M >/dev/null 2>&1 || true
+  command -v apt-get >/dev/null && apt-get clean >/dev/null 2>&1
+  command -v dnf >/dev/null && dnf clean all >/dev/null 2>&1
+  if [[ -f /var/tmp/cloudrix-build.swap ]] && ! grep -q cloudrix-build.swap /proc/swaps; then
+    rm -f /var/tmp/cloudrix-build.swap
+  fi
+  rm -f "$BIN.prev"
+  # временные каталоги прошлых прерванных обновлений (старше суток)
+  find /tmp -maxdepth 1 -name 'tmp.*' -type d -mtime +0 -exec test -e '{}/cloudrix' ';' -exec rm -rf '{}' + 2>/dev/null || true
+  local old
+  find "$BACKUP_DIR" -maxdepth 1 -name 'cloudrix-*.db' -printf '%T@ %p\n' 2>/dev/null |
+    sort -rn | tail -n +4 | cut -d' ' -f2- | while read -r old; do rm -f "$old" "$old-wal"; done
+  free_mb=$(df -Pm "$dir" | awk 'NR==2 {print $4}')
+  if ((free_mb < need_mb)); then
+    warn "После очистки свободно ${free_mb} МБ. Больше всего места занимают:"
+    du -xhd2 / 2>/dev/null | sort -rh | head -n 12 >&2
+    return 1
+  fi
+  ok "Свободно ${free_mb} МБ"
+}
+
 make_backup() {
   local label=${1:-manual} bin=${2:-$BIN} file
   mkdir -p "$BACKUP_DIR"
@@ -994,6 +1025,7 @@ cmd_update() {
   fi
   self_update
 
+  free_disk_space 300 || die "Мало места на диске для обновления. Удалите лишнее (см. список выше) и повторите."
   ensure_deps
   fetch_binary
 
@@ -1324,6 +1356,7 @@ cmd_node_update() {
     resolve_target
   fi
   self_update node-update
+  free_disk_space 200 || die "Мало места на диске для обновления. Удалите лишнее (см. список выше) и повторите."
   ensure_node_deps
   fetch_binary
   install_binary
