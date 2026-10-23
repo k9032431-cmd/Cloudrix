@@ -224,8 +224,13 @@ install_packages() {
       # needrestart на Ubuntu 22.04+ иначе молча ждёт ответа на невидимый вопрос
       export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a NEEDRESTART_SUSPEND=1
       wait_apt_lock
-      apt-get -o DPkg::Lock::Timeout=600 update -qq
-      apt-get -o DPkg::Lock::Timeout=600 install -y -qq "${pkgs[@]}" >/dev/null
+      apt-get -o DPkg::Lock::Timeout=600 update -qq || true
+      if ! apt-get -o DPkg::Lock::Timeout=600 install -y -qq "${pkgs[@]}" >/dev/null; then
+        # чаще всего недоступно зеркало пакетов хостера (например mirror.timeweb.ru)
+        warn "Не удалось установить пакеты: ${pkgs[*]}. Похоже, недоступно зеркало пакетов хостинга."
+        warn "Переключите на официальное: sed -i 's#http://[^ ]*/ubuntu#http://archive.ubuntu.com/ubuntu#g' /etc/apt/sources.list /etc/apt/sources.list.d/*.sources; apt-get update"
+        return 1
+      fi
       ;;
     dnf) dnf install -y -q "${pkgs[@]}" >/dev/null ;;
     yum) yum install -y -q "${pkgs[@]}" >/dev/null ;;
@@ -247,7 +252,7 @@ ensure_deps() {
   fi
   if ((${#need[@]})); then
     info "Устанавливаю пакеты: ${need[*]}"
-    install_packages "${need[@]}"
+    install_packages "${need[@]}" || die "Не удалось установить пакеты: ${need[*]}"
   fi
 }
 
@@ -1057,14 +1062,31 @@ latest_tag() {
 }
 
 ensure_node_deps() {
-  local need=()
-  for c in curl tar unzip openssl; do command -v "$c" >/dev/null || need+=("$c"); done
-  # xz нужен, если готовой сборки нет и агент собирается из исходников
-  command -v xz >/dev/null || { [[ $PKG == apt ]] && need+=(xz-utils) || need+=(xz); }
+  local need=() want=()
+  for c in curl tar openssl; do command -v "$c" >/dev/null || need+=("$c"); done
   [[ -f /etc/ssl/certs/ca-certificates.crt || -f /etc/pki/tls/certs/ca-bundle.crt ]] || need+=(ca-certificates)
+  # unzip распаковывает Xray, но его заменит python3; xz нужен только для
+  # сборки из исходников — без них установка продолжается
+  command -v unzip >/dev/null || command -v python3 >/dev/null || want+=(unzip)
+  command -v xz >/dev/null || { [[ $PKG == apt ]] && want+=(xz-utils) || want+=(xz); }
   if ((${#need[@]})); then
-    info "Устанавливаю пакеты: ${need[*]}"
-    install_packages "${need[@]}"
+    info "Устанавливаю пакеты: ${need[*]} ${want[*]}"
+    install_packages "${need[@]}" "${want[@]}" || die "Без пакетов ${need[*]} нода не установится."
+  elif ((${#want[@]})); then
+    info "Устанавливаю пакеты: ${want[*]}"
+    install_packages "${want[@]}" || warn "Продолжаю без них."
+  fi
+}
+
+# unzip_to ARCHIVE DIR распаковывает zip: unzip, а если его нет — python3.
+unzip_to() {
+  mkdir -p "$2"
+  if command -v unzip >/dev/null; then
+    unzip -oq "$1" -d "$2"
+  elif command -v python3 >/dev/null; then
+    python3 -m zipfile -e "$1" "$2"
+  else
+    bsdtar -xf "$1" -C "$2" 2>/dev/null
   fi
 }
 
@@ -1080,7 +1102,7 @@ install_cores() {
   info "Скачиваю Xray"
   url=${CLOUDRIX_XRAY_URL:-https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-$xarch.zip}
   curl -fsSL --retry 3 -o "$tmp/xray.zip" "$url" || die "Не удалось скачать Xray ($url)."
-  unzip -oq "$tmp/xray.zip" -d "$tmp/xray" || die "Архив Xray повреждён."
+  unzip_to "$tmp/xray.zip" "$tmp/xray" || die "Не удалось распаковать Xray: установите unzip (apt-get install unzip)."
   install -m 0755 "$tmp/xray/xray" "$NODE_LIB/xray/xray"
   cp -f "$tmp/xray/"*.dat "$NODE_LIB/xray/" 2>/dev/null || true
 
