@@ -63,6 +63,7 @@ func (p *proc) spawnLocked() error {
 		pw.Close()
 		return err
 	}
+	raiseOOMScore(cmd.Process.Pid)
 	done := make(chan struct{})
 	p.cmd, p.done = cmd, done
 	p.runs++

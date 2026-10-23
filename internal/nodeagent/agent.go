@@ -92,7 +92,7 @@ func New(cfg Config) *Agent {
 		pending: map[string]*nodeproto.Stat{},
 		fw:      newFirewall(cfg.Log),
 	}
-	env := append(os.Environ(), "XRAY_LOCATION_ASSET="+cfg.XrayAssets)
+	env := coreEnv(append(os.Environ(), "XRAY_LOCATION_ASSET="+cfg.XrayAssets), memTotal())
 	a.xray = newProc("xray", cfg.XrayBin, []string{"run", "-config", a.path("xray.json")}, env, cfg.Log, a.setErr)
 	a.singbox = newProc("sing-box", cfg.SingBoxBin, []string{"run", "-c", a.path("sing-box.json")}, env, cfg.Log, a.setErr)
 	a.xray.onOK, a.singbox.onOK = a.clearErr, a.clearErr

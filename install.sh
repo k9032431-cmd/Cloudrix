@@ -1125,11 +1125,46 @@ ExecStart=$BIN node run
 Restart=always
 RestartSec=3
 LimitNOFILE=1048576
+# when memory runs out the kernel kills a core (the agent restarts it), not
+# the agent: the node stays in touch with the panel
+OOMScoreAdjust=-800
 
 [Install]
 WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
+}
+
+# ensure_node_swap добавляет постоянный swap, если его нет: при нехватке памяти
+# система иначе убивает Xray и все клиенты ноды на секунду теряют связь.
+ensure_node_swap() {
+  local mem_mb swap_mb size_mb free_mb
+  mem_mb=$(awk '/^MemTotal:/ {print int($2/1024)}' /proc/meminfo)
+  swap_mb=$(awk '/^SwapTotal:/ {print int($2/1024)}' /proc/meminfo)
+  ((swap_mb > 0)) && return 0
+  ((mem_mb >= 4096)) && return 0
+  [[ -e /swapfile ]] && return 0
+  size_mb=$((mem_mb < 1024 ? 1024 : 2048))
+  free_mb=$(df -Pm / | awk 'NR==2 {print $4}')
+  if ((free_mb < size_mb + 1024)); then
+    warn "Swap нет, а места на диске мало (${free_mb} МБ) — пропускаю. При нехватке памяти Xray может перезапускаться."
+    return 0
+  fi
+  info "Памяти ${mem_mb} МБ и нет swap — добавляю ${size_mb} МБ swap, чтобы Xray не падал при нагрузке"
+  if ! fallocate -l "${size_mb}M" /swapfile 2>/dev/null; then
+    dd if=/dev/zero of=/swapfile bs=1M count="$size_mb" status=none || { rm -f /swapfile; return 0; }
+  fi
+  chmod 600 /swapfile
+  if mkswap /swapfile >/dev/null 2>&1 && swapon /swapfile 2>/dev/null; then
+    grep -q '^/swapfile ' /etc/fstab || echo '/swapfile none swap sw 0 0' >>/etc/fstab
+    # swap только на крайний случай: в обычной работе всё остаётся в памяти
+    sysctl -q -w vm.swappiness=10 >/dev/null 2>&1 || true
+    echo 'vm.swappiness=10' >/etc/sysctl.d/99-cloudrix-swap.conf
+    ok "Swap ${size_mb} МБ включён"
+  else
+    rm -f /swapfile
+    warn "Не удалось включить swap (возможно, это контейнер без поддержки swap)."
+  fi
 }
 
 # tune_network включает BBR: заметно быстрее на дальних и нестабильных каналах.
@@ -1201,6 +1236,7 @@ cmd_node_install() {
   write_node_env
   write_node_service
   tune_network
+  ensure_node_swap
   systemctl enable "$NODE_SERVICE" >/dev/null 2>&1
   systemctl restart "$NODE_SERVICE"
   save_install_conf
@@ -1235,6 +1271,8 @@ cmd_node_update() {
   fetch_binary
   install_binary
   install_cores
+  write_node_service
+  ensure_node_swap
   systemctl restart "$NODE_SERVICE"
   save_install_conf
   if wait_node_synced; then ok "Нода обновлена и подключена к панели"; else warn "Нода обновлена, но пока не подключилась: cloudrix-manager node-logs"; fi

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -56,5 +57,37 @@ func TestCrashIsClearedOnceStable(t *testing.T) {
 	}
 	if e := get(); e != "" || !p.running() {
 		t.Fatalf("error kept after a stable restart: %q (running %v)", e, p.running())
+	}
+}
+
+func TestCoreEnv(t *testing.T) {
+	env := coreEnv([]string{"A=1"}, 1<<30) // 1 GiB of RAM
+	if env[len(env)-1] != "GOMEMLIMIT=716MiB" {
+		t.Fatalf("limit: %v", env)
+	}
+	if got := coreEnv([]string{"GOMEMLIMIT=200MiB"}, 1<<30); len(got) != 1 {
+		t.Fatalf("an admin's own limit was overridden: %v", got)
+	}
+	if memTotal() <= 0 {
+		t.Skip("no /proc/meminfo")
+	}
+}
+
+// A started core gets a high OOM score so the kernel spares the agent.
+func TestCoreOOMScore(t *testing.T) {
+	p := newProc("xray", "sleep", []string{"30"}, os.Environ(), slog.New(slog.DiscardHandler), func(string) {})
+	if err := p.start(); err != nil {
+		t.Fatal(err)
+	}
+	defer p.stop()
+	p.mu.Lock()
+	pid := p.cmd.Process.Pid
+	p.mu.Unlock()
+	b, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "oom_score_adj"))
+	if err != nil {
+		t.Skip("no /proc")
+	}
+	if strings.TrimSpace(string(b)) != coreOOMScore {
+		t.Fatalf("oom_score_adj = %s", b)
 	}
 }
