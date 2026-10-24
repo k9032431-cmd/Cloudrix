@@ -400,10 +400,30 @@ func xrayStream(s model.InboundSettings) map[string]any {
 	if s.TCPKeepAliveInterval > 0 {
 		sockopt["tcpKeepAliveInterval"] = s.TCPKeepAliveInterval
 	}
+	if behindCDN(s) {
+		// the connection comes from the CDN; the client's own IP, which
+		// the device limit counts, is in the CDN's header
+		sockopt["trustedXForwardedFor"] = cdnClientIPHeaders
+	}
 	if len(sockopt) > 0 {
 		st["sockopt"] = sockopt
 	}
 	return st
+}
+
+// cdnClientIPHeaders mark a request that came through Cloudflare, Fastly or
+// an nginx-style proxy; Xray then takes the client's IP from the first
+// X-Forwarded-For entry these add.
+var cdnClientIPHeaders = []string{"CF-Connecting-IP", "Fastly-Client-IP", "X-Real-IP"}
+
+// behindCDN reports an inbound made to sit behind a CDN or reverse proxy:
+// an HTTP transport without TLS of its own.
+func behindCDN(s model.InboundSettings) bool {
+	switch s.Network {
+	case "ws", "xhttp", "httpupgrade":
+		return s.Security == "" || s.Security == "none"
+	}
+	return false
 }
 
 // SingBox renders a sing-box server config for hysteria2/tuic/wireguard inbounds.
