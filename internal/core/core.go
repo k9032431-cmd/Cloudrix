@@ -411,10 +411,11 @@ func xrayStream(s model.InboundSettings) map[string]any {
 	return st
 }
 
-// cdnClientIPHeaders mark a request that came through Cloudflare, Fastly or
-// an nginx-style proxy; Xray then takes the client's IP from the first
-// X-Forwarded-For entry these add.
-var cdnClientIPHeaders = []string{"CF-Connecting-IP", "Fastly-Client-IP", "X-Real-IP"}
+// cdnClientIPHeaders mark a request that came through Cloudflare, Fastly,
+// CloudFront (with its viewer headers forwarded) or an nginx-style proxy;
+// Xray then takes the client's IP from the first X-Forwarded-For entry
+// these add.
+var cdnClientIPHeaders = []string{"CF-Connecting-IP", "Fastly-Client-IP", "CloudFront-Viewer-Address", "X-Real-IP"}
 
 // behindCDN reports an inbound made to sit behind a CDN or reverse proxy:
 // an HTTP transport without TLS of its own.
