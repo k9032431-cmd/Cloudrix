@@ -169,6 +169,22 @@ func transportQuery(s model.InboundSettings) url.Values {
 		setNonEmpty(q, "path", s.Path)
 		setNonEmpty(q, "host", s.Host)
 		setNonEmpty(q, "mode", s.XHTTPMode)
+		// the client half of xhttp's extra settings
+		extra := map[string]any{}
+		if s.XPaddingBytes != "" {
+			extra["xPaddingBytes"] = s.XPaddingBytes
+		}
+		if s.XScMaxEachPostBytes != "" {
+			extra["scMaxEachPostBytes"] = s.XScMaxEachPostBytes
+		}
+		if s.XNoGRPCHeader {
+			extra["noGRPCHeader"] = true
+		}
+		if len(extra) > 0 {
+			if b, err := json.Marshal(extra); err == nil {
+				q.Set("extra", string(b))
+			}
+		}
 	case "grpc":
 		setNonEmpty(q, "serviceName", s.ServiceName)
 		q.Set("mode", "gun")
@@ -187,6 +203,16 @@ func transportQuery(s model.InboundSettings) url.Values {
 	}
 	security := orDefault(s.Security, "none")
 	q.Set("security", security)
+	if f := s.Fragment; f != nil && security == "tls" && network(s) != "kcp" {
+		// "fragment" for Happ / v2rayN, "fm" (finalmask) for Xray 26 clients
+		packets := orDefault(f.Packets, "tlshello")
+		q.Set("fragment", strings.Join([]string{f.Length, orDefault(f.Interval, "0"), packets}, ","))
+		fm := map[string]any{"tcp": []map[string]any{{"type": "fragment", "settings": map[string]any{
+			"packets": packets, "length": f.Length, "delay": orDefault(f.Interval, "0")}}}}
+		if b, err := json.Marshal(fm); err == nil {
+			q.Set("fm", string(b))
+		}
+	}
 	switch security {
 	case "tls":
 		setNonEmpty(q, "sni", s.SNI)

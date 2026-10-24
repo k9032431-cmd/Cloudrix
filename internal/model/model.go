@@ -229,6 +229,9 @@ type InboundSettings struct {
 	ALPN          []string `json:"alpn,omitempty"`
 	Fingerprint   string   `json:"fingerprint,omitempty"`
 	AllowInsecure bool     `json:"allow_insecure,omitempty"`
+	// client side only, set by a host: split the TLS hello into small
+	// pieces so DPI cannot read the SNI
+	Fragment *Fragment `json:"fragment,omitempty"`
 
 	// cascade: send this inbound's traffic out through another node
 	ExitNodeID *int64 `json:"exit_node_id,omitempty"`
@@ -380,6 +383,14 @@ type HostSettings struct {
 	Fingerprint   string       `json:"fingerprint,omitempty"`     // uTLS fingerprint
 	AllowInsecure bool         `json:"allow_insecure,omitempty"`  // skip certificate checks
 	UseSNIAsHost  bool         `json:"use_sni_as_host,omitempty"` // Host header = the SNI picked
+	Fragment      *Fragment    `json:"fragment,omitempty"`        // client TLS fragmentation
+}
+
+// Fragment is the client's TLS fragmentation (Xray "fragment" / finalmask).
+type Fragment struct {
+	Packets  string `json:"packets"`  // tlshello, or a range such as 1-3
+	Length   string `json:"length"`   // bytes per piece, e.g. 3-3 or 100-200
+	Interval string `json:"interval"` // ms between pieces, e.g. 0-1
 }
 
 // Core is a core configuration, as in PasarGuard: a named set of inbounds.

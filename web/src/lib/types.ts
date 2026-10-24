@@ -209,6 +209,7 @@ export interface Host {
   fingerprint?: string
   allow_insecure?: boolean
   use_sni_as_host?: boolean
+  fragment?: { packets: string; length: string; interval: string }
 }
 
 export type NodeStatus = 'connected' | 'connecting' | 'error' | 'disabled'

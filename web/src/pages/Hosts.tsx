@@ -417,6 +417,25 @@ function HostForm({ initial, inbounds, cores, onClose, onSaved }: { initial: Hos
           </Field>
           <Toggle checked={!!h.allow_insecure} onChange={(v) => set({ allow_insecure: v })} label={t('hosts.insecure')} />
           <Toggle checked={!!h.use_sni_as_host} onChange={(v) => set({ use_sni_as_host: v })} label={t('hosts.sniAsHost')} />
+          <Toggle
+            checked={!!h.fragment}
+            onChange={(v) => set({ fragment: v ? { packets: 'tlshello', length: '3-3', interval: '0-1' } : undefined })}
+            label={t('hosts.fragment')}
+          />
+          <p className="-mt-1 text-xs text-muted-foreground">{t('hosts.fragmentHint')}</p>
+          {h.fragment && (
+            <div className="grid grid-cols-3 gap-2">
+              <Field label={t('hosts.fragmentPackets')}>
+                <Input value={h.fragment.packets} onChange={(e) => set({ fragment: { ...h.fragment!, packets: e.target.value } })} placeholder="tlshello" />
+              </Field>
+              <Field label={t('hosts.fragmentLength')}>
+                <Input value={h.fragment.length} onChange={(e) => set({ fragment: { ...h.fragment!, length: e.target.value } })} placeholder="3-3" />
+              </Field>
+              <Field label={t('hosts.fragmentInterval')}>
+                <Input value={h.fragment.interval} onChange={(e) => set({ fragment: { ...h.fragment!, interval: e.target.value } })} placeholder="0-1" />
+              </Field>
+            </div>
+          )}
         </Accordion>
       </form>
     </Modal>

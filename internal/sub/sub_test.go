@@ -219,3 +219,30 @@ func TestKCPLinkCarriesMask(t *testing.T) {
 		t.Fatalf("kcp link: %s", l)
 	}
 }
+
+// A CDN host (Fastly-style): TLS, SNI and Host of the CDN, xhttp extra and
+// TLS fragmentation all reach the link.
+func TestCDNHostLink(t *testing.T) {
+	in := &model.Inbound{Tag: "xh", Protocol: model.ProtoVLESS, Port: 8443, Enabled: true, Settings: model.InboundSettings{
+		Network: "xhttp", Path: "/", XHTTPMode: "auto", XPaddingBytes: "100-1000", XScMaxEachPostBytes: "1000000", XNoSSEHeader: true}}
+	c := withHost(in, model.HostSettings{Remark: "EU", Port: 443, Security: "tls", SNI: []string{"apps.apple.com"},
+		Host: []string{"me.global.ssl.fastly.net"}, ALPN: []string{"h3"}, Fingerprint: "chrome",
+		Fragment: &model.Fragment{Packets: "tlshello", Length: "3-3", Interval: "0-1"}})
+	l, err := url.Parse(Link(testUser(), Endpoint{Inbound: c, Host: "151.101.3.6", Remark: "EU"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := l.Query()
+	want := map[string]string{"type": "xhttp", "security": "tls", "sni": "apps.apple.com", "host": "me.global.ssl.fastly.net",
+		"alpn": "h3", "fp": "chrome", "mode": "auto", "path": "/", "fragment": "3-3,0-1,tlshello",
+		"extra": `{"scMaxEachPostBytes":"1000000","xPaddingBytes":"100-1000"}`,
+		"fm":    `{"tcp":[{"settings":{"delay":"0-1","length":"3-3","packets":"tlshello"},"type":"fragment"}]}`}
+	for k, v := range want {
+		if q.Get(k) != v {
+			t.Errorf("%s = %q, want %q", k, q.Get(k), v)
+		}
+	}
+	if l.Host != "151.101.3.6:443" {
+		t.Errorf("host %s", l.Host)
+	}
+}

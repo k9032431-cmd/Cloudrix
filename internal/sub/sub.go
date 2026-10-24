@@ -160,6 +160,10 @@ func withHost(in *model.Inbound, h model.HostSettings) *model.Inbound {
 	if h.Path != "" {
 		c.Settings.Path = h.Path
 	}
+	if h.Fragment != nil && h.Fragment.Length != "" {
+		f := *h.Fragment
+		c.Settings.Fragment = &f
+	}
 	if len(h.ALPN) > 0 {
 		c.Settings.ALPN = slices.Clone(h.ALPN)
 	}
