@@ -384,6 +384,7 @@ type HostSettings struct {
 	AllowInsecure bool         `json:"allow_insecure,omitempty"`  // skip certificate checks
 	UseSNIAsHost  bool         `json:"use_sni_as_host,omitempty"` // Host header = the SNI picked
 	Fragment      *Fragment    `json:"fragment,omitempty"`        // client TLS fragmentation
+	Description   string       `json:"description,omitempty"`     // Happ: caption under the link name
 }
 
 // Fragment is the client's TLS fragmentation (Xray "fragment" / finalmask).

@@ -375,6 +375,14 @@ function HostForm({ initial, inbounds, cores, onClose, onSaved }: { initial: Hos
           >
             <Input value={h.remark} onChange={(e) => set({ remark: e.target.value })} placeholder="🇳🇱 Netherlands · {USERNAME}" required />
           </Field>
+          <Field label={t('hosts.description')} hint={t('hosts.descriptionHint')} className="sm:col-span-2">
+            <Input
+              value={h.description ?? ''}
+              onChange={(e) => set({ description: e.target.value })}
+              maxLength={60}
+              placeholder={t('hosts.descriptionPlaceholder')}
+            />
+          </Field>
           <Field label={t('hosts.address')} hint={t('hosts.addressHint')}>
             <TagsInput value={h.address} onChange={(v) => set({ address: v })} placeholder="nl.example.com" />
           </Field>

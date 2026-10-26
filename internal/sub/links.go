@@ -41,6 +41,10 @@ func Link(u *model.User, ep Endpoint) string {
 	in, s := ep.Inbound, ep.Inbound.Settings
 	hostPort := net.JoinHostPort(ep.Host, strconv.Itoa(in.Port))
 	frag := "#" + url.PathEscape(ep.Remark)
+	if ep.Happ && ep.Description != "" {
+		// Happ: "#name?serverDescription=<base64>"
+		frag += "?serverDescription=" + base64.StdEncoding.EncodeToString([]byte(ep.Description))
+	}
 	c := u.Credentials
 
 	switch in.Protocol {
@@ -63,6 +67,9 @@ func Link(u *model.User, ep Endpoint) string {
 			"v": "2", "ps": ep.Remark, "add": ep.Host, "port": strconv.Itoa(in.Port), "id": c.UUID,
 			"aid": "0", "scy": "auto", "net": network(s), "type": headerType(s), "host": s.Host,
 			"path": pathOrService(s), "tls": tlsField(s), "sni": s.SNI, "alpn": strings.Join(s.ALPN, ","), "fp": s.Fingerprint,
+		}
+		if ep.Happ && ep.Description != "" {
+			v["serverDescription"] = ep.Description
 		}
 		b, _ := json.Marshal(v)
 		return "vmess://" + base64.StdEncoding.EncodeToString(b)

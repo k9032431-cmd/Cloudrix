@@ -25,7 +25,24 @@ type Endpoint struct {
 	// CertPin is the hex SHA-256 of the node's self-signed certificate when
 	// the inbound uses it; clients pin it instead of verifying a CA chain.
 	CertPin string
+	// Description is the caption Happ shows under the link name; links
+	// carry it only when Happ is set (other apps would show it in the name).
+	Description string
+	Happ        bool
 }
+
+// ForHapp marks endpoints as going to the Happ app, so links carry their
+// descriptions.
+func ForHapp(eps []Endpoint) []Endpoint {
+	out := slices.Clone(eps)
+	for i := range out {
+		out[i].Happ = true
+	}
+	return out
+}
+
+// happDescriptionMax is the caption length Happ shows.
+const happDescriptionMax = 30
 
 // Resolve picks the inbounds the user can use and gives one endpoint per
 // enabled host of each, in host order. An inbound is served by the nodes
@@ -88,7 +105,7 @@ func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, node
 					addr = defaultHost
 				}
 				c := withHost(in, h.HostSettings)
-				ep := Endpoint{Inbound: c, Host: addr, Remark: RenderRemark(c, u)}
+				ep := Endpoint{Inbound: c, Host: addr, Remark: RenderRemark(c, u), Description: renderDescription(h.Description, u)}
 				if in.SelfSigned() && h.Security != "none" {
 					// self-signed: clients cannot verify the chain, so they skip
 					// it (older apps) or pin the certificate hash (Xray 26+)
@@ -168,6 +185,16 @@ func withHost(in *model.Inbound, h model.HostSettings) *model.Inbound {
 		c.Settings.ALPN = slices.Clone(h.ALPN)
 	}
 	return &c
+}
+
+// renderDescription expands template variables in a host description and
+// keeps it within what Happ shows.
+func renderDescription(d string, u *model.User) string {
+	d = strings.TrimSpace(CleanName(RenderTemplate(d, u)))
+	if r := []rune(d); len(r) > happDescriptionMax {
+		d = strings.TrimSpace(string(r[:happDescriptionMax]))
+	}
+	return d
 }
 
 // RenderRemark expands template variables in an inbound remark (see RenderTemplate).

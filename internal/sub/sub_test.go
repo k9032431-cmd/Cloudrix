@@ -246,3 +246,32 @@ func TestCDNHostLink(t *testing.T) {
 		t.Errorf("host %s", l.Host)
 	}
 }
+
+// Happ shows a host's description under the link name; other apps get the
+// plain name.
+func TestHappDescription(t *testing.T) {
+	in := &model.Inbound{Tag: "v", Protocol: model.ProtoVLESS, Port: 443, Enabled: true, CoreID: 1,
+		Hosts: []model.Host{{Enabled: true, HostSettings: model.HostSettings{Remark: "Germany", Address: []string{"1.2.3.4"},
+			Description: "For {USERNAME} — YouTube without ads, very fast"}}}}
+	vm := &model.Inbound{Tag: "m", Protocol: model.ProtoVMess, Port: 80, Enabled: true, CoreID: 1,
+		Hosts: []model.Host{{Enabled: true, HostSettings: model.HostSettings{Remark: "NL", Address: []string{"1.2.3.4"}, Description: "Happ the best"}}}}
+	u := testUser()
+	eps := Resolve(u, []*model.Inbound{in, vm}, nil, oneNode(), "x")
+	if len(eps) != 2 {
+		t.Fatalf("%d endpoints", len(eps))
+	}
+	if l := Link(u, eps[0]); strings.Contains(l, "serverDescription") || !strings.HasSuffix(l, "#Germany") {
+		t.Errorf("plain link: %s", l)
+	}
+	happ := ForHapp(eps)
+	l := Link(u, happ[0])
+	want := "For alice — YouTube without ad" // cut to 30 characters
+	if !strings.HasSuffix(l, "#Germany?serverDescription="+base64.StdEncoding.EncodeToString([]byte(want))) {
+		t.Errorf("happ link: %s", l)
+	}
+	raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(Link(u, happ[1]), "vmess://"))
+	var v map[string]string
+	if err := json.Unmarshal(raw, &v); err != nil || v["serverDescription"] != "Happ the best" || v["ps"] != "NL" {
+		t.Errorf("vmess: %s", raw)
+	}
+}

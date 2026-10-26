@@ -109,6 +109,9 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, err)
 		return
 	}
+	if isHapp(r) {
+		eps = sub.ForHapp(eps)
+	}
 
 	// HWID device limit: clients such as Happ and v2RayTun send x-hwid.
 	if hwid := r.Header.Get("x-hwid"); hwid != "" {
