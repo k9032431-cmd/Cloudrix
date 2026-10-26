@@ -166,7 +166,9 @@ random_string() {
 # ---------- проверки системы ----------
 
 require_root() {
-  [[ $EUID -eq 0 ]] || die "Запустите от root: sudo bash install.sh"
+  # Azure, AWS, Google Cloud входят не под root; `sudo bash <(curl …)` не
+  # работает (sudo закрывает /dev/fd), поэтому подсказываем sudo -i.
+  [[ $EUID -eq 0 ]] || die "Нужны права root. Выполните сначала: sudo -i — затем эту же команду ещё раз."
 }
 
 detect_os() {
