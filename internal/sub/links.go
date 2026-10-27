@@ -27,6 +27,10 @@ func Base64Links(u *model.User, eps []Endpoint) string {
 	return base64.StdEncoding.EncodeToString([]byte(strings.Join(Links(u, eps), "\n")))
 }
 
+// happName keeps a link name readable for Happ, escaping only what would
+// end it early or be read as an escape.
+var happName = strings.NewReplacer("%", "%25", "#", "%23", "?", "%3F", "\n", "", "\r", "")
+
 // pinCert makes TLS links pin the node's self-signed certificate: Xray 26
 // dropped allowInsecure, so such links would not import otherwise.
 func pinCert(q url.Values, ep Endpoint) {
@@ -42,8 +46,10 @@ func Link(u *model.User, ep Endpoint) string {
 	hostPort := net.JoinHostPort(ep.Host, strconv.Itoa(in.Port))
 	frag := "#" + url.PathEscape(ep.Remark)
 	if ep.Happ && ep.Description != "" {
-		// Happ: "#name?serverDescription=<base64>"
-		frag += "?serverDescription=" + base64.StdEncoding.EncodeToString([]byte(ep.Description))
+		// Happ: "#name?serverDescription=<base64>"; it finds the
+		// description only when the name is written as is, not
+		// percent-encoded
+		frag = "#" + happName.Replace(ep.Remark) + "?serverDescription=" + base64.StdEncoding.EncodeToString([]byte(ep.Description))
 	}
 	c := u.Credentials
 

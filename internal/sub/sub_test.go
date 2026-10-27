@@ -269,6 +269,12 @@ func TestHappDescription(t *testing.T) {
 	if !strings.HasSuffix(l, "#Germany?serverDescription="+base64.StdEncoding.EncodeToString([]byte(want))) {
 		t.Errorf("happ link: %s", l)
 	}
+	// Happ reads the name as is: emoji and spaces stay, "?" is escaped
+	in.Hosts[0].Remark = "🇭🇰 UDP SPEED🚀 ?"
+	l = Link(u, ForHapp(Resolve(u, []*model.Inbound{in}, nil, oneNode(), "x"))[0])
+	if !strings.Contains(l, "#🇭🇰 UDP SPEED🚀 %3F?serverDescription=") {
+		t.Errorf("happ link: %s", l)
+	}
 	raw, _ := base64.StdEncoding.DecodeString(strings.TrimPrefix(Link(u, happ[1]), "vmess://"))
 	var v map[string]string
 	if err := json.Unmarshal(raw, &v); err != nil || v["serverDescription"] != "Happ the best" || v["ps"] != "NL" {
