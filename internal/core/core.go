@@ -114,6 +114,9 @@ func Xray(inbounds []*model.Inbound, users []*model.User, groups model.Groups, c
 		{"inboundTag": []string{"api"}, "outboundTag": "api"},
 		{"ip": []string{"geoip:private"}, "outboundTag": "block"},
 		{"protocol": []string{"bittorrent"}, "outboundTag": "block"},
+		// mail servers: spam sent through a VPN gets the server's IP
+		// blocked by its hosting
+		{"network": "tcp", "port": "25", "outboundTag": "block"},
 	}
 	cascade.apply(&xin, &outbounds, &rules)
 	// No per-inbound counters: with them Xray's hysteria inbound loses the
@@ -526,6 +529,9 @@ func SingBox(inbounds []*model.Inbound, users []*model.User, groups model.Groups
 		"outbounds": []map[string]any{{"type": "direct", "tag": "direct"}},
 		"route": map[string]any{"rules": []map[string]any{
 			{"ip_is_private": true, "action": "reject"},
+			{"network": "tcp", "port": []int{25}, "action": "reject"},
+			{"action": "sniff"},
+			{"protocol": []string{"bittorrent"}, "action": "reject"},
 		}},
 	}
 	if len(endpoints) > 0 {
