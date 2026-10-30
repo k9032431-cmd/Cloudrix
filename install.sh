@@ -386,6 +386,10 @@ resolve_target() {
   TARGET_CHANNEL=source
   TARGET_REF=$(curl -fsSL --max-time 15 -H "Accept: application/vnd.github.sha" \
     "https://api.github.com/repos/$REPO/commits/$BRANCH" 2>/dev/null | head -c 40 || true)
+  if [[ ! $TARGET_REF =~ ^[0-9a-f]{40}$ ]] && command -v git >/dev/null; then
+    # api.github.com бывает закрыт провайдером, а сам github.com — нет
+    TARGET_REF=$(timeout 30 git ls-remote "https://github.com/$REPO.git" "refs/heads/$BRANCH" 2>/dev/null | cut -c1-40 || true)
+  fi
   [[ $TARGET_REF =~ ^[0-9a-f]{40}$ ]] || TARGET_REF=$BRANCH
 }
 
@@ -416,8 +420,10 @@ download_edge() {
   [[ $TARGET_REF =~ ^[0-9a-f]{40}$ ]] || return 1
   local tag="edge-${BRANCH//\//-}" ref waited=0
   local url="https://github.com/$REPO/releases/download/$tag/cloudrix-linux-$ARCH.tar.gz"
-  # Пре-релиза нет вовсе (Actions выключены) — сразу собираем сами.
-  github_api "/releases/tags/$tag" >/dev/null || return 1
+  # Пре-релиза нет вовсе (Actions выключены) — сразу собираем сами. Если
+  # api.github.com недоступен, пробуем скачать первый байт самой сборки.
+  github_api "/releases/tags/$tag" >/dev/null ||
+    curl -fsSL --max-time 20 -r 0-0 -o /dev/null "$url" 2>/dev/null || return 1
   local deadline=$((SECONDS + ${CLOUDRIX_EDGE_WAIT:-300}))
   while true; do
     rm -rf "$WORK/edge" && mkdir -p "$WORK/edge"
@@ -520,8 +526,15 @@ build_from_source() {
   mkdir -p "$src" "$tools"
 
   info "Скачиваю исходники"
-  curl -fsSL --retry 3 "https://github.com/$REPO/archive/$TARGET_REF.tar.gz" | tar -xz -C "$src" --strip-components=1 ||
-    die "Не удалось скачать исходники $REPO (репозиторий приватный или нет сети?)."
+  if ! curl -fsSL --retry 3 "https://github.com/$REPO/archive/$TARGET_REF.tar.gz" 2>/dev/null | tar -xz -C "$src" --strip-components=1 2>/dev/null; then
+    # архив отдаёт codeload.github.com, который провайдеры иногда закрывают;
+    # git ходит через сам github.com
+    command -v git >/dev/null || install_packages git >/dev/null 2>&1 || true
+    rm -rf "$src"
+    if ! command -v git >/dev/null || ! git clone -q --depth 1 --branch "$BRANCH" "https://github.com/$REPO.git" "$src" 2>/dev/null; then
+      die "Не удалось скачать исходники $REPO (репозиторий приватный или нет сети?)."
+    fi
+  fi
 
   info "Скачиваю Go $GO_VERSION и Node.js $NODE_VERSION (только для сборки)"
   curl -fsSL --retry 3 "${CLOUDRIX_GO_URL:-https://dl.google.com/go/go$GO_VERSION.linux-$ARCH.tar.gz}" | tar -xz -C "$tools"
