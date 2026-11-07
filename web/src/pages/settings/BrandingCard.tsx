@@ -4,7 +4,7 @@ import { put } from '../../lib/api'
 import { useFetch } from '../../lib/hooks'
 import { useI18n } from '../../lib/i18n'
 import type { Branding } from '../../lib/types'
-import { Button, Card, ErrorNote, Field, Input, Textarea, Toggle } from '../../components/ui'
+import { Button, Card, ErrorNote, Field, Input, Select, Textarea, Toggle } from '../../components/ui'
 
 const VARIABLES = ['USERNAME', 'NOTE', 'EXPIRE_DATE', 'DAYS_LEFT', 'DATA_LEFT', 'DATA_USED', 'DATA_LIMIT', 'STATUS'] as const
 
@@ -149,6 +149,28 @@ export default function BrandingCard() {
             <div className={form.provider_id ? 'grid gap-3' : 'pointer-events-none grid gap-3 opacity-50'}>
               <Toggle checked={form.hide_settings} onChange={(v) => setForm({ ...form, hide_settings: v })} label={t('br.hideSettings')} />
               <Toggle checked={form.always_hwid} onChange={(v) => setForm({ ...form, always_hwid: v })} label={t('br.alwaysHwid')} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t('br.pingType')} hint={t('br.pingTypeHint')}>
+                  <Select value={form.ping_type ?? ''} onChange={(e) => setForm({ ...form, ping_type: e.target.value as Branding['ping_type'] })}>
+                    <option value="">{t('br.pingDefault')}</option>
+                    <option value="proxy">Proxy (GET)</option>
+                    <option value="proxy-head">Proxy (HEAD)</option>
+                    <option value="tcp">TCP</option>
+                    <option value="icmp">ICMP</option>
+                  </Select>
+                </Field>
+                <Field label={t('br.pingMode')} hint={t('br.pingModeHint')}>
+                  <Select value={form.ping_mode ?? ''} onChange={(e) => setForm({ ...form, ping_mode: e.target.value as Branding['ping_mode'] })}>
+                    <option value="">{t('br.pingDefault')}</option>
+                    <option value="default">default</option>
+                    <option value="double">double</option>
+                    <option value="keepalive">keepalive</option>
+                  </Select>
+                </Field>
+                <Field label={t('br.pingUrl')} className="sm:col-span-2">
+                  <Input value={form.ping_url ?? ''} onChange={(e) => setForm({ ...form, ping_url: e.target.value })} placeholder="https://cp.cloudflare.com/generate_204" />
+                </Field>
+              </div>
             </div>
           </div>
           <Button type="submit" loading={busy}>

@@ -307,6 +307,9 @@ export interface Branding {
   provider_id: string
   hide_settings: boolean
   always_hwid: boolean
+  ping_type?: '' | 'proxy' | 'proxy-head' | 'tcp' | 'icmp'
+  ping_mode?: '' | 'default' | 'double' | 'keepalive'
+  ping_url?: string
 }
 
 export interface SubscriptionInfo {

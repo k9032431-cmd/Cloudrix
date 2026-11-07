@@ -196,6 +196,15 @@ func (s *Server) writeSubHeaders(w http.ResponseWriter, u *model.User) {
 		if b.AlwaysHWID {
 			h.Set("subscription-always-hwid-enable", "1")
 		}
+		if b.PingType != "" {
+			h.Set("ping-type", b.PingType)
+		}
+		if b.PingMode != "" {
+			h.Set("proxy-ping-mode", b.PingMode)
+		}
+		if b.PingURL != "" {
+			h.Set("check-url-via-proxy", b.PingURL)
+		}
 	}
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, u.Username))
 	h.Set("Cache-Control", "no-store")

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -35,6 +36,12 @@ type branding struct {
 	ProviderID   string `json:"provider_id"`
 	HideSettings bool   `json:"hide_settings"`
 	AlwaysHWID   bool   `json:"always_hwid"`
+	// How Happ measures ping (also a provider feature): proxy, proxy-head,
+	// tcp or icmp; the proxy mode (default, double, keepalive: only the
+	// already open connection is timed); the URL fetched through the proxy.
+	PingType string `json:"ping_type,omitempty"`
+	PingMode string `json:"ping_mode,omitempty"`
+	PingURL  string `json:"ping_url,omitempty"`
 }
 
 var providerIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
@@ -103,6 +110,7 @@ func (s *Server) handleUpdateBranding(w http.ResponseWriter, r *http.Request) {
 	in.Announce = strings.TrimSpace(strings.ReplaceAll(in.Announce, "\r\n", "\n"))
 	in.SupportURL, in.WebPageURL = strings.TrimSpace(in.SupportURL), strings.TrimSpace(in.WebPageURL)
 	in.ProviderID = strings.TrimSpace(in.ProviderID)
+	in.PingURL = strings.TrimSpace(in.PingURL)
 	switch {
 	case in.Title == "" || utf8.RuneCountInString(in.Title) > 64:
 		writeError(w, http.StatusBadRequest, "title must be 1-64 characters")
@@ -119,7 +127,14 @@ func (s *Server) handleUpdateBranding(w http.ResponseWriter, r *http.Request) {
 	case !providerIDRe.MatchString(in.ProviderID):
 		writeError(w, http.StatusBadRequest, "provider ID: letters, digits, _ and - only")
 		return
-	case (in.HideSettings || in.AlwaysHWID) && in.ProviderID == "":
+	case !slices.Contains([]string{"", "proxy", "proxy-head", "tcp", "icmp"}, in.PingType) ||
+		!slices.Contains([]string{"", "default", "double", "keepalive"}, in.PingMode):
+		writeError(w, http.StatusBadRequest, "unknown ping type or mode")
+		return
+	case in.PingURL != "" && !strings.HasPrefix(in.PingURL, "https://") && !strings.HasPrefix(in.PingURL, "http://"):
+		writeError(w, http.StatusBadRequest, "ping URL must start with https:// or http://")
+		return
+	case (in.HideSettings || in.AlwaysHWID || in.PingType != "" || in.PingMode != "") && in.ProviderID == "":
 		writeError(w, http.StatusBadRequest, "hiding settings and forced HWID need a Happ provider ID")
 		return
 	}
