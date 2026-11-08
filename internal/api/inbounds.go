@@ -15,6 +15,7 @@ import (
 	"github.com/k9032431-cmd/cloudrix/internal/auth"
 	"github.com/k9032431-cmd/cloudrix/internal/core"
 	"github.com/k9032431-cmd/cloudrix/internal/model"
+	"github.com/k9032431-cmd/cloudrix/internal/store"
 )
 
 var tagRe = regexp.MustCompile(`^[a-zA-Z0-9_.-]{1,64}$`)
@@ -90,6 +91,15 @@ func validateInbound(in *model.Inbound) error {
 		}
 	}
 	return nil
+}
+
+// writeInboundError names the clash when an inbound's tag is taken.
+func (s *Server) writeInboundError(w http.ResponseWriter, err error, tag string) {
+	if errors.Is(err, store.ErrConflict) {
+		writeError(w, http.StatusConflict, "an inbound with the tag \""+tag+"\" already exists: pick another tag")
+		return
+	}
+	s.writeStoreError(w, err)
 }
 
 // inboundCore settles which core an inbound belongs to: the one sent, or
@@ -220,7 +230,7 @@ func (s *Server) handleCreateInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.CreateInbound(r.Context(), &in); err != nil {
-		s.writeStoreError(w, err)
+		s.writeInboundError(w, err, in.Tag)
 		return
 	}
 	s.audit(r, "inbound.create", in.Tag, string(in.Protocol))
@@ -252,7 +262,7 @@ func (s *Server) handleUpdateInbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.store.UpdateInbound(r.Context(), &in); err != nil {
-		s.writeStoreError(w, err)
+		s.writeInboundError(w, err, in.Tag)
 		return
 	}
 	s.syncHosts(r, &in)
