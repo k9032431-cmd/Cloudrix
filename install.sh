@@ -1202,8 +1202,16 @@ install_cores() {
   v=${CLOUDRIX_SINGBOX_VERSION:-$(latest_tag SagerNet/sing-box)}
   [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v=$SINGBOX_FALLBACK_VERSION
   url=${CLOUDRIX_SINGBOX_URL:-https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz}
-  curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url" && tar -xzf "$tmp/sb.tar.gz" -C "$tmp" ||
-    die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
+  if ! curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url"; then
+    [[ -z ${CLOUDRIX_SINGBOX_URL-} && $v != "$SINGBOX_FALLBACK_VERSION" ]] ||
+      die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
+    v=$SINGBOX_FALLBACK_VERSION
+    url="https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz"
+    warn "GitHub не отдал sing-box последней версии, пробую v$v"
+    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url" ||
+      die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
+  fi
+  tar -xzf "$tmp/sb.tar.gz" -C "$tmp" || die "Не удалось распаковать sing-box."
   install -m 0755 "$tmp"/sing-box-*/sing-box "$NODE_LIB/sing-box"
   rm -rf "$tmp"
   ok "Ядра: $("$NODE_LIB/xray/xray" version | head -n1 | awk '{print $1, $2}'), $("$NODE_LIB/sing-box" version | head -n1)"
