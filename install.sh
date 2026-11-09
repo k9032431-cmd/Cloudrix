@@ -43,6 +43,7 @@ NODE_DATA_DIR="/var/lib/cloudrix-node"
 NODE_LIB="/usr/local/lib/cloudrix-node"
 NODE_SERVICE="cloudrix-node"
 # если узнать последнюю версию sing-box не получилось
+XRAY_FALLBACK_VERSION="26.3.27"
 SINGBOX_FALLBACK_VERSION="1.12.12"
 
 GO_VERSION="1.24.7"
@@ -1184,7 +1185,15 @@ install_cores() {
 
   info "Скачиваю Xray"
   url=${CLOUDRIX_XRAY_URL:-https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-$xarch.zip}
-  curl -fsSL --retry 3 -o "$tmp/xray.zip" "$url" || die "Не удалось скачать Xray ($url)."
+  # GitHub иногда отвечает 504 на ссылку «latest»: ждём и повторяем, затем
+  # берём проверенную версию по прямой ссылке
+  if ! curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/xray.zip" "$url"; then
+    [[ -z ${CLOUDRIX_XRAY_URL-} ]] || die "Не удалось скачать Xray ($url)."
+    url="https://github.com/XTLS/Xray-core/releases/download/v$XRAY_FALLBACK_VERSION/Xray-linux-$xarch.zip"
+    warn "GitHub не отдал последнюю версию Xray, пробую v$XRAY_FALLBACK_VERSION"
+    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/xray.zip" "$url" ||
+      die "Не удалось скачать Xray: GitHub не отвечает с этого сервера. Повторите установку через несколько минут."
+  fi
   unzip_to "$tmp/xray.zip" "$tmp/xray" || die "Не удалось распаковать Xray: установите unzip (apt-get install unzip)."
   install -m 0755 "$tmp/xray/xray" "$NODE_LIB/xray/xray"
   cp -f "$tmp/xray/"*.dat "$NODE_LIB/xray/" 2>/dev/null || true
@@ -1193,7 +1202,8 @@ install_cores() {
   v=${CLOUDRIX_SINGBOX_VERSION:-$(latest_tag SagerNet/sing-box)}
   [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v=$SINGBOX_FALLBACK_VERSION
   url=${CLOUDRIX_SINGBOX_URL:-https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz}
-  curl -fsSL --retry 3 "$url" | tar -xz -C "$tmp" || die "Не удалось скачать sing-box ($url)."
+  curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url" && tar -xzf "$tmp/sb.tar.gz" -C "$tmp" ||
+    die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
   install -m 0755 "$tmp"/sing-box-*/sing-box "$NODE_LIB/sing-box"
   rm -rf "$tmp"
   ok "Ядра: $("$NODE_LIB/xray/xray" version | head -n1 | awk '{print $1, $2}'), $("$NODE_LIB/sing-box" version | head -n1)"
