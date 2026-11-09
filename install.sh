@@ -1174,24 +1174,38 @@ unzip_to() {
   fi
 }
 
+# fetch_first скачивает файл по первому из адресов, который отвечает.
+fetch_first() {
+  local out=$1 url
+  shift
+  for url in "$@"; do
+    [[ -n $url ]] || continue
+    curl -fsSL --retry 3 --retry-delay 3 --retry-all-errors -o "$out" "$url" 2>/dev/null && return 0
+    warn "Не скачалось: $url"
+  done
+  return 1
+}
+
 install_cores() {
-  local tmp xarch sarch v url
+  local tmp xarch sarch v mirror
   tmp=$(mktemp -d)
   case $ARCH in
     amd64) xarch=64 sarch=amd64 ;;
     arm64) xarch=arm64-v8a sarch=arm64 ;;
   esac
   mkdir -p "$NODE_LIB/xray"
+  # Копии ядер в пре-релизе Cloudrix: с некоторых серверов GitHub отвечает
+  # 504 на файлы XTLS и SagerNet, а наш релиз скачивается.
+  mirror="https://github.com/${REPO:-$DEFAULT_REPO}/releases/download/edge-$(printf '%s' "${BRANCH:-main}" | tr '/' '-')"
 
   info "Скачиваю Xray"
-  url=${CLOUDRIX_XRAY_URL:-https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-$xarch.zip}
-  # GitHub иногда отвечает 504 на ссылку «latest»: ждём и повторяем, затем
-  # берём проверенную версию по прямой ссылке
-  if ! curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/xray.zip" "$url"; then
-    [[ -z ${CLOUDRIX_XRAY_URL-} ]] || die "Не удалось скачать Xray ($url)."
-    url="https://github.com/XTLS/Xray-core/releases/download/v$XRAY_FALLBACK_VERSION/Xray-linux-$xarch.zip"
-    warn "GitHub не отдал последнюю версию Xray, пробую v$XRAY_FALLBACK_VERSION"
-    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/xray.zip" "$url" ||
+  if [[ -n ${CLOUDRIX_XRAY_URL-} ]]; then
+    fetch_first "$tmp/xray.zip" "$CLOUDRIX_XRAY_URL" || die "Не удалось скачать Xray ($CLOUDRIX_XRAY_URL)."
+  else
+    fetch_first "$tmp/xray.zip" \
+      "https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-$xarch.zip" \
+      "$mirror/xray-linux-$ARCH.zip" \
+      "https://github.com/XTLS/Xray-core/releases/download/v$XRAY_FALLBACK_VERSION/Xray-linux-$xarch.zip" ||
       die "Не удалось скачать Xray: GitHub не отвечает с этого сервера. Повторите установку через несколько минут."
   fi
   unzip_to "$tmp/xray.zip" "$tmp/xray" || die "Не удалось распаковать Xray: установите unzip (apt-get install unzip)."
@@ -1199,17 +1213,16 @@ install_cores() {
   cp -f "$tmp/xray/"*.dat "$NODE_LIB/xray/" 2>/dev/null || true
 
   info "Скачиваю sing-box"
-  v=${CLOUDRIX_SINGBOX_VERSION:-$(latest_tag SagerNet/sing-box)}
-  [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v=$SINGBOX_FALLBACK_VERSION
-  url=${CLOUDRIX_SINGBOX_URL:-https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz}
-  if ! curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url"; then
-    [[ -z ${CLOUDRIX_SINGBOX_URL-} && $v != "$SINGBOX_FALLBACK_VERSION" ]] ||
-      die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
-    v=$SINGBOX_FALLBACK_VERSION
-    url="https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz"
-    warn "GitHub не отдал sing-box последней версии, пробую v$v"
-    curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$tmp/sb.tar.gz" "$url" ||
-      die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера ($url). Повторите установку через несколько минут."
+  if [[ -n ${CLOUDRIX_SINGBOX_URL-} ]]; then
+    fetch_first "$tmp/sb.tar.gz" "$CLOUDRIX_SINGBOX_URL" || die "Не удалось скачать sing-box ($CLOUDRIX_SINGBOX_URL)."
+  else
+    v=${CLOUDRIX_SINGBOX_VERSION:-$(latest_tag SagerNet/sing-box)}
+    [[ $v =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || v=$SINGBOX_FALLBACK_VERSION
+    fetch_first "$tmp/sb.tar.gz" \
+      "https://github.com/SagerNet/sing-box/releases/download/v$v/sing-box-$v-linux-$sarch.tar.gz" \
+      "$mirror/sing-box-linux-$ARCH.tar.gz" \
+      "https://github.com/SagerNet/sing-box/releases/download/v$SINGBOX_FALLBACK_VERSION/sing-box-$SINGBOX_FALLBACK_VERSION-linux-$sarch.tar.gz" ||
+      die "Не удалось скачать sing-box: GitHub не отвечает с этого сервера. Повторите установку через несколько минут."
   fi
   tar -xzf "$tmp/sb.tar.gz" -C "$tmp" || die "Не удалось распаковать sing-box."
   install -m 0755 "$tmp"/sing-box-*/sing-box "$NODE_LIB/sing-box"
