@@ -258,3 +258,7 @@ web/                React-интерфейс (собирается в web/dist �
 - [ ] Тарифы и оплата, баланс реселлеров
 - [ ] Миграция из Marzban и PasarGuard
 - [ ] Prometheus `/metrics`, поддержка PostgreSQL
+
+## Сторонние материалы
+
+- Флаги стран в интерфейсе: шрифт «Twemoji Country Flags» из пакета [country-flag-emoji-polyfill](https://github.com/talkjs/country-flag-emoji-polyfill) (MIT), изображения флагов — [Twemoji](https://github.com/twitter/twemoji), лицензия [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).

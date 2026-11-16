@@ -10,8 +10,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Geist Variable"', 'Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        mono: ['"Geist Mono Variable"', '"Geist Mono"', 'ui-monospace', 'monospace'],
+        sans: ['"Twemoji Country Flags"', '"Geist Variable"', 'Geist', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        mono: ['"Twemoji Country Flags"', '"Geist Mono Variable"', '"Geist Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
         background: tok('background'),

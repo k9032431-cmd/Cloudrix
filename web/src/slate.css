@@ -2,10 +2,21 @@
    (.claude/skills/bs-slate-admin-console). Tokens are oklch; components
    reference tokens only, so dark mode and the tangerine preset are free. */
 
+/* Country flags: Windows has no flag emoji and shows "US" instead of 🇺🇸.
+   This font covers only the flag code points (unicode-range), so every other
+   character keeps the normal fonts. Flags: Twemoji, CC BY 4.0; font packaged by
+   country-flag-emoji-polyfill (MIT). */
+@font-face {
+  font-family: 'Twemoji Country Flags';
+  src: url('./assets/fonts/TwemojiCountryFlags.woff2') format('woff2');
+  unicode-range: U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E, U+E0073-E0074, U+E0077, U+E007F;
+  font-display: swap;
+}
+
 /* ===== Design tokens: Slate (default preset), light ===== */
 :root {
-  --font-sans: 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-sans: 'Twemoji Country Flags', 'Geist Variable', 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'Twemoji Country Flags', 'Geist Mono Variable', 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
   --radius: 0.625rem;
   --radius-panel: 0.875rem;
   --radius-md: calc(var(--radius) - 2px);
