@@ -5,6 +5,7 @@ import { useFetch } from '../lib/hooks'
 import { relativeTime } from '../lib/format'
 import { useI18n } from '../lib/i18n'
 import type { DriveSettings } from '../lib/types'
+import BackupCard from './settings/BackupCard'
 import BrandingCard from './settings/BrandingCard'
 import { Badge, Button, Card, CopyButton, ErrorNote, Field, Input, PageHeader, Select, Toggle } from '../components/ui'
 
@@ -15,6 +16,7 @@ export default function Settings() {
       <PageHeader title={t('nav.settings')} />
       <BrandingCard />
       <DriveCard />
+      <BackupCard />
     </>
   )
 }

@@ -32,6 +32,13 @@ type driveSettings struct {
 	FolderID        string `json:"folder_id"`
 	Format          string `json:"format"` // base64 | plain
 	IntervalMinutes int    `json:"interval_minutes"`
+
+	// Panel backups kept in the same Drive (see backup.go).
+	BackupHours    int        `json:"backup_hours"` // 0 = off
+	BackupKeep     int        `json:"backup_keep"`
+	BackupFolderID string     `json:"backup_folder_id"`
+	BackupAt       *time.Time `json:"backup_at,omitempty"`
+	BackupError    string     `json:"backup_error,omitempty"`
 }
 
 func (d *driveSettings) normalize() {
@@ -40,6 +47,9 @@ func (d *driveSettings) normalize() {
 	}
 	if d.IntervalMinutes <= 0 {
 		d.IntervalMinutes = 10
+	}
+	if d.BackupKeep <= 0 {
+		d.BackupKeep = 10
 	}
 }
 
@@ -648,7 +658,7 @@ func (s *Server) handleUpdateDrive(w http.ResponseWriter, r *http.Request) {
 	err := s.drive.update(r.Context(), func(set *driveSettings) {
 		if in.ClientID != set.ClientID {
 			// A different OAuth client cannot use the old refresh token.
-			set.RefreshToken, set.Account, set.FolderID = "", "", ""
+			set.RefreshToken, set.Account, set.FolderID, set.BackupFolderID = "", "", "", ""
 		}
 		set.Enabled, set.APIKey, set.ClientID = in.Enabled, in.APIKey, in.ClientID
 		if in.ClientSecret != "" {

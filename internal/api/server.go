@@ -37,6 +37,8 @@ type Server struct {
 	adminHold adminHold
 	// OnUsersChanged is called after mutations that affect core configs.
 	OnUsersChanged func()
+	// OnRestart restarts the panel (set by main); a restore needs it.
+	OnRestart func()
 }
 
 func New(cfg config.Config, st *store.Store, issuer *auth.Issuer, log *slog.Logger, web fs.FS) *Server {
@@ -62,6 +64,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return err
 	}
 	go s.drive.run(ctx)
+	go s.drive.runBackups(ctx)
 	go s.watchNodes(ctx)
 	go s.watchDevices(ctx)
 	s.drive.Trigger()
@@ -158,6 +161,13 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/settings/gdrive/disconnect", s.handleDriveDisconnect)
 				r.Post("/settings/gdrive/test", s.handleDriveTest)
 				r.Post("/settings/gdrive/sync", s.handleDriveSyncAll)
+
+				r.Get("/system/backup", s.handleDownloadBackup)
+				r.Post("/system/restore", s.handleRestoreUpload)
+				r.Get("/system/drive-backups", s.handleDriveBackups)
+				r.Put("/system/drive-backups", s.handleUpdateDriveBackups)
+				r.Post("/system/drive-backups", s.handleDriveBackupNow)
+				r.Post("/system/drive-backups/{fileID}/restore", s.handleDriveRestore)
 
 				r.Get("/core/config", s.handleCoreConfig)
 				r.Get("/audit", s.handleAudit)

@@ -10,6 +10,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +26,7 @@ type fakeGoogle struct {
 	mu        sync.Mutex
 	polls     int
 	files     map[string]string // id -> content
+	names     map[string]string // id -> name
 	public    map[string]bool
 	folders   map[string]bool
 	nextID    int
@@ -36,7 +39,7 @@ type fakeGoogle struct {
 }
 
 func newFakeGoogle() (*fakeGoogle, *httptest.Server) {
-	g := &fakeGoogle{files: map[string]string{}, public: map[string]bool{}, folders: map[string]bool{}, apiKey: "AIzaTEST"}
+	g := &fakeGoogle{files: map[string]string{}, names: map[string]string{}, public: map[string]bool{}, folders: map[string]bool{}, apiKey: "AIzaTEST"}
 	return g, httptest.NewServer(g)
 }
 
@@ -98,6 +101,7 @@ func (g *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		mr := multipart.NewReader(r.Body, params["boundary"])
 		metaPart, _ := mr.NextPart()
 		var meta struct {
+			Name    string   `json:"name"`
 			Parents []string `json:"parents"`
 		}
 		_ = json.NewDecoder(metaPart).Decode(&meta)
@@ -110,6 +114,7 @@ func (g *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		content, _ := io.ReadAll(body)
 		id := g.id()
 		g.files[id] = string(content)
+		g.names[id] = meta.Name
 		jsonOut(map[string]string{"id": id})
 	case strings.HasPrefix(p, "/upload/drive/v3/files/") && r.Method == http.MethodPatch && authed:
 		id := strings.TrimPrefix(p, "/upload/drive/v3/files/")
@@ -129,6 +134,34 @@ func (g *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		delete(g.files, id)
 		delete(g.folders, id)
 		w.WriteHeader(204)
+	case p == "/drive/v3/files" && r.Method == http.MethodGet && authed:
+		// listing: names containing the quoted word in q, newest (highest id) first
+		q := r.URL.Query().Get("q")
+		word := ""
+		if i := strings.Index(q, "name contains '"); i >= 0 {
+			word = strings.SplitN(q[i+len("name contains '"):], "'", 2)[0]
+		}
+		type file struct {
+			ID      string `json:"id"`
+			Name    string `json:"name"`
+			Created string `json:"createdTime"`
+			Size    string `json:"size"`
+		}
+		var out []file
+		for id, name := range g.names {
+			if _, ok := g.files[id]; ok && strings.Contains(name, word) {
+				out = append(out, file{ID: id, Name: name, Created: time.Now().UTC().Format(time.RFC3339), Size: fmt.Sprint(len(g.files[id]))})
+			}
+		}
+		sort.Slice(out, func(i, j int) bool { return idNum(out[i].ID) > idNum(out[j].ID) })
+		jsonOut(map[string]any{"files": out})
+	case strings.HasPrefix(p, "/drive/v3/files/") && r.Method == http.MethodGet && authed && r.URL.Query().Get("key") == "":
+		content, ok := g.files[strings.TrimPrefix(p, "/drive/v3/files/")]
+		if !ok {
+			w.WriteHeader(404)
+			return
+		}
+		_, _ = io.WriteString(w, content)
 	case strings.HasPrefix(p, "/drive/v3/files/") && r.Method == http.MethodGet:
 		id := strings.TrimPrefix(p, "/drive/v3/files/")
 		content, ok := g.files[id]
@@ -144,6 +177,11 @@ func (g *fakeGoogle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(401)
 	}
+}
+
+func idNum(id string) int {
+	n, _ := strconv.Atoi(strings.TrimPrefix(id, "f"))
+	return n
 }
 
 func (g *fakeGoogle) content(id string) (string, bool) {

@@ -288,7 +288,13 @@ func (c *Client) CreateFolder(ctx context.Context, name string) (string, error) 
 
 // CreateFile uploads a text file into folderID and returns its id.
 func (c *Client) CreateFile(ctx context.Context, folderID, name string, content []byte) (string, error) {
-	meta := map[string]any{"name": name, "mimeType": "text/plain"}
+	return c.Upload(ctx, folderID, name, "text/plain", content)
+}
+
+// Upload stores content as a new private file of the given type in folderID
+// and returns its id.
+func (c *Client) Upload(ctx context.Context, folderID, name, mimeType string, content []byte) (string, error) {
+	meta := map[string]any{"name": name, "mimeType": mimeType}
 	if folderID != "" {
 		meta["parents"] = []string{folderID}
 	}
@@ -301,7 +307,11 @@ func (c *Client) CreateFile(ctx context.Context, folderID, name string, content 
 	part, _ := mw.CreatePart(h)
 	_, _ = part.Write(metaJSON)
 	h = textproto.MIMEHeader{}
-	h.Set("Content-Type", "text/plain; charset=UTF-8")
+	if mimeType == "text/plain" {
+		h.Set("Content-Type", "text/plain; charset=UTF-8")
+	} else {
+		h.Set("Content-Type", mimeType)
+	}
 	part, _ = mw.CreatePart(h)
 	_, _ = part.Write(content)
 	_ = mw.Close()
@@ -331,6 +341,58 @@ func (c *Client) Delete(ctx context.Context, fileID string) error {
 		return nil
 	}
 	return err
+}
+
+// File describes a Drive file in a listing.
+type File struct {
+	ID      string    `json:"id"`
+	Name    string    `json:"name"`
+	Created time.Time `json:"createdTime"`
+	Size    int64     `json:"size,string"`
+}
+
+// List returns the files the app can see that match a Drive query, newest
+// first (drive.file: only files this OAuth client created).
+func (c *Client) List(ctx context.Context, query string) ([]File, error) {
+	q := url.Values{
+		"q": {query}, "orderBy": {"createdTime desc"}, "pageSize": {"100"},
+		"fields": {"files(id,name,createdTime,size)"},
+	}
+	var out struct {
+		Files []File `json:"files"`
+	}
+	err := c.authed(ctx, http.MethodGet, c.ep.Drive+"/files?"+q.Encode(), nil, "", &out)
+	return out.Files, err
+}
+
+// Download returns the content of a file the app can read, up to limit bytes.
+func (c *Client) Download(ctx context.Context, fileID string, limit int64) ([]byte, error) {
+	tok, err := c.token(ctx)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.ep.Drive+"/files/"+url.PathEscape(fileID)+"?alt=media", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := (&http.Client{Timeout: 5 * time.Minute}).Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, &APIError{Status: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+	}
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, errors.New("file is too large")
+	}
+	return data, nil
 }
 
 // FetchPublic downloads a file the way a client would: anonymously, with the API key.

@@ -46,12 +46,25 @@ func main() {
 		return
 	}
 	if err := serve(cfg, log); err != nil {
+		if errors.Is(err, errRestart) {
+			log.Info("restarting to apply the restored backup")
+			os.Exit(3)
+		}
 		log.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
+// errRestart ends serve so that main exits with a failure code and the
+// service manager starts the panel again (systemd Restart=on-failure).
+var errRestart = errors.New("restart requested")
+
 func serve(cfg config.Config, log *slog.Logger) error {
+	if done, err := api.ApplyPendingRestore(cfg.DatabasePath); err != nil {
+		return fmt.Errorf("apply restored backup: %w", err)
+	} else if done {
+		log.Info("restored the database from a backup")
+	}
 	st, err := store.Open(cfg.DatabasePath)
 	if err != nil {
 		return err
@@ -70,6 +83,11 @@ func serve(cfg config.Config, log *slog.Logger) error {
 	}
 
 	srv := api.New(cfg, st, auth.NewIssuer(secret, cfg.TokenTTL), log, web.FS())
+	restart := false
+	srv.OnRestart = func() {
+		restart = true
+		stop()
+	}
 	if err := srv.Start(ctx); err != nil {
 		return err
 	}
@@ -104,7 +122,13 @@ func serve(cfg config.Config, log *slog.Logger) error {
 		log.Info("shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return httpSrv.Shutdown(shutdownCtx)
+		if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		if restart {
+			return errRestart
+		}
+		return nil
 	}
 	return nil
 }
