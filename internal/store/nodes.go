@@ -36,7 +36,8 @@ func scanNode(row interface{ Scan(...any) error }) (*model.Node, error) {
 func (s *Store) CreateNode(ctx context.Context, n *model.Node) error {
 	n.CreatedAt = time.Now().UTC()
 	res, err := s.db.ExecContext(ctx,
-		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, secret, created_at, core_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO nodes (name, address, api_port, usage_coefficient, status, secret, created_at, core_id, position)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(position), 0) + 1 FROM nodes))`,
 		n.Name, n.Address, n.APIPort, n.UsageCoefficient, n.Status, n.Secret, unix(n.CreatedAt), nullID(coreRef(n.CoreID)))
 	if isUnique(err) {
 		return ErrConflict
@@ -73,7 +74,7 @@ func (s *Store) GetNode(ctx context.Context, id int64) (*model.Node, error) {
 }
 
 func (s *Store) ListNodes(ctx context.Context) ([]*model.Node, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+nodeCols+` FROM nodes ORDER BY position, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -141,4 +142,23 @@ func coreRef(id int64) *int64 {
 		return nil
 	}
 	return &id
+}
+
+// ReorderNodes puts the nodes in the given order; nodes not listed go after
+// them, in their old order.
+func (s *Store) ReorderNodes(ctx context.Context, ids []int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `UPDATE nodes SET position = position + ?`, len(ids)+1); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if _, err := tx.ExecContext(ctx, `UPDATE nodes SET position = ? WHERE id = ?`, i+1, id); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }

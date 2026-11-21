@@ -226,6 +226,9 @@ var migrations = []string{
 		'$.sni', json(CASE WHEN COALESCE(json_extract(data, '$.sni'), '') != '' THEN json_array(json_extract(data, '$.sni')) ELSE json_array() END),
 		'$.host', json(CASE WHEN COALESCE(json_extract(data, '$.host'), '') != '' THEN json_array(json_extract(data, '$.host')) ELSE json_array() END));
 	UPDATE inbounds SET node_id = NULL WHERE tag NOT LIKE 'hysteria2-node%';`,
+	// nodes in the order the admin drags them to; the current order stays
+	`ALTER TABLE nodes ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+	UPDATE nodes SET position = id;`,
 }
 
 func (s *Store) migrate(ctx context.Context) error {

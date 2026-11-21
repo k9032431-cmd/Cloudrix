@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { ChartUp, CircleAlert, Info, Pencil, Plus, RefreshCw, Terminal, Trash2 } from '../components/icons'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { ChartUp, CircleAlert, GripVertical, Info, Pencil, Plus, RefreshCw, Terminal, Trash2 } from '../components/icons'
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
@@ -18,7 +18,7 @@ interface InstallInfo {
 }
 
 export default function Nodes() {
-  const { t, lang } = useI18n()
+  const { t } = useI18n()
   const { data, error, reload } = useFetch<Node[]>('/api/nodes')
   const { data: cores } = useFetch<Core[]>('/api/cores')
   const [editing, setEditing] = useState<Node | 'new' | null>(null)
@@ -26,6 +26,48 @@ export default function Nodes() {
   const [installing, setInstalling] = useState<Node | null>(null)
   const [period, setPeriod] = useState<StatsPeriod>('30')
   const [stats, setStats] = useState<{ id: number; name: string } | null>(null)
+  // the order the admin drags the nodes to; a poll must not undo a drag
+  const [list, setList] = useState<Node[]>([])
+  const [dragId, setDragId] = useState<number | null>(null)
+  const listRef = useRef<Node[]>([])
+  listRef.current = list
+  const bodyRef = useRef<HTMLTableSectionElement>(null)
+  const toast = useToast()
+  useEffect(() => {
+    if (dragId === null) setList(data ?? [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+  // the dragged row takes the place of the row under the pointer
+  const dragMove = (y: number) => {
+    if (dragId === null || !bodyRef.current) return
+    const rows = [...bodyRef.current.querySelectorAll<HTMLTableRowElement>('tr[data-id]')]
+    let to = rows.length - 1
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect()
+      if (y < r.top + r.height / 2) {
+        to = i
+        break
+      }
+    }
+    setList((l) => {
+      const from = l.findIndex((n) => n.id === dragId)
+      if (from < 0 || from === to) return l
+      const next = [...l]
+      next.splice(to, 0, ...next.splice(from, 1))
+      return next
+    })
+  }
+  const dragEnd = async () => {
+    setDragId(null)
+    const ids = listRef.current.map((n) => n.id)
+    if (ids.join() === (data ?? []).map((n) => n.id).join()) return
+    try {
+      await put('/api/nodes/order', { ids })
+    } catch (e) {
+      toast((e as Error).message, 'error')
+    }
+    reload()
+  }
 
   // the agent reports in every ~25s; keep the list fresh while the page is open
   useEffect(() => {
@@ -86,7 +128,7 @@ export default function Nodes() {
                 <Th className="w-[132px] sm:w-36" />
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={bodyRef}>
               {!data && (
                 <tr>
                   <td colSpan={6}>
@@ -94,50 +136,21 @@ export default function Nodes() {
                   </td>
                 </tr>
               )}
-              {data?.map((n) => (
-                <tr key={n.id}>
-                  <Td>
-                    <div className="ent-name">{n.name}</div>
-                    <div className="ent-sub font-mono">{n.address}</div>
-                    <div className="ent-sub">
-                      {t('nodes.core')}: {cores?.find((c) => c.id === n.core_id)?.name ?? '—'}
-                    </div>
-                    {/* phones: the status under the name instead of its own column */}
-                    <div className="show-sm mt-1.5">
-                      <NodeStatusBadge status={n.status} />
-                      {n.message && <NodeError text={message(n)} raw={n.message} />}
-                    </div>
-                  </Td>
-                  <Td className="hide-sm">
-                    <NodeStatusBadge status={n.status} />
-                    {n.message && (
-                      <NodeError text={message(n)} raw={n.message} />
-                    )}
-                  </Td>
-                  <Td className="hide-sm text-xs text-muted-foreground">{n.core_version || '—'}</Td>
-                  <Td className="hide-md r whitespace-nowrap tabular-nums text-muted-foreground">
-                    {formatBytes(n.upload_bytes + n.download_bytes)}
-                    {n.usage_coefficient !== 1 && <span className="ml-1 text-faint">×{n.usage_coefficient}</span>}
-                  </Td>
-                  <Td className="hide-sm whitespace-nowrap text-muted-foreground">{relativeTime(n.last_seen, lang)}</Td>
-                  <Td>
-                    <div className="flex justify-end gap-0.5 sm:gap-1">
-                      <Button variant={n.status === 'connecting' ? 'primary' : 'secondary'} size="sm" className="max-sm:w-7 max-sm:px-0" onClick={() => setInstalling(n)} aria-label={t('nodes.install')}>
-                        <Terminal />
-                        <span className="hide-sm">{t('nodes.install')}</span>
-                      </Button>
-                      <IconButton onClick={() => setStats(n)} aria-label={t('nodes.stats.open')} title={t('nodes.stats.open')}>
-                        <ChartUp />
-                      </IconButton>
-                      <IconButton onClick={() => setEditing(n)} aria-label={t('common.edit')}>
-                        <Pencil />
-                      </IconButton>
-                      <IconButton onClick={() => setDeleting(n)} aria-label={t('common.delete')}>
-                        <Trash2 />
-                      </IconButton>
-                    </div>
-                  </Td>
-                </tr>
+              {list.map((n) => (
+                <NodeRow
+                  key={n.id}
+                  node={n}
+                  coreName={cores?.find((c) => c.id === n.core_id)?.name ?? '—'}
+                  message={message(n)}
+                  dragging={dragId === n.id}
+                  onDragStart={() => setDragId(n.id)}
+                  onDragMove={dragMove}
+                  onDrop={dragEnd}
+                  onInstall={() => setInstalling(n)}
+                  onStats={() => setStats(n)}
+                  onEdit={() => setEditing(n)}
+                  onDelete={() => setDeleting(n)}
+                />
               ))}
             </tbody>
           </Table>
@@ -171,6 +184,97 @@ export default function Nodes() {
         }}
       />
     </>
+  )
+}
+
+// NodeRow is one node in the list; the grip on the left drags it to a new place.
+function NodeRow({
+  node: n,
+  coreName,
+  message,
+  dragging,
+  onDragStart,
+  onDragMove,
+  onDrop,
+  onInstall,
+  onStats,
+  onEdit,
+  onDelete,
+}: {
+  node: Node
+  coreName: string
+  message: string
+  dragging: boolean
+  onDragStart: () => void
+  onDragMove: (y: number) => void
+  onDrop: () => void
+  onInstall: () => void
+  onStats: () => void
+  onEdit: () => void
+  onDelete: () => void
+}) {
+  const { t, lang } = useI18n()
+  return (
+    <tr data-id={n.id} className={dragging ? 'bg-muted' : undefined}>
+      <Td>
+        <div className="flex items-start gap-1.5">
+          <button
+            type="button"
+            className="-ml-1.5 flex h-8 w-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-faint hover:text-foreground active:cursor-grabbing"
+            onPointerDown={(e) => {
+              e.currentTarget.setPointerCapture(e.pointerId)
+              onDragStart()
+            }}
+            onPointerMove={(e) => dragging && onDragMove(e.clientY)}
+            onPointerUp={() => dragging && onDrop()}
+            onPointerCancel={() => dragging && onDrop()}
+            aria-label={t('nodes.drag')}
+            title={t('nodes.drag')}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+          <div className="min-w-0">
+            <div className="ent-name">{n.name}</div>
+            <div className="ent-sub font-mono">{n.address}</div>
+            <div className="ent-sub">
+              {t('nodes.core')}: {coreName}
+            </div>
+            {/* phones: the status under the name instead of its own column */}
+            <div className="show-sm mt-1.5">
+              <NodeStatusBadge status={n.status} />
+              {n.message && <NodeError text={message} raw={n.message} />}
+            </div>
+          </div>
+        </div>
+      </Td>
+      <Td className="hide-sm">
+        <NodeStatusBadge status={n.status} />
+        {n.message && <NodeError text={message} raw={n.message} />}
+      </Td>
+      <Td className="hide-sm text-xs text-muted-foreground">{n.core_version || '—'}</Td>
+      <Td className="hide-md r whitespace-nowrap tabular-nums text-muted-foreground">
+        {formatBytes(n.upload_bytes + n.download_bytes)}
+        {n.usage_coefficient !== 1 && <span className="ml-1 text-faint">×{n.usage_coefficient}</span>}
+      </Td>
+      <Td className="hide-sm whitespace-nowrap text-muted-foreground">{relativeTime(n.last_seen, lang)}</Td>
+      <Td>
+        <div className="flex justify-end gap-0.5 sm:gap-1">
+          <Button variant={n.status === 'connecting' ? 'primary' : 'secondary'} size="sm" className="max-sm:w-7 max-sm:px-0" onClick={onInstall} aria-label={t('nodes.install')}>
+            <Terminal />
+            <span className="hide-sm">{t('nodes.install')}</span>
+          </Button>
+          <IconButton onClick={onStats} aria-label={t('nodes.stats.open')} title={t('nodes.stats.open')}>
+            <ChartUp />
+          </IconButton>
+          <IconButton onClick={onEdit} aria-label={t('common.edit')}>
+            <Pencil />
+          </IconButton>
+          <IconButton onClick={onDelete} aria-label={t('common.delete')}>
+            <Trash2 />
+          </IconButton>
+        </div>
+      </Td>
+    </tr>
   )
 }
 

@@ -355,3 +355,19 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 
 // Version is set at build time via -ldflags.
 var Version = "dev"
+
+// handleReorderNodes takes {"ids": [...]}: the nodes in the order to show.
+func (s *Server) handleReorderNodes(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		IDs []int64 `json:"ids"`
+	}
+	if !decode(w, r, &in) {
+		return
+	}
+	if err := s.store.ReorderNodes(r.Context(), in.IDs); err != nil {
+		s.writeStoreError(w, err)
+		return
+	}
+	s.audit(r, "node.reorder", "", "")
+	w.WriteHeader(http.StatusNoContent)
+}

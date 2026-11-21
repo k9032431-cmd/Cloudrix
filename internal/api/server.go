@@ -148,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/nodes/stats", s.handleNodesStats)
 				r.Get("/nodes/{id}/stats", s.handleNodeStats)
 				r.Post("/nodes", s.handleCreateNode)
+				r.Put("/nodes/order", s.handleReorderNodes)
 				r.Put("/nodes/{id}", s.handleUpdateNode)
 				r.Delete("/nodes/{id}", s.handleDeleteNode)
 				r.Get("/nodes/{id}/install", s.handleNodeInstall)
