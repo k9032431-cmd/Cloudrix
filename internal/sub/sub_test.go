@@ -281,3 +281,34 @@ func TestHappDescription(t *testing.T) {
 		t.Errorf("vmess: %s", raw)
 	}
 }
+
+// Keys with the same name get #1, #2… top to bottom; a disabled host does
+// not keep its number, and a name used once is left alone.
+func TestSameNamesNumbered(t *testing.T) {
+	host := func(id int64, name, addr string, enabled bool) model.Host {
+		return model.Host{ID: id, Priority: int(id), Enabled: enabled, HostSettings: model.HostSettings{Remark: name, Address: []string{addr}}}
+	}
+	in := &model.Inbound{Tag: "v", Protocol: model.ProtoVLESS, Port: 443, Enabled: true, CoreID: 1,
+		Hosts: []model.Host{host(1, "France", "1.1.1.1", true), host(2, "Germany", "2.2.2.2", true), host(3, "France", "3.3.3.3", true), host(4, "France", "4.4.4.4", true)}}
+	names := func() []string {
+		var out []string
+		for _, ep := range Resolve(testUser(), []*model.Inbound{in}, nil, oneNode(), "x") {
+			out = append(out, ep.Host+" "+ep.Remark)
+		}
+		return out
+	}
+	want := []string{"1.1.1.1 France #1", "2.2.2.2 Germany", "3.3.3.3 France #2", "4.4.4.4 France #3"}
+	if got := names(); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %v", got)
+	}
+	in.Hosts[0].Enabled = false
+	want = []string{"2.2.2.2 Germany", "3.3.3.3 France #1", "4.4.4.4 France #2"}
+	if got := names(); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("after disabling the first: %v", got)
+	}
+	in.Hosts[2].Enabled = false
+	want = []string{"2.2.2.2 Germany", "4.4.4.4 France"}
+	if got := names(); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("one left: %v", got)
+	}
+}

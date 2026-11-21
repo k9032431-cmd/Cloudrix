@@ -128,7 +128,27 @@ func Resolve(u *model.User, inbounds []*model.Inbound, groups model.Groups, node
 	for _, r := range all {
 		out = append(out, r.ep)
 	}
+	numberSameNames(out)
 	return out
+}
+
+// numberSameNames tells keys with the same name apart: "France #1",
+// "France #2", top to bottom. Numbers follow what the user gets, so when
+// one is disabled the next ones move up; a name used once stays as is.
+func numberSameNames(eps []Endpoint) {
+	count := map[string]int{}
+	for _, ep := range eps {
+		count[ep.Remark]++
+	}
+	seen := map[string]int{}
+	for i := range eps {
+		name := eps[i].Remark
+		if count[name] < 2 {
+			continue
+		}
+		seen[name]++
+		eps[i].Remark = fmt.Sprintf("%s #%d", name, seen[name])
+	}
 }
 
 // nodeAt finds the serving node a link points at: by address, or the only one.
