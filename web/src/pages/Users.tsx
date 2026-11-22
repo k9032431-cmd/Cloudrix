@@ -18,6 +18,21 @@ import UserDetails from './users/UserDetails'
 const PAGE = 25
 const STATUSES: UserStatus[] = ['active', 'disabled', 'limited', 'expired', 'on_hold']
 
+// sort choices for the dropdown; table headers sort too
+const SORTS = [
+  '-created_at',
+  'created_at',
+  'username',
+  '-username',
+  '-used_traffic',
+  'used_traffic',
+  'data_left',
+  '-data_left',
+  'expire_at',
+  '-expire_at',
+  '-online_at',
+] as const
+
 export default function UsersPage() {
   const { t, lang } = useI18n()
   const { admin } = useAuth()
@@ -114,18 +129,27 @@ export default function UsersPage() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-          <div className="relative min-w-[200px] flex-1">
+          <div className="relative w-full min-w-[200px] flex-1 sm:w-auto">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-faint" />
             <Input className="pl-9" placeholder={t('common.search')} value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <Select className="w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">{t('common.all')}</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {t(`status.${s}`)}
-              </option>
-            ))}
-          </Select>
+          <div className="flex w-full gap-2 sm:w-auto">
+            <Select className="min-w-0 flex-1 sm:w-auto sm:flex-none" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="">{t('common.all')}</option>
+              {STATUSES.map((s) => (
+                <option key={s} value={s}>
+                  {t(`status.${s}`)}
+                </option>
+              ))}
+            </Select>
+            <Select className="min-w-0 flex-1 sm:w-auto sm:flex-none" value={sort} onChange={(e) => setSort(e.target.value)} aria-label={t('users.sortBy')}>
+              {SORTS.map((v) => (
+                <option key={v} value={v}>
+                  {t(`users.sort.${v}`)}
+                </option>
+              ))}
+            </Select>
+          </div>
         </div>
 
         <AnimatePresence initial={false}>

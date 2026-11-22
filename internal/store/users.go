@@ -125,9 +125,21 @@ type UserFilter struct {
 	Offset  int
 }
 
-var userSortable = map[string]string{
-	"id": "id", "username": "username", "used_traffic": "used_traffic", "data_limit": "data_limit",
-	"expire_at": "expire_at", "created_at": "created_at", "online_at": "online_at",
+// userSortable maps a sort field to its ORDER BY for ascending and for
+// descending order. "No limit" and "no end date" count as the most, so they
+// go last when looking for the least.
+var userSortable = map[string][2]string{
+	"id":           {"id ASC", "id DESC"},
+	"username":     {"username COLLATE NOCASE ASC", "username COLLATE NOCASE DESC"},
+	"used_traffic": {"used_traffic ASC", "used_traffic DESC"},
+	"data_limit":   {"data_limit = 0, data_limit ASC", "data_limit = 0 DESC, data_limit DESC"},
+	"data_left": {
+		"data_limit = 0, data_limit - used_traffic ASC",
+		"data_limit = 0 DESC, data_limit - used_traffic DESC",
+	},
+	"expire_at":  {"expire_at IS NULL, expire_at ASC", "expire_at IS NULL DESC, expire_at DESC"},
+	"created_at": {"created_at ASC", "created_at DESC"},
+	"online_at":  {"online_at IS NULL, online_at ASC", "online_at IS NULL, online_at DESC"},
 }
 
 func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*model.User, int, error) {
@@ -158,12 +170,13 @@ func (s *Store) ListUsers(ctx context.Context, f UserFilter) ([]*model.User, int
 
 	order := "id DESC"
 	if f.Sort != "" {
-		field, dir := strings.TrimPrefix(f.Sort, "-"), "ASC"
-		if strings.HasPrefix(f.Sort, "-") {
-			dir = "DESC"
-		}
-		if col, ok := userSortable[field]; ok {
-			order = col + " " + dir + ", id DESC"
+		field, desc := strings.TrimPrefix(f.Sort, "-"), strings.HasPrefix(f.Sort, "-")
+		if by, ok := userSortable[field]; ok {
+			if desc {
+				order = by[1] + ", id DESC"
+			} else {
+				order = by[0] + ", id DESC"
+			}
 		}
 	}
 	limit := f.Limit
