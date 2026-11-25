@@ -10,3 +10,6 @@
 web/node_modules/
 web/dist/*
 !web/dist/.gitkeep
+
+# TypeScript build cache
+*.tsbuildinfo
