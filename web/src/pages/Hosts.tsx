@@ -5,7 +5,7 @@ import { ChevronDown, Copy, Cpu, Globe, GripVertical, Pencil, Plus, Power, Refre
 import { del, post, put } from '../lib/api'
 import { useFetch } from '../lib/hooks'
 import { useI18n } from '../lib/i18n'
-import type { Core, Host, Inbound, Node, UserStatus } from '../lib/types'
+import type { Branding, Core, Host, Inbound, Node, UserStatus } from '../lib/types'
 import { Button, Card, Confirm, ErrorNote, Field, IconButton, Input, Modal, PageHeader, Select, Skeleton, Toggle, cx } from '../components/ui'
 import { ActionsMenu } from '../components/ActionsMenu'
 import { useToast } from '../components/toast'
@@ -304,6 +304,9 @@ function HostForm({ initial, inbounds, cores, onClose, onSaved }: { initial: Hos
   const [busy, setBusy] = useState(false)
   const [section, setSection] = useState<'' | 'network' | 'security'>('')
   const set = (patch: Partial<Host>) => setH((x) => ({ ...x, ...patch }))
+  // Happ shows the caption only with a provider ID set in Settings.
+  const { data: brand } = useFetch<Branding>('/api/settings/subscription')
+  const noProvider = !!h.description?.trim() && brand !== undefined && brand !== null && !brand.provider_id
   const isNew = h.id === 0
   const ib = inbounds.find((x) => x.id === h.inbound_id)
   const coreName = (id?: number) => cores.find((c) => c.id === id)?.name ?? '—'
@@ -382,6 +385,14 @@ function HostForm({ initial, inbounds, cores, onClose, onSaved }: { initial: Hos
               maxLength={60}
               placeholder={t('hosts.descriptionPlaceholder')}
             />
+            {noProvider && (
+              <p className="mt-1.5 rounded-md bg-warning/10 px-2.5 py-1.5 text-xs text-warning">
+                {t('hosts.descriptionNoProvider')}{' '}
+                <Link to="/settings" className="font-medium underline">
+                  {t('hosts.descriptionOpenSettings')}
+                </Link>
+              </p>
+            )}
           </Field>
           <Field label={t('hosts.address')} hint={t('hosts.addressHint')}>
             <TagsInput value={h.address} onChange={(v) => set({ address: v })} placeholder="nl.example.com" />

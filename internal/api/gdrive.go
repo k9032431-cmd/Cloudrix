@@ -255,16 +255,26 @@ func (d *driveSyncer) render(ctx context.Context, u *model.User) ([]byte, error)
 	if err != nil {
 		return nil, err
 	}
+	brand := d.s.branding()
+	if brand.ProviderID != "" {
+		// With a provider ID the subscription is meant for Happ, so the
+		// copy carries the captions under key names too.
+		eps = sub.ForHapp(eps)
+	}
 	links := sub.Links(u, eps)
 	if d.settings().Format == "base64" {
-		return []byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(links, "\n")))), nil
+		lines := append(brand.happProviderComments(), links...)
+		return []byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))), nil
 	}
 	var expire int64
 	if u.ExpireAt != nil {
 		expire = u.ExpireAt.Unix()
 	}
 	var b strings.Builder
-	brand := d.s.branding()
+	for _, c := range brand.happProviderComments() {
+		b.WriteString(c)
+		b.WriteByte('\n')
+	}
 	fmt.Fprintf(&b, "#profile-title: %s\n", b64Header(brand.Title))
 	fmt.Fprintf(&b, "#profile-update-interval: %d\n", brand.UpdateHours)
 	if a := brand.userAnnounce(u); a != "" {

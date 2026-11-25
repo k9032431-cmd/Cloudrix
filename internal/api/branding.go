@@ -44,6 +44,42 @@ type branding struct {
 	PingURL  string `json:"ping_url,omitempty"`
 }
 
+// happProvider lists the Happ provider settings (header name, value); Happ
+// accepts them only together with the provider ID, which comes first.
+func (b branding) happProvider() [][2]string {
+	if b.ProviderID == "" {
+		return nil
+	}
+	out := [][2]string{{"providerid", b.ProviderID}}
+	if b.HideSettings {
+		out = append(out, [2]string{"hide-settings", "1"})
+	}
+	if b.AlwaysHWID {
+		out = append(out, [2]string{"subscription-always-hwid-enable", "1"})
+	}
+	for _, kv := range [][2]string{{"ping-type", b.PingType}, {"proxy-ping-mode", b.PingMode}, {"check-url-via-proxy", b.PingURL}} {
+		if kv[1] != "" {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
+// happProviderComments puts the provider settings in a subscription body,
+// for when headers do not reach Happ (a Drive copy, a proxy that drops
+// them): "#providerid <id>" as Happ documents it, the rest as "#name: value".
+func (b branding) happProviderComments() []string {
+	var out []string
+	for i, kv := range b.happProvider() {
+		if i == 0 {
+			out = append(out, "#providerid "+kv[1])
+		} else {
+			out = append(out, "#"+kv[0]+": "+kv[1])
+		}
+	}
+	return out
+}
+
 var providerIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{0,64}$`)
 
 func (s *Server) defaultBranding() branding {

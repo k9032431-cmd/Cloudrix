@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"strings"
@@ -162,7 +163,13 @@ func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(strings.Join(sub.Links(u, eps), "\n")))
 	default:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte(sub.Base64Links(u, eps)))
+		lines := sub.Links(u, eps)
+		if isHapp(r) {
+			// Happ also reads the provider ID from the body, which survives
+			// proxies and CDNs that drop unknown response headers.
+			lines = append(s.branding().happProviderComments(), lines...)
+		}
+		_, _ = w.Write([]byte(base64.StdEncoding.EncodeToString([]byte(strings.Join(lines, "\n")))))
 	}
 }
 
@@ -188,23 +195,8 @@ func (s *Server) writeSubHeaders(w http.ResponseWriter, u *model.User) {
 	if b.WebPageURL != "" {
 		h.Set("Profile-Web-Page-Url", b.WebPageURL)
 	}
-	if b.ProviderID != "" {
-		h.Set("providerid", b.ProviderID)
-		if b.HideSettings {
-			h.Set("hide-settings", "1")
-		}
-		if b.AlwaysHWID {
-			h.Set("subscription-always-hwid-enable", "1")
-		}
-		if b.PingType != "" {
-			h.Set("ping-type", b.PingType)
-		}
-		if b.PingMode != "" {
-			h.Set("proxy-ping-mode", b.PingMode)
-		}
-		if b.PingURL != "" {
-			h.Set("check-url-via-proxy", b.PingURL)
-		}
+	for _, kv := range b.happProvider() {
+		h.Set(kv[0], kv[1])
 	}
 	h.Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, u.Username))
 	h.Set("Cache-Control", "no-store")
